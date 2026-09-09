@@ -60,8 +60,27 @@ export const AdminDataProvider = ({ children }) => {
 
   // 1. Products
   const [products, setProducts] = useState(() => {
-    const saved = localStorage.getItem('admin_products');
-    return saved ? JSON.parse(saved) : ALL_PRODUCTS;
+    try {
+      const saved = localStorage.getItem('admin_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map(p => {
+          if (!p.approvalStatus) {
+            const mock = ALL_PRODUCTS.find(m => m.id === p.id);
+            return {
+              ...p,
+              approvalStatus: mock?.approvalStatus || (p.id === 3 || p.id === 4 ? 'Pending' : 'Approved'),
+              approvalComment: mock?.approvalComment || p.approvalComment || '',
+              rejectionReason: mock?.rejectionReason || p.rejectionReason || null
+            };
+          }
+          return p;
+        });
+      }
+      return ALL_PRODUCTS;
+    } catch {
+      return ALL_PRODUCTS;
+    }
   });
 
   // 2. Orders
@@ -104,9 +123,46 @@ export const AdminDataProvider = ({ children }) => {
 
   // 5. Schools
   const [schools, setSchools] = useState(() => {
-    const saved = localStorage.getItem('admin_schools');
-    return saved ? JSON.parse(saved) : MOCK_SCHOOLS;
+    try {
+      const saved = localStorage.getItem('admin_schools');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map(s => {
+          const mock = MOCK_SCHOOLS.find(m => m.id === s.id || m.name === s.name);
+          return {
+            ...s,
+            lat: s.lat !== undefined ? Number(s.lat) : (mock?.lat || 28.6139),
+            lng: s.lng !== undefined ? Number(s.lng) : (mock?.lng || 77.2090),
+            address: s.address || mock?.address || s.city,
+            pincode: s.pincode || mock?.pincode || '110001'
+          };
+        });
+      }
+      return MOCK_SCHOOLS;
+    } catch {
+      return MOCK_SCHOOLS;
+    }
   });
+
+  // School Discovery Radius in km (set by admin for student storefront listing)
+  const [schoolRadiusKm, setSchoolRadiusKm] = useState(() => {
+    try {
+      const saved = localStorage.getItem('bv_school_radius_km');
+      if (saved) return Number(JSON.parse(saved));
+      const savedSettings = localStorage.getItem('admin_settings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.schoolRadiusKm) return Number(parsed.schoolRadiusKm);
+      }
+      return MOCK_SETTINGS.schoolRadiusKm || 25;
+    } catch {
+      return 25;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bv_school_radius_km', JSON.stringify(schoolRadiusKm));
+  }, [schoolRadiusKm]);
 
   // 6. Users
   const [users, setUsers] = useState(() => {
@@ -181,6 +237,7 @@ export const AdminDataProvider = ({ children }) => {
     if (incoming.users) setUsers(incoming.users);
     if (incoming.promotions) setPromotions(incoming.promotions);
     if (incoming.reviews) setReviews(incoming.reviews);
+    if (incoming.schoolRadiusKm) setSchoolRadiusKm(Number(incoming.schoolRadiusKm));
   });
 
   // Audit Logger Helper
@@ -263,7 +320,9 @@ export const AdminDataProvider = ({ children }) => {
           ...p,
           approvalStatus: validStatus,
           approvalComment: validStatus === 'Rejected' ? nextRemark : (trimmedRemark || p.approvalComment || ''),
-          rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || p.rejectionReason || 'Quality standards not met') : null
+          rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || p.rejectionReason || 'Quality standards not met') : null,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: adminUser?.name || adminUser?.role || 'Marketplace Administrator'
         };
       });
       pushPlatformSync({ products: updated });
@@ -403,16 +462,32 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   // ==================== SCHOOL ACTIONS ====================
+  const updateSchoolRadius = (km) => {
+    const validKm = Math.max(1, Math.min(500, Number(km) || 25));
+    setSchoolRadiusKm(validKm);
+    setSettings(prev => {
+      const next = { ...prev, schoolRadiusKm: validKm };
+      localStorage.setItem('admin_settings', JSON.stringify(next));
+      return next;
+    });
+    pushPlatformSync({ schoolRadiusKm: validKm });
+    logAudit('School Radius Updated', `Admin updated school discovery radius to ${validKm} km`);
+  };
+
   const addSchool = (newSchool) => {
     const school = {
       id: `SCH-${String(schools.length + 1).padStart(3, '0')}`,
       status: 'Partner Active',
       partnerSince: '2026',
+      lat: Number(newSchool.lat) || 28.6139,
+      lng: Number(newSchool.lng) || 77.2090,
+      address: newSchool.address || newSchool.city || 'Delhi NCR',
+      pincode: newSchool.pincode || '110001',
       ...newSchool
     };
     setSchools(prev => {
       const updated = [school, ...prev];
-      pushPlatformSync({ schools: updated });
+      pushPlatformSync({ schools: updated, schoolRadiusKm });
       return updated;
     });
     logAudit('School Onboarded', `Added partner institution: ${school.name}`);
@@ -608,6 +683,8 @@ export const AdminDataProvider = ({ children }) => {
     addSchool,
     updateSchool,
     deleteSchool,
+    schoolRadiusKm,
+    updateSchoolRadius,
     users,
     toggleUserStatus,
     promotions,

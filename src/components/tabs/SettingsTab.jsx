@@ -12,14 +12,28 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function SettingsTab() {
-  const { settings, setSettings, logAudit } = useAdminData();
-  const [formData, setFormData] = useState(settings);
+  const { settings, setSettings, logAudit, schoolRadiusKm, updateSchoolRadius } = useAdminData();
+  const [formData, setFormData] = useState({
+    ...settings,
+    schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25
+  });
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  React.useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      ...settings,
+      schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25
+    }));
+  }, [settings, schoolRadiusKm]);
 
   const handleSave = (e) => {
     e.preventDefault();
     setSettings(formData);
-    logAudit('Platform Settings Updated', 'Updated marketplace commissions, tax & shipping parameters');
+    if (formData.schoolRadiusKm) {
+      updateSchoolRadius(Number(formData.schoolRadiusKm));
+    }
+    logAudit('Platform Settings Updated', 'Updated marketplace commissions, school discovery radius, tax & shipping parameters');
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
   };
@@ -83,15 +97,21 @@ export default function SettingsTab() {
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
-                Free Shipping Eligibility Threshold (₹)
+                Customer School Discovery Radius (km)
               </label>
-              <input
-                type="number"
-                value={formData.freeShippingThreshold}
-                onChange={e => setFormData({ ...formData, freeShippingThreshold: Number(e.target.value) })}
-                className="w-48 px-3.5 py-2 text-sm font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
-              />
-              <span className="block text-[11px] text-gray-400 mt-1">Orders exceeding this amount receive zero delivery charges.</span>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={formData.schoolRadiusKm}
+                  onChange={e => setFormData({ ...formData, schoolRadiusKm: Number(e.target.value) })}
+                  className="w-24 px-3.5 py-2 text-sm font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+                />
+                <span className="text-xs text-gray-500">
+                  Defines the maximum distance (in km) to filter schools shown to user in user store based on GPS/city
+                </span>
+              </div>
             </div>
           </div>
         </div>

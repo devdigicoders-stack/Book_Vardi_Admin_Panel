@@ -15,11 +15,26 @@ import { useAdminData } from '../../context/AdminDataContext';
 import SchoolModal from '../modals/SchoolModal';
 
 export default function SchoolsTab() {
-  const { schools, addSchool, updateSchool, deleteSchool } = useAdminData();
+  const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius } = useAdminData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState(null);
+  const [tempRadius, setTempRadius] = useState(schoolRadiusKm || 25);
+  const [radiusSavedFeedback, setRadiusSavedFeedback] = useState(false);
+
+  // Sync tempRadius if external update
+  React.useEffect(() => {
+    if (schoolRadiusKm) setTempRadius(schoolRadiusKm);
+  }, [schoolRadiusKm]);
+
+  const handleApplyRadius = (newRadius) => {
+    const val = Number(newRadius);
+    setTempRadius(val);
+    updateSchoolRadius(val);
+    setRadiusSavedFeedback(true);
+    setTimeout(() => setRadiusSavedFeedback(false), 2500);
+  };
 
   const filteredSchools = schools.filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -73,6 +88,92 @@ export default function SchoolsTab() {
         </button>
       </div>
 
+      {/* Discovery Radius Controller Card (Admin Controlled for bookvardiuser) */}
+      <div className="bg-linear-to-r from-teal-900 via-teal-800 to-teal-950 rounded-2xl p-5 text-white shadow-md border border-teal-700/50 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-yellow/20 text-brand-yellow flex items-center justify-center shrink-0 border border-brand-yellow/30">
+              <MapPin size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-bold text-base text-white">
+                  User Portal School Discovery Radius
+                </h3>
+                <span className="bg-brand-yellow text-brand-teal-dark font-extrabold text-[11px] px-2.5 py-0.5 rounded-full shadow-xs">
+                  {schoolRadiusKm} km active
+                </span>
+                {radiusSavedFeedback && (
+                  <span className="text-[11px] font-bold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <CheckCircle size={12} /> Broadcasted to Customer Store!
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-teal-200 mt-1 max-w-2xl">
+                When a customer visits <code className="bg-teal-950/70 px-1.5 py-0.5 rounded text-amber-300 font-mono text-[11px]">bookvardiuser</code>, 
+                their location permission is prompted and only schools located within this specified kilometer radius are displayed.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Radius Presets */}
+          <div className="flex items-center gap-1.5 bg-teal-950/60 p-1.5 rounded-xl border border-teal-800 shrink-0">
+            {[10, 25, 50, 100].map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleApplyRadius(preset)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  tempRadius === preset
+                    ? 'bg-brand-yellow text-brand-teal-dark shadow-xs'
+                    : 'text-teal-200 hover:text-white hover:bg-teal-800/60'
+                }`}
+              >
+                {preset} km
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Interactive Slider & Manual Input */}
+        <div className="bg-teal-950/40 p-4 rounded-xl border border-teal-800/60 flex flex-col md:flex-row items-center gap-4">
+          <div className="flex-1 w-full flex items-center gap-3">
+            <span className="text-xs font-semibold text-teal-300">5 km</span>
+            <input
+              type="range"
+              min="5"
+              max="200"
+              step="5"
+              value={tempRadius}
+              onChange={(e) => setTempRadius(Number(e.target.value))}
+              onMouseUp={() => handleApplyRadius(tempRadius)}
+              onTouchEnd={() => handleApplyRadius(tempRadius)}
+              className="w-full accent-brand-yellow h-2 bg-teal-800 rounded-lg cursor-pointer"
+            />
+            <span className="text-xs font-semibold text-teal-300">200 km</span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center bg-teal-900 border border-teal-700 rounded-xl px-3 py-1.5">
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={tempRadius}
+                onChange={(e) => setTempRadius(Number(e.target.value))}
+                className="w-16 bg-transparent text-white font-mono font-bold text-center text-sm outline-hidden"
+              />
+              <span className="text-xs text-teal-300 font-bold ml-1">km</span>
+            </div>
+            <button
+              onClick={() => handleApplyRadius(tempRadius)}
+              className="px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+            >
+              Update Radius
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex items-center justify-between gap-3">
         <div className="relative w-full md:w-96">
@@ -101,12 +202,17 @@ export default function SchoolsTab() {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-gray-900 leading-snug">{school.name}</h3>
-                  <div className="text-[11px] text-gray-500 flex items-center gap-1.5 mt-0.5">
+                  <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                     <span className="font-semibold text-purple-800 bg-purple-50 px-2 py-0.2 rounded-md">
                       {school.board}
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-0.5"><MapPin size={11} /> {school.city}</span>
+                    {school.lat && school.lng && (
+                      <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
+                        {school.lat.toFixed(4)}, {school.lng.toFixed(4)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

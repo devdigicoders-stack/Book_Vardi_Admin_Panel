@@ -4,17 +4,24 @@ import {
   Plus, 
   Search, 
   Filter, 
-  CheckCircle, 
-  Ban, 
+  CheckCircle2, 
+  AlertTriangle,
+  Clock, 
   Edit3, 
   Trash2, 
   Eye, 
   Tag,
-  Store
+  Store,
+  ShieldCheck,
+  Zap,
+  Check,
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { CATEGORIES } from '../../data/mockData';
 import ProductModal from '../modals/ProductModal';
+import ProductReviewModal from '../modals/ProductReviewModal';
 
 export default function ProductsTab() {
   const {
@@ -32,16 +39,21 @@ export default function ProductsTab() {
   
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [approvalEditor, setApprovalEditor] = useState(null);
+  const [reviewingProduct, setReviewingProduct] = useState(null);
   const [previewProduct, setPreviewProduct] = useState(null);
-  const [remark, setRemark] = useState('');
+
+  // Status Metrics
+  const pendingProducts = products.filter(p => p.approvalStatus === 'Pending');
+  const approvedProducts = products.filter(p => p.approvalStatus === 'Approved' || !p.approvalStatus);
+  const rejectedProducts = products.filter(p => p.approvalStatus === 'Rejected');
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
                           (p.sellerName && p.sellerName.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-    const matchesStatus = statusFilter === 'all' || p.approvalStatus === statusFilter;
+    const currentStatus = p.approvalStatus || 'Approved';
+    const matchesStatus = statusFilter === 'all' || currentStatus === statusFilter;
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
@@ -69,31 +81,16 @@ export default function ProductsTab() {
     }
   };
 
-  const openApprovalEditor = (product) => {
-    setApprovalEditor({
-      productId: product.id,
-      currentStatus: product.approvalStatus || 'Pending',
-      remark: product.approvalComment || product.rejectionReason || ''
-    });
-    setRemark(product.approvalComment || product.rejectionReason || '');
-  };
-
-  const saveApprovalUpdate = () => {
-    if (!approvalEditor) return;
-
-    const trimmedRemark = remark.trim();
-    if (approvalEditor.currentStatus === 'Rejected' || approvalEditor.currentStatus === 'Pending' && !trimmedRemark && approvalEditor.currentStatus === 'Rejected') {
-      // This prevents an empty rejection remark when the selected status is Rejected.
+  const handleUpdateStatus = (productId, newStatus, remark) => {
+    updateProductApprovalStatus(productId, newStatus, remark);
+    if (previewProduct && previewProduct.id === productId) {
+      setPreviewProduct(prev => prev ? {
+        ...prev,
+        approvalStatus: newStatus,
+        approvalComment: remark,
+        rejectionReason: newStatus === 'Rejected' ? remark : null
+      } : null);
     }
-
-    if (approvalEditor.currentStatus === 'Rejected' && !trimmedRemark) {
-      window.alert('Please add a rejection remark before saving this status.');
-      return;
-    }
-
-    updateProductApprovalStatus(approvalEditor.productId, approvalEditor.currentStatus, trimmedRemark);
-    setApprovalEditor(null);
-    setRemark('');
   };
 
   return (
@@ -106,15 +103,134 @@ export default function ProductsTab() {
             <Package className="text-teal-700" size={24} /> Marketplace Products Catalog
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Monitor, approve, edit, and delist merchant inventory across school uniforms, books & stationery.
+            Monitor, inspect, approve, edit, or reject merchant inventory with audit remarks across uniforms, books & stationery.
           </p>
         </div>
 
+        <div className="flex items-center gap-2.5">
+          {pendingProducts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('Pending');
+                setReviewingProduct(pendingProducts[0]);
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer animate-pulse"
+            >
+              <Zap size={15} />
+              <span>Review Urgent Queue ({pendingProducts.length})</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus size={16} /> Add Catalog Product
+          </button>
+        </div>
+      </div>
+
+      {/* Urgent Approval Queue Banner */}
+      {pendingProducts.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5 border border-amber-300/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-amber-100">
+              <Clock size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-sm text-gray-900">Urgent Product Approval Queue</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-600 text-white shadow-2xs">
+                  {pendingProducts.length} Pending Administrative Inspection
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 mt-1 max-w-2xl">
+                Direct merchant submissions must undergo image quality inspection, pricing / MRP verification, and board policy checks before going live on the customer store.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Pending')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'Pending' 
+                  ? 'bg-amber-600 text-white shadow-xs' 
+                  : 'bg-white text-gray-800 border border-gray-200 hover:bg-amber-50 hover:border-amber-300'
+              }`}
+            >
+              Filter Queue ({pendingProducts.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReviewingProduct(pendingProducts[0])}
+              className="px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <ShieldCheck size={15} />
+              <span>Inspect & Approve</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Status Pill Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'all'
+              ? 'bg-teal-900 text-white shadow-xs'
+              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+          }`}
         >
-          <Plus size={16} /> Add Catalog Product
+          All Products ({products.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Pending')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+            statusFilter === 'Pending'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : pendingProducts.length > 0
+                ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <Clock size={13} className={pendingProducts.length > 0 ? 'text-amber-700 animate-spin-slow' : ''} />
+          <span>⚡ Urgent Approval Queue ({pendingProducts.length})</span>
+          {pendingProducts.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Approved')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+            statusFilter === 'Approved'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <CheckCircle2 size={13} className="text-emerald-600" />
+          <span>Approved ({approvedProducts.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('Rejected')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+            statusFilter === 'Rejected'
+              ? 'bg-rose-700 text-white shadow-xs'
+              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          <AlertTriangle size={13} className="text-rose-600" />
+          <span>Rejected ({rejectedProducts.length})</span>
         </button>
       </div>
 
@@ -126,7 +242,7 @@ export default function ProductsTab() {
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search by name, SKU, or seller..."
+            placeholder="Search by product name, SKU, or seller..."
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden"
           />
         </div>
@@ -151,8 +267,8 @@ export default function ProductsTab() {
             className="px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-700 bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
           >
             <option value="all">All Statuses</option>
+            <option value="Pending">Pending Review (Urgent Queue)</option>
             <option value="Approved">Approved</option>
-            <option value="Pending">Pending Review</option>
             <option value="Rejected">Rejected</option>
           </select>
         </div>
@@ -164,117 +280,151 @@ export default function ProductsTab() {
           <table className="w-full text-left text-xs text-gray-600">
             <thead className="bg-gray-50 text-gray-700 font-bold uppercase text-[10px] tracking-wider border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3">Product</th>
+                <th className="px-4 py-3">Product Item</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Price / MRP</th>
                 <th className="px-4 py-3">Stock Level</th>
                 <th className="px-4 py-3">Merchant / Seller</th>
-                <th className="px-4 py-3">Approval</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">Approval Status & Remark</th>
+                <th className="px-4 py-3 text-right">Review Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 font-medium">
-              {filteredProducts.map((p) => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-gray-50/70 transition-colors cursor-pointer"
-                  onClick={() => setPreviewProduct(p)}
-                >
-                  
-                  {/* Thumbnail & Title */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <img 
-                        src={p.image || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=150'} 
-                        alt={p.name} 
-                        className="w-12 h-12 rounded-xl object-cover border border-gray-200 shrink-0"
-                      />
-                      <div>
-                        <div className="font-bold text-gray-900 max-w-xs truncate">{p.name}</div>
-                        <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.sku || `SKU-${p.id}`}</div>
+              {filteredProducts.map((p) => {
+                const status = p.approvalStatus || 'Approved';
+                const hasRemark = Boolean(p.approvalComment || p.rejectionReason);
+                const remarkText = p.rejectionReason || p.approvalComment || '';
+
+                return (
+                  <tr
+                    key={p.id}
+                    className="hover:bg-gray-50/70 transition-colors cursor-pointer"
+                    onClick={() => setPreviewProduct(p)}
+                  >
+                    
+                    {/* Thumbnail & Title */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={p.image || (Array.isArray(p.images) && p.images[0]) || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=150'} 
+                          alt={p.name} 
+                          className="w-12 h-12 rounded-xl object-cover border border-gray-200 shrink-0 bg-white"
+                        />
+                        <div className="min-w-0 max-w-xs">
+                          <div className="font-bold text-gray-900 truncate">{p.name}</div>
+                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.sku || `SKU-${p.id}`}</div>
+                          {p.badge && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                              {p.badge}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Category */}
-                  <td className="px-4 py-3 capitalize font-semibold text-gray-700">
-                    {p.category}
-                  </td>
+                    {/* Category */}
+                    <td className="px-4 py-3 capitalize font-semibold text-gray-700 whitespace-nowrap">
+                      {p.category}
+                    </td>
 
-                  {/* Price */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="font-bold text-gray-900">₹{p.price}</div>
-                    {p.originalPrice && p.originalPrice > p.price && (
-                      <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
-                    )}
-                  </td>
+                    {/* Price */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-bold text-gray-900">₹{p.price}</div>
+                      {p.originalPrice && p.originalPrice > p.price && (
+                        <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
+                      )}
+                    </td>
 
-                  {/* Stock */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                      (p.stockQuantity ?? 50) <= 5 ? 'bg-rose-100 text-rose-800' :
-                      (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
-                      'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {p.stockQuantity ?? 50} units
-                    </span>
-                  </td>
+                    {/* Stock */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                        (p.stockQuantity ?? 50) <= 5 ? 'bg-rose-100 text-rose-800' :
+                        (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
+                        'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {p.stockQuantity ?? 50} units
+                      </span>
+                    </td>
 
-                  {/* Seller */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-gray-800 font-semibold flex items-center gap-1.5">
-                      <Store size={13} className="text-teal-700" />
-                      <span>{p.sellerName || 'Direct Marketplace'}</span>
-                    </div>
-                  </td>
+                    {/* Seller */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-gray-800 font-semibold flex items-center gap-1.5">
+                        <Store size={13} className="text-teal-700" />
+                        <span>{p.sellerName || 'Direct Marketplace'}</span>
+                      </div>
+                    </td>
 
-                  {/* Approval Status */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => openApprovalEditor(p)}
-                      className={`inline-flex items-center justify-center min-w-[120px] px-2.5 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-colors cursor-pointer ${
-                        p.approvalStatus === 'Approved' ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' :
-                        p.approvalStatus === 'Rejected' ? 'bg-rose-100 text-rose-800 hover:bg-rose-200' :
-                        'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                      }`}
-                      title="Change approval status"
-                    >
-                      {p.approvalStatus || 'Approved'}
-                    </button>
-                  </td>
+                    {/* Approval Status & Remarks */}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <div className="space-y-1 max-w-xs">
+                        <button
+                          type="button"
+                          onClick={() => setReviewingProduct(p)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all cursor-pointer shadow-2xs border ${
+                            status === 'Approved' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' :
+                            status === 'Rejected' ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100' :
+                            'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 animate-pulse'
+                          }`}
+                          title="Click to review product and change approval status"
+                        >
+                          {status === 'Approved' && <CheckCircle2 size={12} className="text-emerald-600" />}
+                          {status === 'Pending' && <Clock size={12} className="text-amber-600" />}
+                          {status === 'Rejected' && <AlertTriangle size={12} className="text-rose-600" />}
+                          <span>{status === 'Pending' ? 'Pending Review' : status}</span>
+                        </button>
 
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => openApprovalEditor(p)}
-                        className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                        title="Update Approval Status"
-                      >
-                        <Tag size={15} />
-                      </button>
-                      
-                      <button
-                        onClick={() => handleOpenEdit(p)}
-                        className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                        title="Edit Details"
-                      >
-                        <Edit3 size={15} />
-                      </button>
+                        {/* Remark snippet */}
+                        {hasRemark && (
+                          <div
+                            className={`text-[10px] truncate max-w-[200px] flex items-center gap-1 ${
+                              status === 'Rejected' ? 'text-rose-700 font-medium' : 'text-gray-500'
+                            }`}
+                            title={remarkText}
+                          >
+                            <MessageSquare size={10} className="shrink-0 opacity-70" />
+                            <span className="truncate">{remarkText}</span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
 
-                      <button
-                        onClick={() => handleDelete(p.id, p.name)}
-                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="Delete Product"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
+                    {/* Actions */}
+                    <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setReviewingProduct(p)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold ${
+                            status === 'Pending' 
+                              ? 'bg-amber-500 text-white hover:bg-amber-600 px-2.5 shadow-2xs' 
+                              : 'text-teal-800 hover:bg-teal-50'
+                          }`}
+                          title="Review & Update Approval Status"
+                        >
+                          <ShieldCheck size={15} />
+                          {status === 'Pending' && <span>Inspect</span>}
+                        </button>
+                        
+                        <button
+                          onClick={() => handleOpenEdit(p)}
+                          className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Details"
+                        >
+                          <Edit3 size={15} />
+                        </button>
 
-                </tr>
-              ))}
+                        <button
+                          onClick={() => handleDelete(p.id, p.name)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Product"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+
+                  </tr>
+                );
+              })}
 
               {filteredProducts.length === 0 && (
                 <tr>
@@ -288,6 +438,7 @@ export default function ProductsTab() {
         </div>
       </div>
 
+      {/* Catalog Preview Modal */}
       {previewProduct && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-gray-200 overflow-hidden">
@@ -309,7 +460,7 @@ export default function ProductsTab() {
                 <img
                   src={previewProduct.image || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=800'}
                   alt={previewProduct.name}
-                  className="w-full h-[300px] md:h-full object-cover rounded-2xl border border-gray-200"
+                  className="w-full h-[300px] md:h-full object-contain rounded-2xl border border-gray-200 bg-white"
                 />
               </div>
 
@@ -351,7 +502,7 @@ export default function ProductsTab() {
                 </div>
 
                 <div className="rounded-xl bg-gray-50 p-3 border border-gray-100 text-xs">
-                  <div className="text-gray-500 uppercase tracking-wider mb-1">Remark</div>
+                  <div className="text-gray-500 uppercase tracking-wider mb-1">Approval Remark</div>
                   <div className="text-gray-700 leading-relaxed">
                     {previewProduct.approvalComment || previewProduct.rejectionReason || 'No remark added for this product yet.'}
                   </div>
@@ -360,12 +511,13 @@ export default function ProductsTab() {
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     onClick={() => {
+                      const toReview = previewProduct;
                       setPreviewProduct(null);
-                      openApprovalEditor(previewProduct);
+                      setReviewingProduct(toReview);
                     }}
-                    className="px-3 py-2 rounded-xl bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark text-xs font-bold cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
                   >
-                    Review Status
+                    <ShieldCheck size={14} /> Review & Approve
                   </button>
                   <button
                     onClick={() => setPreviewProduct(null)}
@@ -380,73 +532,13 @@ export default function ProductsTab() {
         </div>
       )}
 
-      {approvalEditor && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[1px] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Update Product Status</h3>
-              <button
-                onClick={() => {
-                  setApprovalEditor(null);
-                  setRemark('');
-                }}
-                className="text-gray-400 hover:text-gray-700 text-xl leading-none cursor-pointer"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-              Status
-            </label>
-            <select
-              value={approvalEditor.currentStatus}
-              onChange={e => setApprovalEditor(prev => prev ? { ...prev, currentStatus: e.target.value } : prev)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-brand-yellow outline-hidden"
-            >
-              <option value="Approved">Approved</option>
-              <option value="Pending">Pending</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mt-4 mb-2">
-              {approvalEditor.currentStatus === 'Rejected' ? 'Remark / rejection reason (required)' : 'Remark / note (optional)'}
-            </label>
-            <textarea
-              value={remark}
-              onChange={e => setRemark(e.target.value)}
-              rows={4}
-              placeholder={approvalEditor.currentStatus === 'Rejected' ? 'Add the reason this product is being rejected...' : 'Add a note for this status update...'}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-brand-yellow outline-hidden resize-none"
-            />
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setApprovalEditor(null);
-                  setRemark('');
-                }}
-                className="px-3 py-2 rounded-xl border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-100 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveApprovalUpdate}
-                className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                  approvalEditor.currentStatus === 'Rejected'
-                    ? 'bg-rose-600 text-white hover:bg-rose-700'
-                    : approvalEditor.currentStatus === 'Approved'
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-amber-500 text-white hover:bg-amber-600'
-                }`}
-              >
-                Save Status
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Comprehensive Product Review & Inspection Modal */}
+      <ProductReviewModal
+        isOpen={Boolean(reviewingProduct)}
+        onClose={() => setReviewingProduct(null)}
+        product={reviewingProduct}
+        onUpdateStatus={handleUpdateStatus}
+      />
 
       {/* Product Add/Edit Modal */}
       <ProductModal

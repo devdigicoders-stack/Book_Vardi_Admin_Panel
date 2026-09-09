@@ -6,6 +6,8 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
     name: '',
     board: 'CBSE',
     city: '',
+    lat: 28.6139,
+    lng: 77.2090,
     classes: 'Nursery to 12th',
     studentCount: '2500',
     contactPerson: '',
@@ -21,6 +23,8 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
         name: school.name || '',
         board: school.board || 'CBSE',
         city: school.city || '',
+        lat: school.lat ?? 28.6139,
+        lng: school.lng ?? 77.2090,
         classes: school.classes || 'Nursery to 12th',
         studentCount: school.studentCount || '2500',
         contactPerson: school.contactPerson || '',
@@ -34,6 +38,8 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
         name: '',
         board: 'CBSE',
         city: '',
+        lat: 28.6139,
+        lng: 77.2090,
         classes: 'Nursery to 12th',
         studentCount: '2500',
         contactPerson: '',
@@ -115,6 +121,38 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
                 placeholder="e.g. New Delhi"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200/80">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                Latitude (GPS)
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={formData.lat}
+                onChange={e => setFormData({ ...formData, lat: parseFloat(e.target.value) || 0 })}
+                placeholder="28.6139"
+                className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-xs bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                Longitude (GPS)
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={formData.lng}
+                onChange={e => setFormData({ ...formData, lng: parseFloat(e.target.value) || 0 })}
+                placeholder="77.2090"
+                className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-xs bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+            <div className="col-span-2 text-[10px] text-gray-500">
+              Used by user portal to filter schools within the admin discovery radius.
             </div>
           </div>
 
