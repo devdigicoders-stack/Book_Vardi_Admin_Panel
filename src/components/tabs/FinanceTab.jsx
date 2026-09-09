@@ -57,7 +57,7 @@ export default function FinanceTab() {
         <button
           onClick={handleReleaseAllPayouts}
           disabled={totalSellerPending === 0}
-          className="inline-flex items-center gap-2 px-4 py-2.2 bg-brand-yellow hover:bg-brand-yellow-hover disabled:opacity-50 text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover disabled:opacity-50 text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <Landmark size={15} /> Disburse All Pending Payouts (₹{totalSellerPending.toLocaleString()})
         </button>

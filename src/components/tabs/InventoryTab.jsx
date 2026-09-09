@@ -73,7 +73,7 @@ export default function InventoryTab() {
 
         <button
           onClick={exportExcelReport}
-          className="inline-flex items-center gap-2 px-4 py-2.2 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <Download size={15} /> Export Inventory (Excel)
         </button>
