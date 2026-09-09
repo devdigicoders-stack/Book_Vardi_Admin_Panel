@@ -1,28 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   ShieldCheck, 
-  Store, 
-  ShoppingBag, 
-  Bell, 
-  ExternalLink, 
-  CheckCircle2, 
-  UserCheck, 
-  ChevronDown,
-  Sparkles
+  Bell
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
-export default function Header({ onOpenNotifications, onOpenProfile }) {
-  const { adminUser, switchAdminRole, notifications } = useAdminData();
-  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+export default function Header({ onOpenNotifications }) {
+  const { adminUser, notifications } = useAdminData();
   const unreadCount = notifications.filter(n => n.unread).length;
-
-  const roles = [
-    'Super Admin',
-    'Operations Manager',
-    'Finance Admin',
-    'Support Lead'
-  ];
 
   return (
     <header className="bg-brand-teal text-white border-b border-white/10 sticky top-0 z-40 shadow-sm">
@@ -62,40 +47,13 @@ export default function Header({ onOpenNotifications, onOpenProfile }) {
           </button>
         </div>
 
-        {/* Right: Cross-App Navigation & Role Switcher */}
+        {/* Right: Admin-only controls */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
-          
-          {/* Quick Link to Customer Storefront */}
-          <a
-            href="http://localhost:5173"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition-colors border border-white/15 cursor-pointer backdrop-blur-xs"
-            title="Open Customer Storefront"
-          >
-            <ShoppingBag size={14} className="text-brand-yellow" />
-            <span>Customer Store</span>
-            <ExternalLink size={12} className="opacity-70" />
-          </a>
-
-          {/* Quick Link to Seller Hub */}
-          <a
-            href="http://localhost:5174"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition-colors border border-white/15 cursor-pointer backdrop-blur-xs"
-            title="Open Seller Portal"
-          >
-            <Store size={14} className="text-amber-300" />
-            <span>Seller Hub</span>
-            <ExternalLink size={12} className="opacity-70" />
-          </a>
-
-          {/* Notification Button Desktop */}
           <button 
             onClick={onOpenNotifications}
             className="hidden md:flex relative p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/10"
-            title="Notifications"
+            title="View all notifications"
+            aria-label="View all notifications"
           >
             <Bell size={16} />
             {unreadCount > 0 && (
@@ -105,41 +63,10 @@ export default function Header({ onOpenNotifications, onOpenProfile }) {
             )}
           </button>
 
-          {/* Role Switcher Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-brand-yellow text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs hover:bg-brand-yellow-hover transition-colors cursor-pointer"
-            >
-              <UserCheck size={14} />
-              <span>{adminUser.role}</span>
-              <ChevronDown size={13} className={`transition-transform duration-200 ${roleDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {roleDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-50 text-gray-800">
-                <div className="px-3 py-1 text-[10px] font-bold uppercase text-gray-400 border-b border-gray-100">
-                  Switch Admin Role
-                </div>
-                {roles.map(role => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      switchAdminRole(role);
-                      setRoleDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between hover:bg-gray-100 transition-colors cursor-pointer ${
-                      adminUser.role === role ? 'bg-teal-50 text-teal-800 font-bold' : ''
-                    }`}
-                  >
-                    <span>{role}</span>
-                    {adminUser.role === role && <CheckCircle2 size={14} className="text-teal-700" />}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-yellow text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs">
+            <ShieldCheck size={14} />
+            <span>{adminUser.role}</span>
           </div>
-
         </div>
 
       </div>

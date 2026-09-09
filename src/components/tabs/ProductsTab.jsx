@@ -182,7 +182,7 @@ export default function ProductsTab() {
                 >
                   
                   {/* Thumbnail & Title */}
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <img 
                         src={p.image || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=150'} 
@@ -197,12 +197,12 @@ export default function ProductsTab() {
                   </td>
 
                   {/* Category */}
-                  <td className="px-4 py-3 capitalize font-semibold text-gray-700" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 capitalize font-semibold text-gray-700">
                     {p.category}
                   </td>
 
                   {/* Price */}
-                  <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="font-bold text-gray-900">₹{p.price}</div>
                     {p.originalPrice && p.originalPrice > p.price && (
                       <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
@@ -210,7 +210,7 @@ export default function ProductsTab() {
                   </td>
 
                   {/* Stock */}
-                  <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
                       (p.stockQuantity ?? 50) <= 5 ? 'bg-rose-100 text-rose-800' :
                       (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
@@ -221,7 +221,7 @@ export default function ProductsTab() {
                   </td>
 
                   {/* Seller */}
-                  <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-gray-800 font-semibold flex items-center gap-1.5">
                       <Store size={13} className="text-teal-700" />
                       <span>{p.sellerName || 'Direct Marketplace'}</span>
@@ -229,7 +229,7 @@ export default function ProductsTab() {
                   </td>
 
                   {/* Approval Status */}
-                  <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => openApprovalEditor(p)}
@@ -245,7 +245,7 @@ export default function ProductsTab() {
                   </td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => openApprovalEditor(p)}

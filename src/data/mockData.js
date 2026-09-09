@@ -230,7 +230,24 @@ export const ALL_PRODUCTS = [
     "rating": 4.6,
     "reviews": 145,
     "image": "https://images.unsplash.com/photo-1503694978374-8a2fa686963a?w=500&auto=format&fit=crop&q=80",
-    "category": "practice_books"
+    "category": "practice_books",
+    "discountBadge": "",
+    "stockQuantity": 1,
+    "sizes": [
+      "S",
+      "M",
+      "L"
+    ],
+    "colors": [
+      "Navy Blue"
+    ],
+    "gender": "Unisex",
+    "images": [
+      "https://images.unsplash.com/photo-1503694978374-8a2fa686963a?w=500&auto=format&fit=crop&q=80"
+    ],
+    "description": "",
+    "sku": "SKU-16",
+    "inStock": true
   },
   {
     "id": 17,
@@ -1005,63 +1022,81 @@ export const PLATFORM_USERS = USERS;
 
 export const PROMOTIONS = [
   {
-    id: 1,
-    code: "BACK2SCHOOL25",
-    title: "Back to School Mega Discount",
-    discountType: "percentage",
-    discountValue: 25,
-    minOrderValue: 799,
-    maxDiscount: 350,
-    validFrom: "2026-09-01",
-    validUntil: "2026-10-31",
-    usageLimit: 1000,
-    usageCount: 238,
-    status: "active"
+    "id": 1788946464338,
+    "code": "SAVEMORE91",
+    "title": "Special Student Discount",
+    "discountType": "percentage",
+    "discountValue": 15,
+    "minOrderValue": 499,
+    "maxDiscount": 250,
+    "validFrom": "2026-09-09",
+    "validUntil": "2026-12-31",
+    "usageLimit": 500,
+    "usageCount": 0,
+    "status": "active",
+    "scope": "specific_product",
+    "specificProductId": 20,
+    "specificProductName": "Ergonomic Student Backpack (24L)",
+    "specificProductSku": "SKU-20",
+    "specificProductImage": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=80"
   },
   {
-    id: 2,
-    code: "UNIFORM15",
-    title: "School Uniform Special Savings",
-    discountType: "percentage",
-    discountValue: 15,
-    minOrderValue: 999,
-    maxDiscount: 250,
-    validFrom: "2026-08-15",
-    validUntil: "2026-09-30",
-    usageLimit: 500,
-    usageCount: 412,
-    status: "active"
+    "id": 1,
+    "code": "BACK2SCHOOL25",
+    "title": "Back to School Mega Discount",
+    "discountType": "percentage",
+    "discountValue": 25,
+    "minOrderValue": 799,
+    "maxDiscount": 350,
+    "validFrom": "2026-09-01",
+    "validUntil": "2026-10-31",
+    "usageLimit": 1000,
+    "usageCount": 238,
+    "status": "active"
   },
   {
-    id: 3,
-    code: "FLAT100OFF",
-    title: "Flat Rs 100 on Orders above 599",
-    discountType: "flat",
-    discountValue: 100,
-    minOrderValue: 599,
-    maxDiscount: 100,
-    validFrom: "2026-09-01",
-    validUntil: "2026-11-15",
-    usageLimit: 300,
-    usageCount: 97,
-    status: "active"
+    "id": 2,
+    "code": "UNIFORM15",
+    "title": "School Uniform Special Savings",
+    "discountType": "percentage",
+    "discountValue": 15,
+    "minOrderValue": 999,
+    "maxDiscount": 250,
+    "validFrom": "2026-08-15",
+    "validUntil": "2026-09-30",
+    "usageLimit": 500,
+    "usageCount": 412,
+    "status": "active"
   },
   {
-    id: 4,
-    code: "FESTIVE30",
-    title: "Diwali Student Fest Offer",
-    discountType: "percentage",
-    discountValue: 30,
-    minOrderValue: 1299,
-    maxDiscount: 500,
-    validFrom: "2026-10-15",
-    validUntil: "2026-11-05",
-    usageLimit: 2000,
-    usageCount: 0,
-    status: "scheduled"
+    "id": 3,
+    "code": "FLAT100OFF",
+    "title": "Flat Rs 100 on Orders above 599",
+    "discountType": "flat",
+    "discountValue": 100,
+    "minOrderValue": 599,
+    "maxDiscount": 100,
+    "validFrom": "2026-09-01",
+    "validUntil": "2026-11-15",
+    "usageLimit": 300,
+    "usageCount": 97,
+    "status": "active"
+  },
+  {
+    "id": 4,
+    "code": "FESTIVE30",
+    "title": "Diwali Student Fest Offer",
+    "discountType": "percentage",
+    "discountValue": 30,
+    "minOrderValue": 1299,
+    "maxDiscount": 500,
+    "validFrom": "2026-10-15",
+    "validUntil": "2026-11-05",
+    "usageLimit": 2000,
+    "usageCount": 0,
+    "status": "scheduled"
   }
 ];
-
 export const REVIEWS = [
   {
     id: 1,
