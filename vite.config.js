@@ -65,5 +65,8 @@ export default defineConfig({
     watch: {
       ignored: ['**/src/data/mockData.js', '**/src/data/.seller_sync.json', '**/.platform_sync.json', '**/src/data/**']
     }
+  },
+  test: {
+    environment: 'jsdom'
   }
 });

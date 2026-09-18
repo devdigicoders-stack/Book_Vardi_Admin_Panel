@@ -19,8 +19,8 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
-import { CATEGORIES } from '../../data/mockData';
-import ProductModal from '../modals/ProductModal';
+import { CATEGORIES } from '../../constants/categories';
+import ProductFormPage from './ProductFormPage';
 import ProductReviewModal from '../modals/ProductReviewModal';
 
 export default function ProductsTab() {
@@ -30,14 +30,17 @@ export default function ProductsTab() {
     updateProduct,
     updateProductApprovalStatus,
     deleteProduct,
-    sellers
+    sellers,
+    isEditor
   } = useAdminData();
+
+  const canEdit = isEditor ? isEditor('products') : true;
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   
-  const [modalOpen, setModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('catalog'); // 'catalog' | 'form'
   const [editingProduct, setEditingProduct] = useState(null);
   const [reviewingProduct, setReviewingProduct] = useState(null);
   const [previewProduct, setPreviewProduct] = useState(null);
@@ -58,30 +61,37 @@ export default function ProductsTab() {
   });
 
   const handleOpenAdd = () => {
+    if (!canEdit) return;
     setEditingProduct(null);
-    setModalOpen(true);
+    setViewMode('form');
   };
 
   const handleOpenEdit = (prod) => {
+    if (!canEdit) return;
     setEditingProduct(prod);
-    setModalOpen(true);
+    setViewMode('form');
   };
 
-  const handleSaveProduct = (formData) => {
+  const handleSaveProduct = async (formData) => {
+    if (!canEdit) return;
     if (editingProduct) {
-      updateProduct(editingProduct.id, formData);
+      await updateProduct(editingProduct.id || editingProduct._id, formData);
     } else {
-      addProduct(formData);
+      await addProduct(formData);
     }
+    setViewMode('catalog');
+    setEditingProduct(null);
   };
 
   const handleDelete = (id, name) => {
+    if (!canEdit) return;
     if (window.confirm(`Are you sure you want to remove "${name}" from the marketplace catalog?`)) {
       deleteProduct(id);
     }
   };
 
   const handleUpdateStatus = (productId, newStatus, remark) => {
+    if (!canEdit) return;
     updateProductApprovalStatus(productId, newStatus, remark);
     if (previewProduct && previewProduct.id === productId) {
       setPreviewProduct(prev => prev ? {
@@ -92,6 +102,20 @@ export default function ProductsTab() {
       } : null);
     }
   };
+
+  if (viewMode === 'form') {
+    return (
+      <ProductFormPage
+        product={editingProduct}
+        sellers={sellers}
+        onSave={handleSaveProduct}
+        onBack={() => {
+          setViewMode('catalog');
+          setEditingProduct(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -122,12 +146,14 @@ export default function ProductsTab() {
             </button>
           )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus size={16} /> Add Catalog Product
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus size={16} /> Add Catalog Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -176,7 +202,7 @@ export default function ProductsTab() {
       )}
 
       {/* Quick Status Pill Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar scrollbar-none">
         <button
           type="button"
           onClick={() => setStatusFilter('all')}
@@ -329,7 +355,14 @@ export default function ProductsTab() {
 
                     {/* Price */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="font-bold text-gray-900">₹{p.price}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-900">₹{p.price}</span>
+                        {Array.isArray(p.sizeVariants) && p.sizeVariants.length > 0 && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-teal-50 text-teal-800 border border-teal-200">
+                            {p.sizeVariants.length} Sizes
+                          </span>
+                        )}
+                      </div>
                       {p.originalPrice && p.originalPrice > p.price && (
                         <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
                       )}
@@ -398,27 +431,31 @@ export default function ProductsTab() {
                               ? 'bg-amber-500 text-white hover:bg-amber-600 px-2.5 shadow-2xs' 
                               : 'text-teal-800 hover:bg-teal-50'
                           }`}
-                          title="Review & Update Approval Status"
+                          title={canEdit ? "Review & Update Approval Status" : "Inspect Product Details (View-Only)"}
                         >
                           <ShieldCheck size={15} />
                           {status === 'Pending' && <span>Inspect</span>}
                         </button>
                         
-                        <button
-                          onClick={() => handleOpenEdit(p)}
-                          className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Details"
-                        >
-                          <Edit3 size={15} />
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(p)}
+                              className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Details"
+                            >
+                              <Edit3 size={15} />
+                            </button>
 
-                        <button
-                          onClick={() => handleDelete(p.id, p.name)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Product"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                            <button
+                              onClick={() => handleDelete(p.id, p.name)}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
 
@@ -538,15 +575,7 @@ export default function ProductsTab() {
         onClose={() => setReviewingProduct(null)}
         product={reviewingProduct}
         onUpdateStatus={handleUpdateStatus}
-      />
-
-      {/* Product Add/Edit Modal */}
-      <ProductModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSaveProduct}
-        product={editingProduct}
-        sellers={sellers}
+        readOnly={!canEdit}
       />
 
     </div>

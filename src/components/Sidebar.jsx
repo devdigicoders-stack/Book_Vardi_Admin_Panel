@@ -16,7 +16,8 @@ import {
   HelpCircle,
   UserCheck,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Shield
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
@@ -59,8 +60,9 @@ export const ADMIN_TABS = [
     ]
   },
   {
-    title: 'System & Profile',
+    title: 'System & Security',
     items: [
+      { id: 'team', label: 'Team & Roles', icon: <Shield size={17} /> },
       { id: 'settings', label: 'Settings', icon: <Settings size={17} /> },
       { id: 'profile', label: 'Admin Profile', icon: <UserCheck size={17} /> },
       { id: 'support', label: 'Support', icon: <HelpCircle size={17} />, badgeKey: 'openTickets' }
@@ -69,7 +71,7 @@ export const ADMIN_TABS = [
 ];
 
 export default function Sidebar({ activeTab, onSelectTab }) {
-  const { products, orders, sellers, reviews, supportTickets, notifications, adminUser } = useAdminData();
+  const { products, orders, sellers, reviews, supportTickets, notifications, adminUser, canViewTab } = useAdminData();
 
   const getBadge = (key) => {
     switch (key) {
@@ -129,44 +131,49 @@ export default function Sidebar({ activeTab, onSelectTab }) {
         </div>
 
         {/* Sidebar Sections */}
-        {ADMIN_TABS.map((section, idx) => (
-          <div key={idx} className="space-y-1">
-            <div className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
-              {section.title}
-            </div>
-            {section.items.map((tab) => {
-              const isCurrent = activeTab === tab.id;
-              const badge = tab.badgeKey ? getBadge(tab.badgeKey) : null;
+        {ADMIN_TABS.map((section, idx) => {
+          const visibleItems = section.items.filter(tab => canViewTab ? canViewTab(tab.id) : true);
+          if (visibleItems.length === 0) return null;
 
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onSelectTab(tab.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    isCurrent
-                      ? 'bg-teal-800 text-white font-bold shadow-sm ring-1 ring-teal-700/50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    {tab.icon}
-                    <span>{tab.label}</span>
-                  </span>
-                  
-                  {badge ? (
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                      isCurrent ? 'bg-amber-400 text-teal-950' : 'bg-red-500 text-white'
-                    }`}>
-                      {badge}
+          return (
+            <div key={idx} className="space-y-1">
+              <div className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+                {section.title}
+              </div>
+              {visibleItems.map((tab) => {
+                const isCurrent = activeTab === tab.id;
+                const badge = tab.badgeKey ? getBadge(tab.badgeKey) : null;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onSelectTab(tab.id)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-teal-800 text-white font-bold shadow-sm ring-1 ring-teal-700/50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {tab.icon}
+                      <span>{tab.label}</span>
                     </span>
-                  ) : (
-                    <ChevronRight size={13} className={isCurrent ? 'opacity-100 text-white' : 'opacity-20'} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+                    
+                    {badge ? (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        isCurrent ? 'bg-amber-400 text-teal-950' : 'bg-red-500 text-white'
+                      }`}>
+                        {badge}
+                      </span>
+                    ) : (
+                      <ChevronRight size={13} className={isCurrent ? 'opacity-100 text-white' : 'opacity-20'} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
 
         {/* Bottom Action: Exit to Customer Store */}
         <div className="pt-3 mt-2 border-t border-gray-100">

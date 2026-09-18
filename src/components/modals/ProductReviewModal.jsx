@@ -29,7 +29,8 @@ export default function ProductReviewModal({
   isOpen,
   onClose,
   product,
-  onUpdateStatus
+  onUpdateStatus,
+  readOnly = false
 }) {
   if (!isOpen || !product) return null;
 
@@ -513,22 +514,24 @@ export default function ProductReviewModal({
               onClick={onClose}
               className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
             >
-              Cancel
+              {readOnly ? 'Close Preview' : 'Cancel'}
             </button>
-            <button
-              type="button"
-              onClick={handleSaveDecision}
-              className={`px-5 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer ${
-                selectedStatus === 'Approved'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : selectedStatus === 'Rejected'
-                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                    : 'bg-amber-500 hover:bg-amber-600 text-white'
-              }`}
-            >
-              <Check size={16} />
-              <span>Confirm {selectedStatus} Decision</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={handleSaveDecision}
+                className={`px-5 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer ${
+                  selectedStatus === 'Approved'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : selectedStatus === 'Rejected'
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                }`}
+              >
+                <Check size={16} />
+                <span>Confirm {selectedStatus} Decision</span>
+              </button>
+            )}
           </div>
         </div>
 

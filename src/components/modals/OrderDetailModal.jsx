@@ -12,7 +12,16 @@ import {
   DollarSign
 } from 'lucide-react';
 
-export default function OrderDetailModal({ isOpen, onClose, order, onUpdateStatus, onUpdateTracking, onCancelOrder, onRefundOrder }) {
+export default function OrderDetailModal({ 
+  isOpen, 
+  onClose, 
+  order, 
+  onUpdateStatus, 
+  onUpdateTracking, 
+  onCancelOrder, 
+  onRefundOrder,
+  readOnly = false 
+}) {
   if (!isOpen || !order) return null;
 
   const [newTracking, setNewTracking] = useState(order.trackingNumber || '');
@@ -81,42 +90,49 @@ export default function OrderDetailModal({ isOpen, onClose, order, onUpdateStatu
         {/* Content Body */}
         <div className="space-y-6">
 
-          {/* Quick Actions Bar */}
-          <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-600">Update Status:</span>
-              <select
-                value={selectedStatus}
-                onChange={e => handleStatusChange(e.target.value)}
-                className="bg-white border border-gray-300 text-xs font-bold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Confirmed">Confirmed</option>
-                <option value="Shipped">Shipped</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+          {/* Quick Actions Bar / View-Only Status */}
+          {readOnly ? (
+            <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/70 flex items-center justify-between gap-3 text-xs">
+              <span className="font-bold text-amber-900">Current Order Status: <span className="font-black text-amber-950">{order.status}</span></span>
+              <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">View-Only</span>
             </div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-600">Update Status:</span>
+                <select
+                  value={selectedStatus}
+                  onChange={e => handleStatusChange(e.target.value)}
+                  className="bg-white border border-gray-300 text-xs font-bold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Shipped">Shipped</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
 
-            <div className="flex items-center gap-2">
-              {order.status !== 'Cancelled' && (
-                <button
-                  onClick={handleCancel}
-                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Ban size={13} /> Cancel Order
-                </button>
-              )}
-              {order.paymentStatus === 'Paid' && (
-                <button
-                  onClick={() => setShowRefundPrompt(!showRefundPrompt)}
-                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <RotateCcw size={13} /> Issue Refund
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {order.status !== 'Cancelled' && (
+                  <button
+                    onClick={handleCancel}
+                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Ban size={13} /> Cancel Order
+                  </button>
+                )}
+                {order.paymentStatus === 'Paid' && (
+                  <button
+                    onClick={() => setShowRefundPrompt(!showRefundPrompt)}
+                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <RotateCcw size={13} /> Issue Refund
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Refund Box */}
           {showRefundPrompt && (
@@ -211,21 +227,27 @@ export default function OrderDetailModal({ isOpen, onClose, order, onUpdateStatu
                 <label className="block text-[10px] font-bold text-gray-500 mb-1">
                   Logistics Tracking ID:
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTracking}
-                    onChange={e => setNewTracking(e.target.value)}
-                    placeholder="e.g. DELHIVERY-7782910"
-                    className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg outline-hidden"
-                  />
-                  <button
-                    onClick={handleSaveTracking}
-                    className="px-3 py-1 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    Save
-                  </button>
-                </div>
+                {readOnly ? (
+                  <div className="text-xs font-mono font-bold text-gray-800 bg-white px-2.5 py-1.5 rounded-lg border border-gray-200">
+                    {order.trackingNumber || 'Not assigned yet'}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTracking}
+                      onChange={e => setNewTracking(e.target.value)}
+                      placeholder="e.g. DELHIVERY-7782910"
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg outline-hidden"
+                    />
+                    <button
+                      onClick={handleSaveTracking}
+                      className="px-3 py-1 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -12,7 +12,8 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function ReviewsTab() {
-  const { reviews, approveReview, hideReview, deleteReview } = useAdminData();
+  const { reviews, approveReview, hideReview, deleteReview, isEditor } = useAdminData();
+  const canEdit = isEditor ? isEditor('reviews') : true;
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, flagged, approved
 
@@ -136,32 +137,38 @@ export default function ReviewsTab() {
                 Status: {review.status}
               </span>
 
-              <div className="flex items-center gap-2">
-                {review.status !== 'Approved' && (
-                  <button
-                    onClick={() => approveReview(review.id)}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <CheckCircle size={13} /> Approve & Publish
-                  </button>
-                )}
+              {canEdit ? (
+                <div className="flex items-center gap-2">
+                  {review.status !== 'Approved' && (
+                    <button
+                      onClick={() => approveReview(review.id)}
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <CheckCircle size={13} /> Approve & Publish
+                    </button>
+                  )}
 
-                {review.status !== 'Hidden' && (
-                  <button
-                    onClick={() => hideReview(review.id)}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <EyeOff size={13} /> Hide from Store
-                  </button>
-                )}
+                  {review.status !== 'Hidden' && (
+                    <button
+                      onClick={() => hideReview(review.id)}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <EyeOff size={13} /> Hide from Store
+                    </button>
+                  )}
 
-                <button
-                  onClick={() => deleteReview(review.id)}
-                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Trash2 size={13} /> Delete Review
-                </button>
-              </div>
+                  <button
+                    onClick={() => deleteReview(review.id)}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 size={13} /> Delete Review
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg">
+                  View-Only Mode
+                </span>
+              )}
             </div>
 
           </div>

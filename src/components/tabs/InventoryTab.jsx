@@ -10,16 +10,22 @@ import {
   Store
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
-import * as XLSX from 'xlsx';
+import { exportToExcel } from '../../utils/excelExporter';
 
 export default function InventoryTab() {
-  const { products, updateProduct, logAudit } = useAdminData();
+  const { products, inventory = [], inventoryMetrics = {}, quickRestock, updateInventoryStock, logAudit } = useAdminData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, low, out
+  const [restockingId, setRestockingId] = useState(null);
+  const [editingStockId, setEditingStockId] = useState(null);
+  const [customStockValue, setCustomStockValue] = useState('');
 
-  const filteredItems = products.filter(p => {
-    const stock = p.stockQuantity ?? 50;
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Use inventory list if available, fallback to products
+  const displayItems = (inventory && inventory.length > 0) ? inventory : products;
+
+  const filteredItems = displayItems.filter(p => {
+    const stock = p.stockQuantity ?? p.stock ?? 50;
+    const matchesSearch = (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
                           (p.sellerName && p.sellerName.toLowerCase().includes(searchTerm.toLowerCase()));
     if (filterType === 'low') return matchesSearch && stock > 0 && stock <= 10;
@@ -27,15 +33,38 @@ export default function InventoryTab() {
     return matchesSearch;
   });
 
-  const lowStockCount = products.filter(p => (p.stockQuantity ?? 50) > 0 && (p.stockQuantity ?? 50) <= 10).length;
-  const outOfStockCount = products.filter(p => (p.stockQuantity ?? 50) === 0).length;
+  const lowStockCount = inventoryMetrics?.lowStockCount !== undefined
+    ? inventoryMetrics.lowStockCount
+    : displayItems.filter(p => (p.stockQuantity ?? p.stock ?? 50) > 0 && (p.stockQuantity ?? p.stock ?? 50) <= 10).length;
 
-  const handleQuickRestock = (prodId, addQty = 50) => {
-    const target = products.find(p => p.id === prodId);
-    if (!target) return;
-    const current = target.stockQuantity ?? 0;
-    updateProduct(prodId, { stockQuantity: current + addQty });
-    logAudit('Inventory Restocked', `Added ${addQty} units to ${target.name} (Now: ${current + addQty})`);
+  const outOfStockCount = inventoryMetrics?.outOfStockCount !== undefined
+    ? inventoryMetrics.outOfStockCount
+    : displayItems.filter(p => (p.stockQuantity ?? p.stock ?? 50) === 0).length;
+
+  const handleQuickRestock = async (prodId, addQty = 50) => {
+    setRestockingId(prodId);
+    try {
+      if (quickRestock) {
+        await quickRestock(prodId, addQty);
+      }
+    } finally {
+      setRestockingId(null);
+    }
+  };
+
+  const handleStartEditStock = (item) => {
+    setEditingStockId(item.id || item._id);
+    setCustomStockValue(String(item.stockQuantity ?? item.stock ?? 0));
+  };
+
+  const handleSaveStock = async (prodId) => {
+    const val = parseInt(customStockValue, 10);
+    if (!isNaN(val) && val >= 0) {
+      if (updateInventoryStock) {
+        await updateInventoryStock(prodId, val);
+      }
+    }
+    setEditingStockId(null);
   };
 
   const exportExcelReport = () => {
@@ -51,10 +80,7 @@ export default function InventoryTab() {
       'Stock Status': (p.stockQuantity ?? 50) === 0 ? 'Out of Stock' : (p.stockQuantity ?? 50) <= 10 ? 'Low Stock Alert' : 'Healthy'
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Marketplace_Inventory');
-    XLSX.writeFile(workbook, `BookVardi_Inventory_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    exportToExcel(data, `BookVardi_Inventory_Report_${new Date().toISOString().slice(0, 10)}`, 'Marketplace_Inventory');
   };
 
   return (
@@ -88,7 +114,7 @@ export default function InventoryTab() {
           }`}
         >
           <span className="text-[11px] font-bold text-gray-500">Total Tracked SKUs</span>
-          <div className="font-display font-extrabold text-2xl text-gray-900 mt-1">{products.length} Items</div>
+          <div className="font-display font-extrabold text-2xl text-gray-900 mt-1">{(inventoryMetrics?.totalProducts !== undefined && inventoryMetrics?.totalProducts > 0) ? inventoryMetrics.totalProducts : displayItems.length} Items</div>
         </div>
 
         <div 
@@ -179,8 +205,39 @@ export default function InventoryTab() {
 
                     {/* Stock Units */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="font-extrabold text-sm text-gray-900">{stock}</span>
-                      <span className="text-[11px] text-gray-400 ml-1">in warehouse</span>
+                      {editingStockId === (item.id || item._id) ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            value={customStockValue}
+                            onChange={(e) => setCustomStockValue(e.target.value)}
+                            className="w-16 px-2 py-0.5 border border-teal-500 rounded text-xs font-bold text-gray-900 outline-hidden"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveStock(item.id || item._id);
+                              if (e.key === 'Escape') setEditingStockId(null);
+                            }}
+                          />
+                          <button
+                            onClick={() => handleSaveStock(item.id || item._id)}
+                            className="p-1 bg-teal-700 text-white rounded hover:bg-teal-800 cursor-pointer"
+                            title="Save"
+                          >
+                            <CheckCircle2 size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => handleStartEditStock(item)}
+                          className="cursor-pointer group flex items-center gap-1.5"
+                          title="Click to adjust stock"
+                        >
+                          <span className="font-extrabold text-sm text-gray-900 group-hover:text-teal-700">{stock}</span>
+                          <span className="text-[11px] text-gray-400">in warehouse</span>
+                          <span className="text-[10px] text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity font-semibold underline">Edit</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Status */}
@@ -204,14 +261,16 @@ export default function InventoryTab() {
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => handleQuickRestock(item.id, 25)}
-                          className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          disabled={restockingId === (item.id || item._id)}
+                          onClick={() => handleQuickRestock(item.id || item._id, 25)}
+                          className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           +25
                         </button>
                         <button
-                          onClick={() => handleQuickRestock(item.id, 50)}
-                          className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          disabled={restockingId === (item.id || item._id)}
+                          onClick={() => handleQuickRestock(item.id || item._id, 50)}
+                          className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 disabled:opacity-50 text-teal-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           +50
                         </button>

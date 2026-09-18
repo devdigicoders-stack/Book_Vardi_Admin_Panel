@@ -22,8 +22,11 @@ export default function OrdersTab() {
     updateOrderStatus, 
     cancelOrder, 
     refundOrder, 
-    updateOrderTracking 
+    updateOrderTracking,
+    isEditor 
   } = useAdminData();
+
+  const canEdit = isEditor ? isEditor('orders') : true;
 
   const [orderType, setOrderType] = useState('retail'); // retail, school
   const [searchTerm, setSearchTerm] = useState('');
@@ -255,6 +258,7 @@ export default function OrdersTab() {
         onUpdateTracking={updateOrderTracking}
         onCancelOrder={cancelOrder}
         onRefundOrder={refundOrder}
+        readOnly={!canEdit}
       />
 
     </div>

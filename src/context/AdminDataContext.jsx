@@ -1,19 +1,44 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  ALL_PRODUCTS,
-  ORDERS as MOCK_ORDERS,
-  SCHOOL_ORDERS as MOCK_SCHOOL_ORDERS,
-  SELLERS as MOCK_SELLERS,
-  SCHOOLS as MOCK_SCHOOLS,
-  USERS as MOCK_USERS,
-  USERS,
-  PROMOTIONS as MOCK_PROMOTIONS,
-  REVIEWS as MOCK_REVIEWS,
-  SUPPORT_TICKETS as MOCK_SUPPORT_TICKETS,
-  PLATFORM_SETTINGS as MOCK_SETTINGS,
-  NOTIFICATIONS as MOCK_NOTIFICATIONS
-} from '../data/mockData';
-import { pushPlatformSync, usePlatformSyncListener } from '../utils/syncBridge';
+  loginAdminApi,
+  fetchAdminSellersApi,
+  fetchAdminUsersApi,
+  fetchAdminProductsApi,
+  fetchAdminOrdersApi,
+  fetchAdminSchoolsApi,
+  fetchAdminPayoutsApi,
+  updateProductApprovalApi,
+  deleteAdminProductApi,
+  createAdminProductApi,
+  updateAdminProductApi,
+  fetchAdminInventoryApi,
+  updateAdminInventoryStockApi,
+  quickRestockAdminInventoryApi,
+  approveSellerApi,
+  rejectSellerApi,
+  updateSellerCommissionApi,
+  toggleSellerStatusApi,
+  updateOrderStatusApi,
+  createSchoolApi,
+  updateSchoolApi,
+  deleteSchoolApi,
+  updateSchoolRadiusApi,
+  createUserApi,
+  updateUserApi,
+  processPayoutApi,
+  fetchAdminPromotionsApi,
+  createPromotionApi,
+  deletePromotionApi,
+  fetchAdminReviewsApi,
+  moderateReviewApi,
+  deleteAdminReviewApi,
+  fetchAdminSettingsApi,
+  fetchAdminRecentActivitiesApi,
+  fetchSubadminsApi,
+  createSubadminApi,
+  updateSubadminApi,
+  deleteSubadminApi
+} from '../utils/api';
 
 const AdminDataContext = createContext();
 
@@ -33,91 +58,86 @@ export const APPROVED_ADMIN_ROLES = [
 ];
 
 export const AdminDataProvider = ({ children }) => {
-  // Authentication state
+  // Authentication state - Enforce live JWT validation
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
-      const saved = localStorage.getItem('admin_is_authenticated');
-      return saved !== null ? JSON.parse(saved) : true;
+      const token = localStorage.getItem('bv_admin_jwt_token');
+      return Boolean(token);
     } catch {
-      return true;
+      return false;
     }
   });
 
-  // Current Admin Profile & RBAC Role
+  // Current Admin Profile & RBAC Role - dynamically loaded from backend auth
   const [adminUser, setAdminUser] = useState(() => {
-    const saved = localStorage.getItem('admin_profile');
-    return saved ? JSON.parse(saved) : {
-      name: 'Aaditya Yadav',
-      email: 'admin@bookvardi.in',
-      phone: '+91 98765 43210',
-      role: 'Super Admin', // Super Admin, Operations Manager, Finance Admin, Support Lead
-      adminId: 'BV-ADM-001',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-      approvedAt: '2024-06-15',
-      lastLogin: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-    };
+    try {
+      const saved = localStorage.getItem('admin_profile');
+      if (saved) return JSON.parse(saved);
+      return {
+        name: 'Administrator',
+        email: 'admin@bookvardi.in',
+        phone: '',
+        role: 'super_admin',
+        permissions: {},
+        status: 'active',
+        adminId: 'BV-ADM-001',
+        approvedAt: new Date().toISOString().split('T')[0],
+        lastLogin: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
+    } catch {
+      return {
+        name: 'Administrator',
+        email: 'admin@bookvardi.in',
+        phone: '',
+        role: 'super_admin',
+        permissions: {},
+        status: 'active',
+        adminId: 'BV-ADM-001',
+        approvedAt: new Date().toISOString().split('T')[0],
+        lastLogin: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
+    }
+  });
+
+  // 13. Sub-Admin RBAC Staff
+  const [subadmins, setSubadmins] = useState(() => {
+    try {
+      const saved = localStorage.getItem('admin_subadmins');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   // 1. Products
   const [products, setProducts] = useState(() => {
     try {
       const saved = localStorage.getItem('admin_products');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.map(p => {
-          if (!p.approvalStatus) {
-            const mock = ALL_PRODUCTS.find(m => m.id === p.id);
-            return {
-              ...p,
-              approvalStatus: mock?.approvalStatus || (p.id === 3 || p.id === 4 ? 'Pending' : 'Approved'),
-              approvalComment: mock?.approvalComment || p.approvalComment || '',
-              rejectionReason: mock?.rejectionReason || p.rejectionReason || null
-            };
-          }
-          return p;
-        });
-      }
-      return ALL_PRODUCTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ALL_PRODUCTS;
+      return [];
     }
   });
 
   // 2. Orders
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('admin_orders');
-    return saved ? JSON.parse(saved) : MOCK_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 3. School Bulk Orders
   const [schoolOrders, setSchoolOrders] = useState(() => {
     const saved = localStorage.getItem('admin_school_orders');
-    return saved ? JSON.parse(saved) : MOCK_SCHOOL_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 4. Sellers
   const [sellers, setSellers] = useState(() => {
     try {
       const saved = localStorage.getItem('admin_sellers');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const merged = parsed.map(s => {
-          const mockMatch = MOCK_SELLERS.find(m => m.id === s.id);
-          if (mockMatch && (!s.rawApplication || Object.keys(s.rawApplication).length < 5)) {
-            return { ...mockMatch, ...s, rawApplication: mockMatch.rawApplication };
-          }
-          return s;
-        });
-        MOCK_SELLERS.forEach(m => {
-          if (!merged.some(s => s.id === m.id)) {
-            merged.push(m);
-          }
-        });
-        return merged;
-      }
-      return MOCK_SELLERS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return MOCK_SELLERS;
+      return [];
     }
   });
 
@@ -125,22 +145,9 @@ export const AdminDataProvider = ({ children }) => {
   const [schools, setSchools] = useState(() => {
     try {
       const saved = localStorage.getItem('admin_schools');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.map(s => {
-          const mock = MOCK_SCHOOLS.find(m => m.id === s.id || m.name === s.name);
-          return {
-            ...s,
-            lat: s.lat !== undefined ? Number(s.lat) : (mock?.lat || 28.6139),
-            lng: s.lng !== undefined ? Number(s.lng) : (mock?.lng || 77.2090),
-            address: s.address || mock?.address || s.city,
-            pincode: s.pincode || mock?.pincode || '110001'
-          };
-        });
-      }
-      return MOCK_SCHOOLS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return MOCK_SCHOOLS;
+      return [];
     }
   });
 
@@ -154,141 +161,427 @@ export const AdminDataProvider = ({ children }) => {
         const parsed = JSON.parse(savedSettings);
         if (parsed.schoolRadiusKm) return Number(parsed.schoolRadiusKm);
       }
-      return MOCK_SETTINGS.schoolRadiusKm || 25;
+      return 25;
     } catch {
       return 25;
     }
   });
 
   useEffect(() => {
-    localStorage.setItem('bv_school_radius_km', JSON.stringify(schoolRadiusKm));
+    try {
+      localStorage.setItem('bv_school_radius_km', JSON.stringify(schoolRadiusKm));
+    } catch (e) {
+      console.warn('[LocalStorage] Quota error on bv_school_radius_km:', e.message);
+    }
   }, [schoolRadiusKm]);
 
   // 6. Users
   const [users, setUsers] = useState(() => {
     const saved = localStorage.getItem('admin_users');
-    return saved ? JSON.parse(saved) : MOCK_USERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 7. Promotions
   const [promotions, setPromotions] = useState(() => {
     const saved = localStorage.getItem('admin_promotions');
-    return saved ? JSON.parse(saved) : MOCK_PROMOTIONS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 8. Reviews & Reports
   const [reviews, setReviews] = useState(() => {
     const saved = localStorage.getItem('admin_reviews');
-    return saved ? JSON.parse(saved) : MOCK_REVIEWS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 9. Support Tickets
   const [supportTickets, setSupportTickets] = useState(() => {
     const saved = localStorage.getItem('admin_support_tickets');
-    return saved ? JSON.parse(saved) : MOCK_SUPPORT_TICKETS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 10. Platform Settings
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('admin_settings');
-    return saved ? JSON.parse(saved) : MOCK_SETTINGS;
+    return saved ? JSON.parse(saved) : { schoolRadiusKm: 25 };
   });
 
   // 11. Notifications
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('admin_notifications');
-    return saved ? JSON.parse(saved) : MOCK_NOTIFICATIONS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // 12. Audit Log
   const [auditLog, setAuditLog] = useState(() => {
-    const saved = localStorage.getItem('admin_audit_log');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, action: 'Platform Launch', user: 'System', details: 'Book Vardi operations initiated', time: '1 day ago' },
-      { id: 2, action: 'Vendor Approved', user: 'Super Admin', details: 'Vardi Uniforms Pvt Ltd verified', time: '5 hours ago' },
-      { id: 3, action: 'Payout Dispatched', user: 'Finance Admin', details: 'Batch #B-991 released to HDFC', time: '2 hours ago' }
-    ];
+    try {
+      const saved = localStorage.getItem('admin_audit_log');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
-  // Persist to localStorage
-  useEffect(() => { localStorage.setItem('admin_products', JSON.stringify(products)); }, [products]);
-  useEffect(() => { localStorage.setItem('admin_orders', JSON.stringify(orders)); }, [orders]);
-  useEffect(() => { localStorage.setItem('admin_school_orders', JSON.stringify(schoolOrders)); }, [schoolOrders]);
-  useEffect(() => { localStorage.setItem('admin_sellers', JSON.stringify(sellers)); }, [sellers]);
-  useEffect(() => { localStorage.setItem('admin_schools', JSON.stringify(schools)); }, [schools]);
-  useEffect(() => { localStorage.setItem('admin_users', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('admin_promotions', JSON.stringify(promotions)); }, [promotions]);
-  useEffect(() => { localStorage.setItem('admin_reviews', JSON.stringify(reviews)); }, [reviews]);
-  useEffect(() => { localStorage.setItem('admin_support_tickets', JSON.stringify(supportTickets)); }, [supportTickets]);
-  useEffect(() => { localStorage.setItem('admin_settings', JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem('admin_notifications', JSON.stringify(notifications)); }, [notifications]);
-  useEffect(() => { localStorage.setItem('admin_audit_log', JSON.stringify(auditLog)); }, [auditLog]);
-  useEffect(() => { localStorage.setItem('admin_profile', JSON.stringify(adminUser)); }, [adminUser]);
-  useEffect(() => { localStorage.setItem('admin_is_authenticated', JSON.stringify(isAuthenticated)); }, [isAuthenticated]);
-
-  // Subscribe to real-time sync across user and seller portals
-  usePlatformSyncListener((incoming) => {
-    if (!incoming) return;
-    if (incoming.products) setProducts(incoming.products);
-    if (incoming.orders) setOrders(incoming.orders);
-    if (incoming.schoolOrders) setSchoolOrders(incoming.schoolOrders);
-    if (incoming.sellers) setSellers(incoming.sellers);
-    if (incoming.schools) setSchools(incoming.schools);
-    if (incoming.users) setUsers(incoming.users);
-    if (incoming.promotions) setPromotions(incoming.promotions);
-    if (incoming.reviews) setReviews(incoming.reviews);
-    if (incoming.schoolRadiusKm) setSchoolRadiusKm(Number(incoming.schoolRadiusKm));
+  // 13. Inventory State & Metrics
+  const [inventory, setInventory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('admin_inventory');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
+
+  const [inventoryMetrics, setInventoryMetrics] = useState({
+    totalProducts: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    healthyStockCount: 0,
+    threshold: 10
+  });
+
+  // Safe helper to write to localStorage without throwing QuotaExceededError
+  const safeSetLocalStorage = (key, data) => {
+    try {
+      const stringified = typeof data === 'string' ? data : JSON.stringify(data);
+      localStorage.setItem(key, stringified);
+    } catch (error) {
+      console.warn(`[LocalStorage] Unable to set item "${key}":`, error?.message || error);
+      if (error?.name === 'QuotaExceededError' || error?.name === 'NS_ERROR_DOM_QUOTA_REACHED' || error?.code === 22) {
+        try {
+          if (Array.isArray(data)) {
+            // Trim array or strip inline base64 image data to fit browser storage quota
+            const sanitized = data.slice(0, 100).map((item) => {
+              if (item && typeof item === 'object') {
+                const copy = { ...item };
+                if (typeof copy.image === 'string' && copy.image.startsWith('data:image')) {
+                  copy.image = '';
+                }
+                if (Array.isArray(copy.images)) {
+                  copy.images = copy.images.filter(img => typeof img === 'string' && !img.startsWith('data:image'));
+                }
+                return copy;
+              }
+              return item;
+            });
+            localStorage.setItem(key, JSON.stringify(sanitized));
+          }
+        } catch (innerError) {
+          console.warn(`[LocalStorage] Quota fallback failed for "${key}":`, innerError?.message || innerError);
+        }
+      }
+    }
+  };
+
+  // Persist state to localStorage safely
+  useEffect(() => { safeSetLocalStorage('admin_products', products); }, [products]);
+  useEffect(() => { safeSetLocalStorage('admin_inventory', inventory); }, [inventory]);
+  useEffect(() => { safeSetLocalStorage('admin_orders', orders); }, [orders]);
+  useEffect(() => { safeSetLocalStorage('admin_school_orders', schoolOrders); }, [schoolOrders]);
+  useEffect(() => { safeSetLocalStorage('admin_sellers', sellers); }, [sellers]);
+  useEffect(() => { safeSetLocalStorage('admin_schools', schools); }, [schools]);
+  useEffect(() => { safeSetLocalStorage('admin_users', users); }, [users]);
+  useEffect(() => { safeSetLocalStorage('admin_promotions', promotions); }, [promotions]);
+  useEffect(() => { safeSetLocalStorage('admin_reviews', reviews); }, [reviews]);
+  useEffect(() => { safeSetLocalStorage('admin_support_tickets', supportTickets); }, [supportTickets]);
+  useEffect(() => { safeSetLocalStorage('admin_settings', settings); }, [settings]);
+  useEffect(() => { safeSetLocalStorage('admin_notifications', notifications); }, [notifications]);
+  useEffect(() => { safeSetLocalStorage('admin_subadmins', subadmins); }, [subadmins]);
+  useEffect(() => { safeSetLocalStorage('admin_audit_log', auditLog); }, [auditLog]);
+  useEffect(() => { safeSetLocalStorage('admin_profile', adminUser); }, [adminUser]);
+  useEffect(() => { safeSetLocalStorage('admin_is_authenticated', isAuthenticated); }, [isAuthenticated]);
+
+  // Phase 0: Hydrate initial state from backend API endpoints
+  useEffect(() => {
+    fetchAdminRecentActivitiesApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setAuditLog(data.map((item, idx) => ({
+          id: item.id || Date.now() - idx * 60000,
+          action: item.action || 'Activity',
+          user: item.user || 'System',
+          details: item.details || `${item.user} ${item.action}`,
+          time: item.time || 'Recently'
+        })));
+      }
+    }).catch(() => {});
+    fetchAdminSellersApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.sellers || []);
+      if (list.length > 0) {
+        setSellers(list.map(s => ({
+          id: s._id || s.id,
+          _id: s._id || s.id,
+          storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+          ownerName: s.ownerName || s.name || 'Vendor',
+          status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          payoutBalance: s.walletBalance || s.payoutBalance || 0,
+          ...s
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminUsersApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setUsers(data.map(u => ({
+          id: u._id || u.id,
+          _id: u._id || u.id,
+          name: u.name || 'User',
+          email: u.email || '',
+          role: u.role || 'Customer',
+          status: u.status ? (u.status.charAt(0).toUpperCase() + u.status.slice(1)) : 'Active',
+          ...u
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminProductsApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.products || []);
+      if (list.length > 0) {
+        setProducts(list.map(p => ({
+          id: p._id || p.id,
+          _id: p._id || p.id,
+          name: p.name || p.title || 'Product',
+          price: Number(p.price || 0),
+          originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+          mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+          category: p.category || 'uniforms',
+          approvalStatus: p.approvalStatus || 'Approved',
+          stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+          stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+          image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
+          images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
+          sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
+          sizes: Array.isArray(p.sizes) ? p.sizes : [],
+          ...p
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminOrdersApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setOrders(data.map(o => ({
+          id: o.orderId || o._id || o.id,
+          _id: o._id || o.id,
+          customerName: o.customer?.name || o.userName || 'Customer',
+          totalAmount: o.totalAmount || o.total || 0,
+          status: o.overallStatus || o.status || 'Pending',
+          paymentStatus: o.paymentStatus || 'Paid',
+          ...o
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminSchoolsApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.schools || []);
+      if (list.length > 0) {
+        setSchools(list.map(sch => ({
+          id: sch._id || sch.id,
+          _id: sch._id || sch.id,
+          name: sch.name || sch.institutionName || 'School',
+          status: sch.status || 'Partner Active',
+          ...sch
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminPromotionsApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setPromotions(data.map(promo => ({
+          id: promo._id || promo.id,
+          _id: promo._id || promo.id,
+          code: promo.code,
+          discount: promo.discount,
+          type: promo.type,
+          minAmount: promo.minAmount,
+          status: promo.status || 'active',
+          ...promo
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminReviewsApi().then(data => {
+      if (Array.isArray(data)) {
+        setReviews(data.map(r => ({
+          id: r._id || r.id,
+          _id: r._id || r.id,
+          productName: r.productName || 'Product',
+          customerName: r.customerName || r.userName || 'Verified Customer',
+          status: r.status || (r.rawStatus === 'approved' ? 'Approved' : (r.rawStatus === 'rejected' ? 'Hidden' : 'Pending Approval')),
+          ...r
+        })));
+      }
+    }).catch(() => {});
+
+    fetchAdminSettingsApi().then(data => {
+      if (data) {
+        setSettings(data);
+        if (data.schoolRadiusKm) setSchoolRadiusKm(Number(data.schoolRadiusKm));
+      }
+    }).catch(() => {});
+
+    fetchSubadminsApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.subadmins || []);
+      if (list.length > 0) {
+        setSubadmins(list);
+      }
+    }).catch(() => {});
+
+    fetchAdminInventoryApi().then(data => {
+      if (data && data.success) {
+        if (Array.isArray(data.inventory)) setInventory(data.inventory);
+        if (data.metrics) setInventoryMetrics(data.metrics);
+      } else if (Array.isArray(data)) {
+        setInventory(data);
+      }
+    }).catch(() => {});
+
+    // Sync product approval notifications & product submissions in real-time
+    const syncFromStorage = () => {
+      try {
+        const savedNotifs = localStorage.getItem('admin_notifications');
+        if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
+        const savedProds = localStorage.getItem('admin_products');
+        if (savedProds) setProducts(JSON.parse(savedProds));
+      } catch (e) {}
+    };
+
+    const handleNotifEvent = (e) => {
+      if (e.detail) {
+        setNotifications(prev => [e.detail, ...prev.filter(n => n.id !== e.detail.id)]);
+      }
+    };
+
+    const handleProdsEvent = (e) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setProducts(e.detail);
+      }
+    };
+
+    window.addEventListener('storage', syncFromStorage);
+    window.addEventListener('adminNotificationReceived', handleNotifEvent);
+    window.addEventListener('adminProductsUpdated', handleProdsEvent);
+
+    return () => {
+      window.removeEventListener('storage', syncFromStorage);
+      window.removeEventListener('adminNotificationReceived', handleNotifEvent);
+      window.removeEventListener('adminProductsUpdated', handleProdsEvent);
+    };
+  }, []);
+
+
 
   // Audit Logger Helper
   const logAudit = useCallback((action, details) => {
     const entry = {
       id: Date.now(),
       action,
-      user: adminUser.role,
+      user: adminUser?.role || 'Admin',
       details,
       time: 'Just now'
     };
     setAuditLog(prev => [entry, ...prev.slice(0, 49)]);
-  }, [adminUser.role]);
+  }, [adminUser?.role]);
 
   // ==================== PRODUCT ACTIONS ====================
-  const addProduct = (newProd) => {
+  const addProduct = async (newProd) => {
+    const tempId = Date.now();
     const item = {
-      id: Date.now(),
+      id: tempId,
+      _id: String(tempId),
       name: newProd.name.trim(),
       subtitle: newProd.subtitle || '',
-      price: Number(newProd.price),
-      originalPrice: Number(newProd.originalPrice) || Math.round(Number(newProd.price) * 1.25),
+      price: Number(newProd.price) || 0,
+      originalPrice: Number(newProd.originalPrice) || Math.round(Number(newProd.price || 0) * 1.25),
+      mrp: Number(newProd.originalPrice || newProd.mrp) || Math.round(Number(newProd.price || 0) * 1.25),
       category: newProd.category || 'uniforms',
+      subCategory: newProd.subCategory || '',
+      schoolName: newProd.schoolName || '',
+      gender: newProd.gender || 'Unisex',
       badge: newProd.badge || 'NEW',
-      stockQuantity: Number(newProd.stockQuantity) || 50,
-      sellerId: newProd.sellerId || 'SEL-101',
-      sellerName: newProd.sellerName || 'Direct Marketplace',
+      stockQuantity: Number(newProd.stockQuantity) || 0,
+      stock: Number(newProd.stockQuantity) || 0,
+      sellerId: newProd.sellerId || '',
+      sellerName: newProd.sellerName || '',
+      paymentMethodAllowed: newProd.paymentMethodAllowed || 'Both',
       approvalStatus: newProd.approvalStatus || 'Approved',
       approvalComment: newProd.approvalComment || '',
       rating: 5.0,
       reviews: 0,
-      image: newProd.image || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=500&auto=format&fit=crop&q=80',
+      image: newProd.image || (Array.isArray(newProd.images) && newProd.images[0]) || '',
       images: Array.isArray(newProd.images) ? newProd.images : (newProd.image ? [newProd.image] : []),
+      sizes: Array.isArray(newProd.sizes) ? newProd.sizes : [],
+      sizeVariants: Array.isArray(newProd.sizeVariants) ? newProd.sizeVariants : [],
       sku: newProd.sku || `BV-CAT-${Math.floor(100 + Math.random() * 900)}`
     };
-    setProducts(prev => {
-      const updated = [item, ...prev];
-      pushPlatformSync({ products: updated });
-      return updated;
-    });
+    setProducts(prev => [item, ...prev]);
+    setInventory(prev => [item, ...prev]);
     logAudit('Add Product', `Added catalog product: ${item.name}`);
+
+    try {
+      const res = await createAdminProductApi({
+        ...item,
+        stock: item.stockQuantity,
+        mrp: item.originalPrice
+      });
+      if (res?.success && res?.product) {
+        const saved = res.product;
+        const normalizedSaved = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          stock: saved.stock ?? saved.stockQuantity ?? 0,
+          stockQuantity: saved.stock ?? saved.stockQuantity ?? 0,
+          price: Number(saved.price || 0),
+          mrp: Number(saved.mrp || saved.originalPrice || 0),
+          originalPrice: Number(saved.originalPrice || saved.mrp || 0),
+          inStock: (saved.stock ?? saved.stockQuantity ?? 0) > 0
+        };
+        setProducts(prev => prev.map(p => ((p.id === tempId || p._id === String(tempId)) ? normalizedSaved : p)));
+        setInventory(prev => prev.map(p => ((p.id === tempId || p._id === String(tempId)) ? normalizedSaved : p)));
+        fetchAdminInventoryApi().then(invRes => {
+          if (invRes?.metrics) setInventoryMetrics(invRes.metrics);
+        }).catch(() => {});
+        return normalizedSaved;
+      }
+    } catch (err) {
+      console.warn('Backend product create fallback to local state:', err);
+    }
     return item;
   };
 
-  const updateProduct = (id, updates) => {
-    setProducts(prev => {
-      const updated = prev.map(p => p.id === id ? { ...p, ...updates } : p);
-      pushPlatformSync({ products: updated });
-      return updated;
-    });
+  const updateProduct = async (id, updates) => {
+    setProducts(prev => prev.map(p => (p.id === id || p._id === id ? { ...p, ...updates } : p)));
+    setInventory(prev => prev.map(p => (p.id === id || p._id === id ? { ...p, ...updates } : p)));
     logAudit('Update Product', `Updated product ID #${id}`);
+
+    try {
+      const payload = {
+        ...updates,
+        stock: updates.stockQuantity !== undefined ? updates.stockQuantity : updates.stock,
+        mrp: updates.originalPrice !== undefined ? updates.originalPrice : updates.mrp
+      };
+      const res = await updateAdminProductApi(id, payload);
+      if (res?.success && res?.product) {
+        const saved = res.product;
+        const normalizedSaved = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          stock: saved.stock ?? saved.stockQuantity ?? 0,
+          stockQuantity: saved.stock ?? saved.stockQuantity ?? 0,
+          price: Number(saved.price || 0),
+          mrp: Number(saved.mrp || saved.originalPrice || 0),
+          originalPrice: Number(saved.originalPrice || saved.mrp || 0),
+          inStock: (saved.stock ?? saved.stockQuantity ?? 0) > 0
+        };
+        setProducts(prev => prev.map(p => (p.id === id || p._id === id ? normalizedSaved : p)));
+        setInventory(prev => prev.map(p => (p.id === id || p._id === id ? normalizedSaved : p)));
+        fetchAdminInventoryApi().then(invRes => {
+          if (invRes?.metrics) setInventoryMetrics(invRes.metrics);
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Backend product update fallback to local state:', err);
+    }
   };
 
   const approveProduct = (id, comment = '') => {
@@ -300,7 +593,7 @@ export const AdminDataProvider = ({ children }) => {
         approvalComment: trimmedComment || p.approvalComment || '',
         rejectionReason: null
       } : p);
-      pushPlatformSync({ products: updated });
+
       return updated;
     });
     logAudit('Approve Product', `Approved product catalog item #${id}${trimmedComment ? ` (${trimmedComment})` : ''}`);
@@ -325,10 +618,11 @@ export const AdminDataProvider = ({ children }) => {
           reviewedBy: adminUser?.name || adminUser?.role || 'Marketplace Administrator'
         };
       });
-      pushPlatformSync({ products: updated });
+
       return updated;
     });
 
+    updateProductApprovalApi(id, validStatus, trimmedRemark).catch(() => {});
     logAudit('Product Status Updated', `Product #${id} marked as ${validStatus}${trimmedRemark ? ` (${trimmedRemark})` : ''}`);
   };
 
@@ -342,18 +636,18 @@ export const AdminDataProvider = ({ children }) => {
         rejectionReason: finalReason,
         approvalComment: finalReason
       } : p);
-      pushPlatformSync({ products: updated });
+
       return updated;
     });
+
+    updateProductApprovalApi(id, 'Rejected', finalReason).catch(() => {});
     logAudit('Reject Product', `Rejected product #${id} (${finalReason})`);
   };
 
   const deleteProduct = (id) => {
-    setProducts(prev => {
-      const updated = prev.filter(p => p.id !== id);
-      pushPlatformSync({ products: updated });
-      return updated;
-    });
+    setProducts(prev => prev.filter(p => p.id !== id && p._id !== id));
+    setInventory(prev => prev.filter(p => p.id !== id && p._id !== id));
+    deleteAdminProductApi(id).catch(() => {});
     logAudit('Delete Product', `Deleted catalog item #${id}`);
   };
 
@@ -361,25 +655,24 @@ export const AdminDataProvider = ({ children }) => {
   const updateOrderStatus = (orderId, newStatus) => {
     setOrders(prev => {
       const updated = prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
-      pushPlatformSync({ orders: updated });
       return updated;
     });
+    updateOrderStatusApi(orderId, newStatus).catch(() => {});
     logAudit('Order Status Updated', `Order ${orderId} marked as ${newStatus}`);
   };
 
   const cancelOrder = (orderId, reason = 'Administrative cancellation') => {
     setOrders(prev => {
       const updated = prev.map(o => o.id === orderId ? { ...o, status: 'Cancelled', cancellationReason: reason } : o);
-      pushPlatformSync({ orders: updated });
       return updated;
     });
+    updateOrderStatusApi(orderId, 'Cancelled').catch(() => {});
     logAudit('Order Cancelled', `Cancelled order ${orderId} (${reason})`);
   };
 
   const refundOrder = (orderId, refundAmount) => {
     setOrders(prev => {
       const updated = prev.map(o => o.id === orderId ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled' } : o);
-      pushPlatformSync({ orders: updated });
       return updated;
     });
     logAudit('Refund Issued', `Refunded ₹${refundAmount} for order ${orderId}`);
@@ -388,7 +681,6 @@ export const AdminDataProvider = ({ children }) => {
   const updateOrderTracking = (orderId, trackingNumber) => {
     setOrders(prev => {
       const updated = prev.map(o => o.id === orderId ? { ...o, trackingNumber, status: 'Shipped' } : o);
-      pushPlatformSync({ orders: updated });
       return updated;
     });
     logAudit('Tracking Assigned', `Assigned tracking ${trackingNumber} to ${orderId}`);
@@ -413,9 +705,47 @@ export const AdminDataProvider = ({ children }) => {
         }
         return s;
       });
-      pushPlatformSync({ sellers: updated });
       return updated;
     });
+
+    // Synchronize approval to Website persistent keys
+    try {
+      localStorage.setItem('book_vardi_seller_status', JSON.stringify('approved'));
+
+      const regData = localStorage.getItem('bv_seller_reg_data');
+      if (regData) {
+        const parsed = JSON.parse(regData);
+        parsed.submissionStatus = 'approved';
+        parsed.status = 'approved';
+        localStorage.setItem('bv_seller_reg_data', JSON.stringify(parsed));
+      } else {
+        localStorage.setItem('bv_seller_reg_data', JSON.stringify({ submissionStatus: 'approved', status: 'approved' }));
+      }
+
+      const sellerProf = localStorage.getItem('book_vardi_seller_profile');
+      if (sellerProf) {
+        const parsed = JSON.parse(sellerProf);
+        parsed.status = 'approved';
+        parsed.submissionStatus = 'approved';
+        localStorage.setItem('book_vardi_seller_profile', JSON.stringify(parsed));
+      } else {
+        localStorage.setItem('book_vardi_seller_profile', JSON.stringify({ status: 'approved', submissionStatus: 'approved' }));
+      }
+
+      const userProf = localStorage.getItem('book_vardi_user_profile');
+      if (userProf) {
+        const parsed = JSON.parse(userProf);
+        parsed.sellerStatus = 'approved';
+        parsed.isSeller = true;
+        localStorage.setItem('book_vardi_user_profile', JSON.stringify(parsed));
+      }
+
+      window.dispatchEvent(new CustomEvent('bv_seller_status_updated', { detail: 'approved' }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    approveSellerApi(sellerId).catch(() => {});
     logAudit('Seller Approved', `KYC approved for seller ${sellerId}`);
   };
 
@@ -437,28 +767,72 @@ export const AdminDataProvider = ({ children }) => {
         }
         return s;
       });
-      pushPlatformSync({ sellers: updated });
       return updated;
     });
-    logAudit('Seller Rejected', `Rejected seller ${sellerId}: ${reason}`);
+    rejectSellerApi(sellerId, reason).catch(() => {});
+    logAudit('Seller Rejected', `Rejected seller ${sellerId} (${reason})`);
   };
 
-  const updateSellerCommission = (sellerId, rate) => {
+  const updateSellerCommission = async (sellerId, rate) => {
+    const numRate = Number(rate);
     setSellers(prev => {
-      const updated = prev.map(s => s.id === sellerId ? { ...s, commissionRate: Number(rate) } : s);
-      pushPlatformSync({ sellers: updated });
+      const updated = prev.map(s => (s.id === sellerId || s._id === sellerId) ? { ...s, commissionRate: numRate, commissionPercentage: numRate } : s);
       return updated;
     });
+    try {
+      await updateSellerCommissionApi(sellerId, numRate);
+    } catch (err) {
+      console.error('Failed to update seller commission via API:', err);
+    }
     logAudit('Commission Changed', `Set seller ${sellerId} commission to ${rate}%`);
   };
 
   const releaseSellerPayout = (sellerId, amount) => {
     setSellers(prev => {
       const updated = prev.map(s => s.id === sellerId ? { ...s, payoutBalance: 0 } : s);
-      pushPlatformSync({ sellers: updated });
       return updated;
     });
+    processPayoutApi(sellerId, 'approve').catch(() => {});
     logAudit('Payout Dispatched', `Processed settlement of ₹${amount} for seller ${sellerId}`);
+  };
+
+  // ==================== INVENTORY ACTIONS ====================
+  const updateInventoryStock = async (productId, newStock) => {
+    const stockVal = Math.max(0, Number(newStock) || 0);
+    setInventory(prev => prev.map(item => (item.id === productId || item._id === productId) ? { ...item, stock: stockVal, stockQuantity: stockVal, inStock: stockVal > 0 } : item));
+    setProducts(prev => prev.map(p => (p.id === productId || p._id === productId) ? { ...p, stock: stockVal, stockQuantity: stockVal, inStock: stockVal > 0 } : p));
+    try {
+      const updateRes = await updateAdminInventoryStockApi(productId, stockVal);
+      if (updateRes?.success && updateRes?.product) {
+        const prod = updateRes.product;
+        setProducts(prev => prev.map(p => (p.id === productId || p._id === productId) ? { ...p, stock: prod.stock, stockQuantity: prod.stock, inStock: prod.stock > 0 } : p));
+      }
+      const res = await fetchAdminInventoryApi();
+      if (res?.metrics) setInventoryMetrics(res.metrics);
+      if (Array.isArray(res?.inventory)) setInventory(res.inventory);
+    } catch (e) {
+      console.error('Failed to update inventory stock via API:', e);
+    }
+    logAudit('Stock Adjusted', `Stock for product ${productId} adjusted to ${stockVal}`);
+  };
+
+  const quickRestock = async (productId, quantityToAdd = 25) => {
+    const qty = Number(quantityToAdd) || 25;
+    setInventory(prev => prev.map(item => (item.id === productId || item._id === productId) ? { ...item, stock: (item.stock || 0) + qty, stockQuantity: ((item.stockQuantity ?? item.stock) || 0) + qty, inStock: true } : item));
+    setProducts(prev => prev.map(p => (p.id === productId || p._id === productId) ? { ...p, stock: (p.stock || 0) + qty, stockQuantity: (p.stockQuantity || 0) + qty, inStock: true } : p));
+    try {
+      const restockRes = await quickRestockAdminInventoryApi(productId, qty);
+      if (restockRes?.success && restockRes?.product) {
+        const prod = restockRes.product;
+        setProducts(prev => prev.map(p => (p.id === productId || p._id === productId) ? { ...p, stock: prod.stock, stockQuantity: prod.stock, inStock: prod.stock > 0 } : p));
+      }
+      const res = await fetchAdminInventoryApi();
+      if (res?.metrics) setInventoryMetrics(res.metrics);
+      if (Array.isArray(res?.inventory)) setInventory(res.inventory);
+    } catch (e) {
+      console.error('Failed to quick restock inventory via API:', e);
+    }
+    logAudit('Quick Restock', `Added +${qty} units to inventory for product ${productId}`);
   };
 
   // ==================== SCHOOL ACTIONS ====================
@@ -470,59 +844,61 @@ export const AdminDataProvider = ({ children }) => {
       localStorage.setItem('admin_settings', JSON.stringify(next));
       return next;
     });
-    pushPlatformSync({ schoolRadiusKm: validKm });
+    updateSchoolRadiusApi(validKm).catch(() => {});
     logAudit('School Radius Updated', `Admin updated school discovery radius to ${validKm} km`);
   };
 
   const addSchool = (newSchool) => {
     const school = {
-      id: `SCH-${String(schools.length + 1).padStart(3, '0')}`,
       status: 'Partner Active',
-      partnerSince: '2026',
-      lat: Number(newSchool.lat) || 28.6139,
-      lng: Number(newSchool.lng) || 77.2090,
-      address: newSchool.address || newSchool.city || 'Delhi NCR',
-      pincode: newSchool.pincode || '110001',
+      partnerSince: new Date().getFullYear().toString(),
+      address: newSchool.address || newSchool.city || '',
+      city: newSchool.city || '',
+      state: newSchool.state || '',
+      pincode: newSchool.pincode || '',
       ...newSchool
     };
+    if (newSchool.lat) school.lat = Number(newSchool.lat);
+    if (newSchool.lng) school.lng = Number(newSchool.lng);
     setSchools(prev => {
       const updated = [school, ...prev];
-      pushPlatformSync({ schools: updated, schoolRadiusKm });
       return updated;
     });
+    createSchoolApi(school).catch(() => {});
     logAudit('School Onboarded', `Added partner institution: ${school.name}`);
   };
 
   const updateSchool = (id, updates) => {
     setSchools(prev => {
-      const updated = prev.map(s => s.id === id ? { ...s, ...updates } : s);
-      pushPlatformSync({ schools: updated });
+      const updated = prev.map(s => (s.id === id || s._id === id) ? { ...s, ...updates } : s);
       return updated;
     });
+    updateSchoolApi(id, updates).catch(() => {});
     logAudit('School Updated', `Updated school record #${id}`);
   };
 
   const deleteSchool = (id) => {
     setSchools(prev => {
-      const updated = prev.filter(s => s.id !== id);
-      pushPlatformSync({ schools: updated });
+      const updated = prev.filter(s => s.id !== id && s._id !== id);
       return updated;
     });
+    deleteSchoolApi(id).catch(() => {});
     logAudit('School Removed', `Removed school #${id}`);
   };
 
   // ==================== USER ACTIONS ====================
   const toggleUserStatus = (userId) => {
     setUsers(prev => {
+      let nextStatus = 'Active';
       const updated = prev.map(u => {
-        if (u.id === userId) {
-          const nextStatus = u.status === 'Active' ? 'Suspended' : 'Active';
+        if (u.id === userId || u._id === userId) {
+          nextStatus = u.status === 'Active' ? 'Suspended' : 'Active';
           logAudit('User Status Changed', `Changed status of ${u.name} to ${nextStatus}`);
           return { ...u, status: nextStatus };
         }
         return u;
       });
-      pushPlatformSync({ users: updated });
+      updateUserApi(userId, { status: nextStatus }).catch(() => {});
       return updated;
     });
   };
@@ -537,46 +913,46 @@ export const AdminDataProvider = ({ children }) => {
     };
     setPromotions(prev => {
       const updated = [item, ...prev];
-      pushPlatformSync({ promotions: updated });
       return updated;
     });
+    createPromotionApi(promo).catch(() => {});
     logAudit('Promotion Created', `Created campaign code ${promo.code}`);
   };
 
   const deletePromotion = (id) => {
     setPromotions(prev => {
-      const updated = prev.filter(p => p.id !== id);
-      pushPlatformSync({ promotions: updated });
+      const updated = prev.filter(p => p.id !== id && p._id !== id);
       return updated;
     });
+    deletePromotionApi(id).catch(() => {});
     logAudit('Promotion Deleted', `Deleted promo coupon #${id}`);
   };
 
   // ==================== REVIEWS & CONTENT MODERATION ====================
   const approveReview = (id) => {
     setReviews(prev => {
-      const updated = prev.map(r => r.id === id ? { ...r, status: 'Approved', reported: false } : r);
-      pushPlatformSync({ reviews: updated });
+      const updated = prev.map(r => r.id === id || r._id === id ? { ...r, status: 'Approved', reported: false } : r);
       return updated;
     });
+    moderateReviewApi(id, 'approved').catch(() => {});
     logAudit('Review Moderated', `Approved product review #${id}`);
   };
 
   const hideReview = (id) => {
     setReviews(prev => {
-      const updated = prev.map(r => r.id === id ? { ...r, status: 'Hidden' } : r);
-      pushPlatformSync({ reviews: updated });
+      const updated = prev.map(r => r.id === id || r._id === id ? { ...r, status: 'Hidden' } : r);
       return updated;
     });
+    moderateReviewApi(id, 'rejected').catch(() => {});
     logAudit('Review Hidden', `Hidden product review #${id}`);
   };
 
   const deleteReview = (id) => {
     setReviews(prev => {
-      const updated = prev.filter(r => r.id !== id);
-      pushPlatformSync({ reviews: updated });
+      const updated = prev.filter(r => r.id !== id && r._id !== id);
       return updated;
     });
+    deleteAdminReviewApi(id).catch(() => {});
     logAudit('Review Deleted', `Removed flagged review #${id}`);
   };
 
@@ -619,32 +995,38 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Role Switched', `Logged in as ${role}`);
   };
 
-  // Authentication & Authorization Actions
-  const loginAdmin = ({ email, role = 'Super Admin' }) => {
-    const matchedUser = USERS.find((u) => u.email?.toLowerCase() === email?.toLowerCase());
-    if (matchedUser) {
-      if (!matchedUser.isAdmin || matchedUser.adminStatus !== 'approved') {
-        throw new Error(`Access Denied: Account '${matchedUser.name}' does not have an approved admin role in Book Vardi mockData.`);
-      }
-      role = matchedUser.adminRole || matchedUser.role || role;
-    } else if (!APPROVED_ADMIN_ROLES.includes(role)) {
-      throw new Error('Access Denied: You do not possess an approved administrative role.');
+  // Authentication & Authorization Actions via Live Backend JWT API
+  const loginAdmin = async ({ email, phone, password, role = 'Super Admin' }) => {
+    const emailOrPhone = (email || phone || '').trim();
+    if (!emailOrPhone) {
+      throw new Error('Authentication Failed: Email or phone number is required.');
+    }
+
+    const res = await loginAdminApi(emailOrPhone, password);
+    if (!res || !res.token || res.success === false) {
+      throw new Error(res?.message || 'Authentication Failed: Invalid credentials or unapproved admin account. Please retry.');
     }
 
     const updated = {
       ...adminUser,
-      name: matchedUser?.name || adminUser.name,
-      email: email || adminUser.email,
-      role: role,
+      id: res.admin?.id || res.admin?._id || adminUser.adminId,
+      name: res.admin?.name || res.admin?.email?.split('@')[0] || 'Admin User',
+      email: res.admin?.email || (emailOrPhone.includes('@') ? emailOrPhone : adminUser.email),
+      phone: res.admin?.phone || '',
+      role: res.admin?.role || 'admin',
+      status: res.admin?.status || 'active',
+      permissions: res.admin?.permissions || {},
       lastLogin: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     };
     setAdminUser(updated);
     setIsAuthenticated(true);
-    logAudit('Admin Signed In', `Authenticated as approved role: ${role}`);
+    logAudit('Admin Signed In', `Authenticated via JWT as role: ${updated.role}`);
     return { success: true };
   };
 
   const logoutAdmin = () => {
+    localStorage.removeItem('bv_admin_jwt_token');
+    localStorage.removeItem('admin_is_authenticated');
     setIsAuthenticated(false);
     logAudit('Admin Signed Out', `${adminUser.name} signed out from console`);
   };
@@ -654,6 +1036,72 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Admin Profile Updated', 'Admin account information updated');
   };
 
+  // RBAC Permission Helpers
+  const isSuperAdmin = useCallback(() => {
+    const r = (adminUser?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+    return r === 'admin' || r === 'superadmin';
+  }, [adminUser?.role]);
+
+  const getTabPermission = useCallback((tabId) => {
+    if (isSuperAdmin()) return 'editor';
+    const perms = adminUser?.permissions || {};
+    return perms[tabId] || 'none';
+  }, [isSuperAdmin, adminUser?.permissions]);
+
+  const isEditor = useCallback((tabId) => {
+    if (isSuperAdmin()) return true;
+    return getTabPermission(tabId) === 'editor';
+  }, [isSuperAdmin, getTabPermission]);
+
+  const canViewTab = useCallback((tabId) => {
+    if (tabId === 'profile') return true;
+    if (tabId === 'team') return isSuperAdmin();
+    if (isSuperAdmin()) return true;
+    const perm = getTabPermission(tabId);
+    return perm === 'editor' || perm === 'viewer';
+  }, [isSuperAdmin, getTabPermission]);
+
+  // Subadmin Management Handlers
+  const addSubadmin = async (subadminData) => {
+    const res = await createSubadminApi(subadminData);
+    if (res?.success && res.subadmin) {
+      setSubadmins(prev => [res.subadmin, ...prev.filter(s => (s._id || s.id) !== (res.subadmin._id || res.subadmin.id))]);
+      logAudit('Staff Created', `Created subadmin account for ${res.subadmin.name} (${res.subadmin.email})`);
+      return res;
+    }
+    throw new Error(res?.message || 'Failed to create subadmin account');
+  };
+
+  const updateSubadmin = async (id, updates) => {
+    const res = await updateSubadminApi(id, updates);
+    if (res?.success && res.subadmin) {
+      setSubadmins(prev => prev.map(s => ((s._id || s.id) === id ? res.subadmin : s)));
+      logAudit('Staff Updated', `Updated permissions/details for ${res.subadmin.name}`);
+      return res;
+    }
+    throw new Error(res?.message || 'Failed to update subadmin account');
+  };
+
+  const deleteSubadmin = async (id) => {
+    const res = await deleteSubadminApi(id);
+    if (res?.success) {
+      setSubadmins(prev => prev.filter(s => (s._id || s.id) !== id));
+      logAudit('Staff Removed', `Removed subadmin account with ID: ${id}`);
+      return res;
+    }
+    throw new Error(res?.message || 'Failed to remove subadmin account');
+  };
+
+  const refreshSubadmins = async () => {
+    try {
+      const data = await fetchSubadminsApi();
+      const list = Array.isArray(data) ? data : (data?.subadmins || []);
+      setSubadmins(list);
+    } catch (err) {
+      console.error('Error refreshing subadmins:', err);
+    }
+  };
+
   const value = {
     isAuthenticated,
     loginAdmin,
@@ -661,6 +1109,15 @@ export const AdminDataProvider = ({ children }) => {
     updateAdminProfile,
     adminUser,
     switchAdminRole,
+    isSuperAdmin,
+    getTabPermission,
+    isEditor,
+    canViewTab,
+    subadmins,
+    addSubadmin,
+    updateSubadmin,
+    deleteSubadmin,
+    refreshSubadmins,
     products,
     addProduct,
     updateProduct,
@@ -668,6 +1125,10 @@ export const AdminDataProvider = ({ children }) => {
     updateProductApprovalStatus,
     rejectProduct,
     deleteProduct,
+    inventory,
+    inventoryMetrics,
+    updateInventoryStock,
+    quickRestock,
     orders,
     updateOrderStatus,
     cancelOrder,

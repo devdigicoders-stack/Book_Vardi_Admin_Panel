@@ -65,7 +65,7 @@ export default function Header({ onOpenNotifications }) {
 
           <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-yellow text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs">
             <ShieldCheck size={14} />
-            <span>{adminUser.role}</span>
+            <span>{adminUser?.role || 'Super Admin'}</span>
           </div>
         </div>
 

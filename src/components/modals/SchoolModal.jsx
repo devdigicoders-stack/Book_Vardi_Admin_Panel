@@ -23,9 +23,11 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
         name: school.name || '',
         board: school.board || 'CBSE',
         city: school.city || '',
+        district: school.district || '',
+        subdistrict: school.subdistrict || '',
         lat: school.lat ?? 28.6139,
         lng: school.lng ?? 77.2090,
-        classes: school.classes || 'Nursery to 12th',
+        classes: Array.isArray(school.classes) ? school.classes.join(', ') : (school.classes || 'Nursery, LKG, UKG, Class 1, Class 2, Class 3, Class 4, Class 5, Class 6, Class 7, Class 8, Class 9, Class 10, Class 11, Class 12'),
         studentCount: school.studentCount || '2500',
         contactPerson: school.contactPerson || '',
         email: school.email || '',
@@ -38,9 +40,11 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
         name: '',
         board: 'CBSE',
         city: '',
+        district: '',
+        subdistrict: '',
         lat: 28.6139,
         lng: 77.2090,
-        classes: 'Nursery to 12th',
+        classes: 'Nursery, LKG, UKG, Class 1, Class 2, Class 3, Class 4, Class 5, Class 6, Class 7, Class 8, Class 9, Class 10, Class 11, Class 12',
         studentCount: '2500',
         contactPerson: '',
         email: '',
@@ -56,7 +60,15 @@ export default function SchoolModal({ isOpen, onClose, onSave, school = null }) 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
-    onSave(formData);
+
+    const classesArray = typeof formData.classes === 'string'
+      ? formData.classes.split(',').map(c => c.trim()).filter(Boolean)
+      : formData.classes;
+
+    onSave({
+      ...formData,
+      classes: classesArray
+    });
     onClose();
   };
 

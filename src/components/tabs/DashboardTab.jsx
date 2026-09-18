@@ -28,27 +28,29 @@ export default function DashboardTab({ onNavigateTab }) {
     approveSeller 
   } = useAdminData();
 
-  // Metrics Calculations
-  const totalGMV = orders.reduce((sum, o) => sum + (o.total || 0), 0) + 745000; // Includes historical platform volume
-  const platformCommission = Math.round(totalGMV * 0.12);
-  const pendingOrders = orders.filter(o => o.status === 'Pending').length;
-  const pendingSellers = sellers.filter(s => s.status === 'Pending Approval' || s.status === 'Pending');
-  const pendingProducts = products.filter(p => p.approvalStatus === 'Pending');
-  const lowStockCount = products.filter(p => (p.stockQuantity ?? 50) <= 10).length;
+  // Metrics Calculations - dynamically derived from live database records
+  const totalGMV = orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
+  const platformCommission = Math.round(orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || 0) * 0.10), 0));
+  const totalPendingPayout = sellers.reduce((sum, s) => sum + Number(s.payoutBalance || s.walletBalance || 0), 0);
+  const pendingOrders = orders.filter(o => o.status === 'Pending' || o.overallStatus === 'pending' || o.status === 'placed').length;
+  const pendingSellers = sellers.filter(s => s.status === 'Pending Approval' || s.status === 'Pending' || s.status === 'pending');
+  const pendingProducts = products.filter(p => p.approvalStatus === 'Pending' || p.approvalStatus === 'pending');
+  const lowStockCount = products.filter(p => Number(p.stockQuantity ?? p.stock ?? 50) <= 10).length;
+  const activeSchoolsCount = schools.filter(s => s.status === 'Partner Active' || s.status === 'active').length || schools.length;
 
   const kpis = [
     {
       label: 'Gross Merchandise Value (GMV)',
       value: `₹${totalGMV.toLocaleString()}`,
-      change: '+18.4% vs last month',
+      change: `${orders.length} total orders recorded`,
       icon: <TrendingUp size={20} className="text-emerald-700" />,
       bg: 'bg-emerald-50/80',
       border: 'border-emerald-200'
     },
     {
-      label: 'Net Platform Commission (12%)',
+      label: 'Net Platform Commission (10%)',
       value: `₹${platformCommission.toLocaleString()}`,
-      change: '₹89,400 ready for payout',
+      change: totalPendingPayout > 0 ? `₹${totalPendingPayout.toLocaleString()} pending settlement` : 'Settlements up to date',
       icon: <CreditCard size={20} className="text-teal-700" />,
       bg: 'bg-teal-50/80',
       border: 'border-teal-200'
@@ -72,7 +74,7 @@ export default function DashboardTab({ onNavigateTab }) {
     {
       label: 'Partner Schools Onboarded',
       value: schools.length,
-      change: '12 exclusive uniform kits',
+      change: `${activeSchoolsCount} active institutional partners`,
       icon: <GraduationCap size={20} className="text-purple-700" />,
       bg: 'bg-purple-50/80',
       border: 'border-purple-200'
@@ -80,7 +82,7 @@ export default function DashboardTab({ onNavigateTab }) {
     {
       label: 'Critical Stock Alerts',
       value: lowStockCount,
-      change: 'Items < 10 units threshold',
+      change: 'Items ≤ 10 units threshold',
       icon: <AlertTriangle size={20} className="text-rose-700" />,
       bg: 'bg-rose-50/80',
       border: 'border-rose-200'

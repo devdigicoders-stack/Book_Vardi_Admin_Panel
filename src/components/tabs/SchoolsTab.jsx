@@ -15,7 +15,8 @@ import { useAdminData } from '../../context/AdminDataContext';
 import SchoolModal from '../modals/SchoolModal';
 
 export default function SchoolsTab() {
-  const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius } = useAdminData();
+  const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius, isEditor } = useAdminData();
+  const canEdit = isEditor ? isEditor('schools') : true;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -29,6 +30,7 @@ export default function SchoolsTab() {
   }, [schoolRadiusKm]);
 
   const handleApplyRadius = (newRadius) => {
+    if (!canEdit) return;
     const val = Number(newRadius);
     setTempRadius(val);
     updateSchoolRadius(val);
@@ -43,16 +45,19 @@ export default function SchoolsTab() {
   );
 
   const handleOpenAdd = () => {
+    if (!canEdit) return;
     setEditingSchool(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (school) => {
+    if (!canEdit) return;
     setEditingSchool(school);
     setModalOpen(true);
   };
 
   const handleSaveSchool = (formData) => {
+    if (!canEdit) return;
     if (editingSchool) {
       updateSchool(editingSchool.id, formData);
     } else {
@@ -61,6 +66,7 @@ export default function SchoolsTab() {
   };
 
   const handleDelete = (id, name) => {
+    if (!canEdit) return;
     if (window.confirm(`Are you sure you want to remove ${name} from partner schools?`)) {
       deleteSchool(id);
     }
@@ -80,12 +86,14 @@ export default function SchoolsTab() {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus size={16} /> Onboard New School
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus size={16} /> Onboard New School
+          </button>
+        )}
       </div>
 
       {/* Discovery Radius Controller Card (Admin Controlled for bookvardiuser) */}
@@ -232,7 +240,11 @@ export default function SchoolsTab() {
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 font-bold uppercase">Classes</span>
-                <div className="font-bold text-gray-800 mt-0.5">{school.classes}</div>
+                <div className="font-bold text-gray-800 mt-0.5">
+                  {Array.isArray(school.classes)
+                    ? (school.classes.length > 3 ? `${school.classes[0]} to ${school.classes[school.classes.length - 1]}` : school.classes.join(', '))
+                    : school.classes}
+                </div>
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 font-bold uppercase">Rev Share</span>
@@ -255,22 +267,24 @@ export default function SchoolsTab() {
                 <span className="text-[11px] text-gray-400">Standard Catalog Only</span>
               )}
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleOpenEdit(school)}
-                  className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                  title="Edit School"
-                >
-                  <Edit3 size={15} />
-                </button>
-                <button
-                  onClick={() => handleDelete(school.id, school.name)}
-                  className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                  title="Remove School"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
+              {canEdit && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenEdit(school)}
+                    className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    title="Edit School"
+                  >
+                    <Edit3 size={15} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(school.id, school.name)}
+                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    title="Delete School"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>

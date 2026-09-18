@@ -14,8 +14,9 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function FinanceTab() {
-  const { sellers, orders, releaseSellerPayout, logAudit } = useAdminData();
+  const { sellers, orders, releaseSellerPayout, logAudit, isEditor } = useAdminData();
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
+  const canEdit = isEditor ? isEditor('finance') : true;
 
   const totalGMV = orders.reduce((sum, o) => sum + (o.total || 0), 0) + 745000;
   const platformRevenue = Math.round(totalGMV * 0.12);
@@ -23,6 +24,7 @@ export default function FinanceTab() {
   const refundedVolume = orders.filter(o => o.paymentStatus === 'Refunded').reduce((sum, o) => sum + o.total, 0);
 
   const handleReleaseAllPayouts = () => {
+    if (!canEdit) return;
     if (totalSellerPending === 0) return;
     if (window.confirm(`Disburse total pending settlement of ₹${totalSellerPending.toLocaleString()} to ${sellers.filter(s => s.payoutBalance > 0).length} verified vendors?`)) {
       sellers.forEach(s => {
@@ -56,7 +58,8 @@ export default function FinanceTab() {
 
         <button
           onClick={handleReleaseAllPayouts}
-          disabled={totalSellerPending === 0}
+          disabled={totalSellerPending === 0 || !canEdit}
+          title={!canEdit ? "View-Only: Payout releases are restricted" : undefined}
           className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover disabled:opacity-50 text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <Landmark size={15} /> Disburse All Pending Payouts (₹{totalSellerPending.toLocaleString()})

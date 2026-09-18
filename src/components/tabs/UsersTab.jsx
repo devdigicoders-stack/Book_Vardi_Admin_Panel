@@ -12,7 +12,8 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function UsersTab() {
-  const { users, toggleUserStatus } = useAdminData();
+  const { users, toggleUserStatus, isEditor } = useAdminData();
+  const canEdit = isEditor ? isEditor('users') : true;
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
@@ -130,16 +131,22 @@ export default function UsersTab() {
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => toggleUserStatus(user.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        user.status === 'Active' 
-                          ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' 
-                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      }`}
-                    >
-                      {user.status === 'Active' ? 'Suspend Account' : 'Activate Account'}
-                    </button>
+                    {canEdit ? (
+                      <button
+                        onClick={() => toggleUserStatus(user.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                          user.status === 'Active' 
+                            ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' 
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {user.status === 'Active' ? 'Suspend Account' : 'Activate Account'}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-md">
+                        View-Only
+                      </span>
+                    )}
                   </td>
 
                 </tr>

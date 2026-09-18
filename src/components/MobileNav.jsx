@@ -1,8 +1,10 @@
 import React from 'react';
 import { ADMIN_TABS } from './Sidebar';
+import { useAdminData } from '../context/AdminDataContext';
 
 export default function MobileNav({ activeTab, onSelectTab }) {
-  const allTabs = ADMIN_TABS.flatMap(section => section.items);
+  const { canViewTab } = useAdminData();
+  const allTabs = ADMIN_TABS.flatMap(section => section.items).filter(t => canViewTab ? canViewTab(t.id) : true);
 
   return (
     <div className="lg:hidden bg-white sticky top-14 z-30 shadow-xs border-b border-gray-200">

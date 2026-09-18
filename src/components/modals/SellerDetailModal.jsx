@@ -37,7 +37,8 @@ export default function SellerDetailModal({
   onApprove, 
   onReject, 
   onUpdateCommission, 
-  onReleasePayout 
+  onReleasePayout,
+  readOnly = false 
 }) {
   if (!isOpen || !seller) return null;
 
@@ -96,13 +97,13 @@ export default function SellerDetailModal({
 
   const ownerName = app.ownerFullName || seller.ownerName || seller.name || 'Merchant Owner';
   const ownerDesignation = app.ownerDesignation || 'Director / Managing Partner';
-  const ownerPan = app.ownerPan || seller.pan || 'ABCDE1234F';
-  const ownerAadhaarLast4 = app.ownerAadhaarLast4 || '8942';
+  const ownerPan = app.ownerPan || seller.pan || seller.ownerPan || 'N/A';
+  const ownerAadhaarLast4 = app.ownerAadhaarLast4 || (seller.aadhaar ? String(seller.aadhaar).slice(-4) : 'N/A');
 
-  const businessPan = app.businessPan || seller.pan || ownerPan;
-  const gstin = app.gstin || seller.gstin || (app.hasGstExemption ? 'GST Exempted' : '07AAAAA0000A1Z5');
-  const msmeNumber = app.msmeRegistrationNumber || 'UDYAM-DL-03-0029142';
-  const cinNumber = app.cinNumber || 'U74999DL2021PTC384192';
+  const businessPan = app.businessPan || seller.businessPan || seller.pan || app.ownerPan || 'N/A';
+  const gstin = app.gstin || seller.gstin || (app.hasGstExemption || seller.hasGstExemption ? 'GST Exempted' : 'N/A');
+  const msmeNumber = app.msmeRegistrationNumber || seller.msmeRegistrationNumber || seller.documents?.msmeRegistrationNumber || 'N/A';
+  const cinNumber = app.cinNumber || seller.cinNumber || seller.documents?.cinNumber || 'N/A';
 
   const addressLine1 = app.addressLine1 || seller.address?.split(',')[0] || 'Plot 42, Industrial Area, Phase-III';
   const addressLine2 = app.addressLine2 || '';
@@ -339,7 +340,7 @@ export default function SellerDetailModal({
 
           <div className="flex items-center gap-2 shrink-0">
             {/* Quick action in header if pending */}
-            {isPending && (
+            {isPending && !readOnly && (
               <button
                 onClick={() => {
                   onApprove(seller.id);
@@ -378,26 +379,32 @@ export default function SellerDetailModal({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => {
-                  onApprove(seller.id);
-                  onClose();
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <CheckCircle size={14} />
-                <span>Approve & Verify</span>
-              </button>
+            {!readOnly ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    onApprove(seller.id);
+                    onClose();
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle size={14} />
+                  <span>Approve & Verify</span>
+                </button>
 
-              <button
-                onClick={() => setShowRejectBox(true)}
-                className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all border border-rose-200 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Ban size={14} />
-                <span>Reject</span>
-              </button>
-            </div>
+                <button
+                  onClick={() => setShowRejectBox(true)}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all border border-rose-200 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Ban size={14} />
+                  <span>Reject</span>
+                </button>
+              </div>
+            ) : (
+              <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-3 py-1.5 rounded-xl shrink-0">
+                View-Only Mode
+              </span>
+            )}
           </div>
         )}
 
@@ -699,8 +706,8 @@ export default function SellerDetailModal({
                       <span className="font-bold text-gray-900">{businessType}</span>
                     </div>
                     <div>
-                      <span className="block text-gray-400 font-medium text-[11px]">Year Started & Turnover</span>
-                      <span className="font-bold text-gray-900">{yearStarted} • {annualTurnoverEstimate}</span>
+                      <span className="block text-gray-400 font-medium text-[11px]">Year Started</span>
+                      <span className="font-bold text-gray-900">{yearStarted}</span>
                     </div>
                   </div>
                 )}
@@ -959,14 +966,10 @@ export default function SellerDetailModal({
 
                 {expandedSections[8] && (
                   <div className="p-5 space-y-3 text-xs">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <span className="block text-gray-400 font-medium text-[11px]">Store Display Name</span>
                         <span className="font-bold text-gray-900 text-sm">{storeName}</span>
-                      </div>
-                      <div>
-                        <span className="block text-gray-400 font-medium text-[11px]">Public Store URL</span>
-                        <span className="font-bold text-teal-800 font-mono">bookvardi.in/store/{storeSlug}</span>
                       </div>
                       <div>
                         <span className="block text-gray-400 font-medium text-[11px]">Store Tagline</span>
@@ -1275,9 +1278,6 @@ export default function SellerDetailModal({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-display font-bold text-lg text-gray-900">{storeName}</h4>
-                      <span className="text-xs text-teal-800 bg-teal-50 px-2.5 py-0.5 rounded-full font-mono font-bold">
-                        bookvardi.in/store/{storeSlug}
-                      </span>
                     </div>
                     <p className="text-xs text-gray-600 font-medium">{storeTagline}</p>
                     <p className="text-xs text-gray-500 leading-relaxed pt-1">{storeDescription}</p>

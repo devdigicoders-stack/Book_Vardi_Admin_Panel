@@ -21,8 +21,11 @@ export default function SellersTab() {
     approveSeller, 
     rejectSeller, 
     updateSellerCommission, 
-    releaseSellerPayout 
+    releaseSellerPayout,
+    isEditor 
   } = useAdminData();
+
+  const canEdit = isEditor ? isEditor('sellers') : true;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeller, setSelectedSeller] = useState(null);
@@ -189,6 +192,7 @@ export default function SellersTab() {
         onReject={rejectSeller}
         onUpdateCommission={updateSellerCommission}
         onReleasePayout={releaseSellerPayout}
+        readOnly={!canEdit}
       />
 
     </div>

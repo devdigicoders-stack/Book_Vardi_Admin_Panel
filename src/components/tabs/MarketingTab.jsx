@@ -14,7 +14,8 @@ import { useAdminData } from '../../context/AdminDataContext';
 import CouponModal from '../modals/CouponModal';
 
 export default function MarketingTab() {
-  const { promotions, addPromotion, deletePromotion, logAudit } = useAdminData();
+  const { promotions, addPromotion, deletePromotion, logAudit, isEditor } = useAdminData();
+  const canEdit = isEditor ? isEditor('marketing') : true;
   const [modalOpen, setModalOpen] = useState(false);
 
   const [announcements, setAnnouncements] = useState([
@@ -27,6 +28,7 @@ export default function MarketingTab() {
 
   const handleAddAnnouncement = (e) => {
     e.preventDefault();
+    if (!canEdit) return;
     if (!newAnnouncement.trim()) return;
     setAnnouncements(prev => [...prev, { id: Date.now(), text: newAnnouncement.trim(), active: true }]);
     logAudit('Announcement Added', `Added banner: "${newAnnouncement}"`);
@@ -34,6 +36,7 @@ export default function MarketingTab() {
   };
 
   const handleRemoveAnnouncement = (id) => {
+    if (!canEdit) return;
     setAnnouncements(prev => prev.filter(a => a.id !== id));
     logAudit('Announcement Removed', `Removed banner #${id}`);
   };
@@ -52,12 +55,14 @@ export default function MarketingTab() {
           </p>
         </div>
 
-        <button
-          onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus size={16} /> Create Discount Coupon
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus size={16} /> Create Discount Coupon
+          </button>
+        )}
       </div>
 
       {/* Promotions & Coupons Grid */}

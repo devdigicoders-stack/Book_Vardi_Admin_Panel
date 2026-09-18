@@ -15,35 +15,43 @@ import { useAdminData, APPROVED_ADMIN_ROLES } from '../../context/AdminDataConte
 
 export default function AdminLogin() {
   const { loginAdmin } = useAdminData();
-  const [email, setEmail] = useState('admin@bookvardi.in');
-  const [password, setPassword] = useState('••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('Super Admin');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      if (!APPROVED_ADMIN_ROLES.includes(role)) {
-        throw new Error('Access Denied: You do not possess an approved administrative role.');
-      }
-      loginAdmin({ email, role });
+      await loginAdmin({ email, password, role });
     } catch (err) {
-      setError(err.message || 'Authentication failed. Please verify credentials.');
+      setError(err.message || 'Authentication Failed: Invalid credentials or backend connection issue. Please retry.');
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickLogin = (selectedRole) => {
+  const handleQuickLogin = async (selectedRole) => {
     setRole(selectedRole);
-    setEmail(`${selectedRole.toLowerCase().replace(/\s+/g, '.')}@bookvardi.in`);
-    loginAdmin({ 
-      email: `${selectedRole.toLowerCase().replace(/\s+/g, '.')}@bookvardi.in`, 
-      role: selectedRole 
-    });
+    setError('');
+    setLoading(true);
+    const demoEmail = selectedRole === 'Super Admin' ? 'admin@admin.com' : `${selectedRole.toLowerCase().replace(/\s+/g, '.')}@bookvardi.in`;
+    setEmail(demoEmail);
+    try {
+      await loginAdmin({ 
+        email: demoEmail, 
+        password: 'admin123',
+        role: selectedRole 
+      });
+    } catch (err) {
+      setError(err.message || 'Authentication Failed: Unable to authenticate with live server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -115,17 +123,17 @@ export default function AdminLogin() {
               </div>
             </div>
 
-            {/* Email */}
+            {/* Email or Phone Number */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Official Admin Email</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Official Admin Email or Phone</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="admin@bookvardi.in"
+                  placeholder="admin@bookvardi.in or 1231231232"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 text-xs font-medium focus:ring-2 focus:ring-brand-yellow outline-hidden"
                 />
               </div>

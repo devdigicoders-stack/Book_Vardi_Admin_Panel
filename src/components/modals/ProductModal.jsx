@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Package, CheckCircle2 } from 'lucide-react';
-import { CATEGORIES } from '../../data/mockData';
+import { CATEGORIES } from '../../constants/categories';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
 
 export default function ProductModal({ isOpen, onClose, onSave, product = null, sellers = [] }) {
@@ -39,6 +39,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         stockQuantity: product.stockQuantity ?? 50,
         sellerId: product.sellerId || 'SEL-101',
         sellerName: product.sellerName || 'Vardi Uniforms Pvt Ltd',
+        paymentMethodAllowed: product.paymentMethodAllowed || 'Both',
         image: prodImages[0] || product.image || '',
         images: prodImages,
         sku: product.sku || ''
@@ -54,6 +55,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         stockQuantity: '50',
         sellerId: sellers[0]?.id || 'SEL-101',
         sellerName: sellers[0]?.storeName || 'Vardi Uniforms Pvt Ltd',
+        paymentMethodAllowed: 'Both',
         image: '',
         images: [],
         sku: `BV-PROD-${Math.floor(100 + Math.random() * 900)}`
@@ -210,6 +212,19 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Customer Payment Method Allowed *</label>
+            <select
+              value={formData.paymentMethodAllowed || 'Both'}
+              onChange={e => setFormData({ ...formData, paymentMethodAllowed: e.target.value })}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white text-gray-900"
+            >
+              <option value="Both">💳 Both Online Payment & Cash on Delivery (COD)</option>
+              <option value="Online_Only">⚡ Online / Prepaid Only (UPI, Credit/Debit Cards, Net Banking)</option>
+              <option value="COD_Only">💵 Cash on Delivery (COD) Only</option>
+            </select>
           </div>
 
           {/* DRAG & DROP MULTI-IMAGE UPLOAD COMPONENT */}

@@ -14,23 +14,60 @@ import { useAdminData } from '../../context/AdminDataContext';
 export default function AnalyticsTab() {
   const { sellers, orders, schools, products } = useAdminData();
 
-  const monthlySales = [
-    { month: 'Apr', gmv: 320000, orders: 410 },
-    { month: 'May', gmv: 540000, orders: 690 },
-    { month: 'Jun', gmv: 890000, orders: 1120 }, // Back to school peak
-    { month: 'Jul', gmv: 780000, orders: 980 },
-    { month: 'Aug', gmv: 620000, orders: 740 },
-    { month: 'Sep (MTD)', gmv: 420000, orders: 510 }
-  ];
+  // Dynamic Metrics derived from live database
+  const totalOrderGMV = orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
+  const aov = orders.length > 0 ? Math.round(totalOrderGMV / orders.length) : 0;
 
-  const maxGMV = Math.max(...monthlySales.map(m => m.gmv));
+  // Monthly Sales Aggregation from live orders
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentMonthIdx = new Date().getMonth();
+  const recentMonths = [];
+  for (let i = 5; i >= 0; i--) {
+    const idx = (currentMonthIdx - i + 12) % 12;
+    recentMonths.push(monthNames[idx]);
+  }
 
-  const categoryBreakdown = [
-    { name: 'School Uniforms & Dress Sets', share: 48, gmv: '₹17.2L', color: 'bg-teal-700' },
-    { name: 'NCERT & Syllabus Textbooks', share: 26, gmv: '₹9.4L', color: 'bg-brand-yellow' },
-    { name: 'Sports Shoes & PT Tracksuits', share: 14, gmv: '₹5.0L', color: 'bg-brand-pink' },
-    { name: 'Stationery, Bags & Drawing Kits', share: 12, gmv: '₹4.3L', color: 'bg-brand-blue' }
-  ];
+  const monthSalesMap = {};
+  recentMonths.forEach(m => {
+    monthSalesMap[m] = { month: m, gmv: 0, orders: 0 };
+  });
+
+  orders.forEach(o => {
+    if (o.createdAt) {
+      const m = monthNames[new Date(o.createdAt).getMonth()];
+      if (monthSalesMap[m]) {
+        monthSalesMap[m].gmv += Number(o.totalAmount || o.total || 0);
+        monthSalesMap[m].orders += 1;
+      }
+    }
+  });
+
+  const monthlySales = recentMonths.map(m => monthSalesMap[m]);
+  const maxGMV = Math.max(...monthlySales.map(m => m.gmv), 1000);
+
+  // Dynamic Vertical Breakdown from products
+  const categoryCounts = {};
+  products.forEach(p => {
+    const rawCat = p.category || 'General Store';
+    const cat = rawCat.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+  });
+
+  const totalProds = Math.max(products.length, 1);
+  const colorPalette = ['bg-teal-700', 'bg-brand-yellow', 'bg-brand-pink', 'bg-brand-blue', 'bg-purple-600', 'bg-emerald-600'];
+  
+  const categoryBreakdown = Object.keys(categoryCounts).length > 0
+    ? Object.entries(categoryCounts).slice(0, 4).map(([name, count], i) => ({
+        name,
+        share: Math.round((count / totalProds) * 100),
+        gmv: `${count} Catalog Items`,
+        color: colorPalette[i % colorPalette.length]
+      }))
+    : [{ name: 'Catalog Products', share: 100, gmv: `${products.length} Items`, color: 'bg-teal-700' }];
+
+  const deliveredCount = orders.filter(o => o.status === 'Delivered' || o.overallStatus === 'delivered' || o.status === 'completed').length;
+  const fulfillmentSLA = orders.length > 0 ? Math.round((deliveredCount / orders.length) * 100) : 100;
+  const activeSellersCount = sellers.filter(s => s.status === 'Verified' || s.status === 'approved').length;
 
   return (
     <div className="space-y-6">
@@ -49,26 +86,26 @@ export default function AnalyticsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
           <div className="text-[11px] font-bold text-gray-400 uppercase">Average Order Value (AOV)</div>
-          <div className="font-display font-extrabold text-2xl text-gray-900 mt-1">₹892</div>
-          <div className="text-[10px] font-semibold text-emerald-600 mt-1">+8.5% year-over-year</div>
+          <div className="font-display font-extrabold text-2xl text-gray-900 mt-1">₹{aov.toLocaleString()}</div>
+          <div className="text-[10px] font-semibold text-emerald-600 mt-1">{orders.length} total orders analyzed</div>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
-          <div className="text-[11px] font-bold text-gray-400 uppercase">Repeat Customer Rate</div>
-          <div className="font-display font-extrabold text-2xl text-teal-800 mt-1">42.8%</div>
-          <div className="text-[10px] font-semibold text-emerald-600 mt-1">High parent loyalty</div>
+          <div className="text-[11px] font-bold text-gray-400 uppercase">Verified Merchant Pool</div>
+          <div className="font-display font-extrabold text-2xl text-teal-800 mt-1">{activeSellersCount}</div>
+          <div className="text-[10px] font-semibold text-emerald-600 mt-1">Out of {sellers.length} registered vendors</div>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
-          <div className="text-[11px] font-bold text-gray-400 uppercase">Return & Exchange Rate</div>
-          <div className="font-display font-extrabold text-2xl text-rose-800 mt-1">1.8%</div>
-          <div className="text-[10px] font-semibold text-emerald-600 mt-1">Well below 5% industry avg</div>
+          <div className="text-[11px] font-bold text-gray-400 uppercase">Partner Institutions</div>
+          <div className="font-display font-extrabold text-2xl text-purple-800 mt-1">{schools.length}</div>
+          <div className="text-[10px] font-semibold text-purple-600 mt-1">Schools & Academies onboarded</div>
         </div>
 
         <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
           <div className="text-[11px] font-bold text-gray-400 uppercase">Order Fulfillment SLA</div>
-          <div className="font-display font-extrabold text-2xl text-emerald-700 mt-1">98.4%</div>
-          <div className="text-[10px] font-semibold text-emerald-600 mt-1">Dispatched within 24h</div>
+          <div className="font-display font-extrabold text-2xl text-emerald-700 mt-1">{fulfillmentSLA}%</div>
+          <div className="text-[10px] font-semibold text-emerald-600 mt-1">{deliveredCount} fulfilled successfully</div>
         </div>
       </div>
 
@@ -76,11 +113,11 @@ export default function AnalyticsTab() {
       <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-display font-bold text-base text-gray-900">Gross Monthly Platform GMV (2026)</h3>
+            <h3 className="font-display font-bold text-base text-gray-900">Gross Monthly Platform GMV (Live)</h3>
             <p className="text-xs text-gray-500">Includes institutional seasonal peaks and retail storefront demand</p>
           </div>
           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-            Peak Season: June Back-to-School
+            Total GMV: ₹{totalOrderGMV.toLocaleString()}
           </span>
         </div>
 
