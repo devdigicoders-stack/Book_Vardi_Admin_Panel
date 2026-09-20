@@ -191,7 +191,7 @@ export default function AdminLogin() {
           {/* Cross-Platform Links */}
           <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
             <a
-              href="http://localhost:5173"
+              href={import.meta.env.VITE_WEBSITE_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5173' : 'https://book-vardi-website.vercel.app')}
               target="_blank"
               rel="noreferrer"
               className="hover:text-teal-900 font-semibold flex items-center gap-1"
@@ -199,7 +199,7 @@ export default function AdminLogin() {
               <ShoppingBag size={12} /> Customer Store
             </a>
             <a
-              href="http://localhost:5174"
+              href={import.meta.env.VITE_SELLER_PANEL_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5174' : 'https://book-vardi-seller-panel-new.vercel.app')}
               target="_blank"
               rel="noreferrer"
               className="hover:text-teal-900 font-semibold flex items-center gap-1"

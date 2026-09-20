@@ -178,7 +178,7 @@ export default function Sidebar({ activeTab, onSelectTab }) {
         {/* Bottom Action: Exit to Customer Store */}
         <div className="pt-3 mt-2 border-t border-gray-100">
           <a
-            href="http://localhost:5173"
+            href={import.meta.env.VITE_WEBSITE_URL || (window.location.hostname === 'localhost' ? 'http://localhost:5173' : 'https://book-vardi-website.vercel.app')}
             target="_blank"
             rel="noreferrer"
             className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold text-teal-900 bg-teal-50 hover:bg-brand-yellow hover:text-brand-teal-dark border border-teal-200/80 transition-all duration-200 cursor-pointer shadow-2xs group"
