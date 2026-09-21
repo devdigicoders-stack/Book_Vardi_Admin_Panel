@@ -36,11 +36,15 @@ export default function SellerDetailModal({
   seller, 
   onApprove, 
   onReject, 
+  onSetPending,
+  onToggleStatus,
   onUpdateCommission, 
   onReleasePayout,
   readOnly = false 
 }) {
   if (!isOpen || !seller) return null;
+
+  const sellerId = seller.id || seller._id;
 
   // Active review tab
   const [activeTab, setActiveTab] = useState('dossier'); // 'dossier' | 'documents' | 'storefront' | 'financials'
@@ -48,7 +52,7 @@ export default function SellerDetailModal({
   // Commission & rejection state
   const [commission, setCommission] = useState(seller.commissionRate || 10);
   const [commissionSaved, setCommissionSaved] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  const [rejectReason, setRejectReason] = useState(seller.rejectionReason || '');
   const [showRejectBox, setShowRejectBox] = useState(false);
 
   // Document inspector preview state
@@ -135,9 +139,11 @@ export default function SellerDetailModal({
   const sampleProductTitle = app.sampleProductTitle || 'Class 10 CBSE Complete Science & Math Bundle';
 
   const currentStatus = seller.status || app.status || 'Pending Approval';
-  const isPending = currentStatus === 'Pending' || currentStatus === 'Pending Approval';
-  const isVerified = currentStatus === 'Verified';
-  const isRejected = currentStatus === 'Rejected';
+  const rawStatus = String(currentStatus).toLowerCase();
+  const isPending = rawStatus === 'pending' || rawStatus === 'pending approval';
+  const isVerified = rawStatus === 'verified' || rawStatus === 'approved';
+  const isRejected = rawStatus === 'rejected';
+  const isSuspended = rawStatus === 'suspended';
   const submittedDate = app.submittedAt || seller.joinedDate || '9/9/2026';
   const auditRefId = `BV-KYC-${Math.abs(seller.phone?.replace(/\D/g, '') || 9876543210).toString().slice(-6)}`;
 
@@ -364,82 +370,103 @@ export default function SellerDetailModal({
         </div>
 
         {/* STATUS & COMPLIANCE BANNER */}
-        {isPending && (
-          <div className="bg-linear-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-200/80 px-6 py-3 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <ShieldCheck className="text-amber-600 shrink-0" size={20} />
-              <div>
-                <div className="text-xs font-extrabold text-amber-950 flex items-center gap-2">
-                  <span>Vendor Onboarding KYC Review Pending</span>
-                  <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.2 rounded-full font-bold">Action Required</span>
-                </div>
-                <p className="text-[11px] text-amber-900/90 mt-0.5">
-                  Verify business registrations, tax documents, bank details, and signatory credentials across all 12 onboarding stages before granting marketplace listing privileges.
-                </p>
+        <div className="bg-slate-50 border-b border-gray-200/80 px-6 py-3 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className={isVerified ? "text-emerald-600" : isRejected ? "text-rose-600" : isSuspended ? "text-gray-600" : "text-amber-600"} size={22} />
+            <div>
+              <div className="text-xs font-extrabold text-gray-900 flex items-center gap-2">
+                <span>Account Status: <strong className="uppercase font-black">{currentStatus}</strong></span>
+                <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold uppercase ${
+                  isVerified ? 'bg-emerald-100 text-emerald-800' :
+                  isRejected ? 'bg-rose-100 text-rose-800' :
+                  isSuspended ? 'bg-gray-200 text-gray-800' :
+                  'bg-amber-100 text-amber-900'
+                }`}>
+                  {isVerified ? 'KYC Approved & Active' : isRejected ? 'Verification Rejected' : isSuspended ? 'Account Suspended' : 'Action Required / Review Pending'}
+                </span>
               </div>
+              <p className="text-[11px] text-gray-600 mt-0.5">
+                {isRejected && seller.rejectionReason ? (
+                  <span className="text-rose-700 font-semibold">Rejection Message: "{seller.rejectionReason}"</span>
+                ) : isVerified ? (
+                  <span>Seller has full catalog syndication, storefront listing, and payout settlement rights.</span>
+                ) : isSuspended ? (
+                  <span className="text-gray-700">Store operations and product visibility are temporarily suspended.</span>
+                ) : (
+                  <span>Verify registrations, documents, bank details, and signatory credentials before granting store access.</span>
+                )}
+              </p>
             </div>
+          </div>
 
-            {!readOnly ? (
-              <div className="flex items-center gap-2 shrink-0">
+          {!readOnly && (
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {!isVerified && (
                 <button
                   onClick={() => {
-                    onApprove(seller.id);
+                    onApprove(sellerId);
                     onClose();
                   }}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                  title="Approve seller and grant full store access"
                 >
                   <CheckCircle size={14} />
-                  <span>Approve & Verify</span>
+                  <span>Approve</span>
                 </button>
+              )}
 
+              {!isPending && (
+                <button
+                  onClick={() => {
+                    if (onSetPending) onSetPending(sellerId);
+                    else if (onToggleStatus) onToggleStatus(sellerId, 'pending');
+                    onClose();
+                  }}
+                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-all border border-amber-200 flex items-center gap-1 cursor-pointer"
+                  title="Reset status back to Pending Review"
+                >
+                  <RefreshCw size={13} />
+                  <span>Set to Pending</span>
+                </button>
+              )}
+
+              {!isRejected && (
                 <button
                   onClick={() => setShowRejectBox(true)}
-                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all border border-rose-200 flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all border border-rose-200 flex items-center gap-1 cursor-pointer"
+                  title="Reject application with a custom message"
                 >
-                  <Ban size={14} />
-                  <span>Reject</span>
+                  <Ban size={13} />
+                  <span>Reject with Msg</span>
                 </button>
-              </div>
-            ) : (
-              <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-3 py-1.5 rounded-xl shrink-0">
-                View-Only Mode
-              </span>
-            )}
-          </div>
-        )}
+              )}
 
-        {isVerified && (
-          <div className="bg-emerald-50 border-b border-emerald-200/80 px-6 py-2.5 shrink-0 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-emerald-900 font-semibold">
-              <CheckCircle2 size={16} className="text-emerald-600" />
-              <span>Seller is <strong>KYC Verified & Authorized</strong> with active BookVardi Merchant Trust badge.</span>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] text-emerald-800 font-bold bg-emerald-100/70 px-2.5 py-0.5 rounded-full">
-              <span>Port 5174 SSO Active</span>
-            </div>
-          </div>
-        )}
+              {isRejected && (
+                <button
+                  onClick={() => setShowRejectBox(true)}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all border border-rose-200 flex items-center gap-1 cursor-pointer"
+                  title="Edit rejection message"
+                >
+                  <AlertTriangle size={13} />
+                  <span>Edit Rejection Msg</span>
+                </button>
+              )}
 
-        {isRejected && (
-          <div className="bg-rose-50 border-b border-rose-200/80 px-6 py-3 shrink-0 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-rose-900">
-              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
-              <div>
-                <span className="font-bold">Application Rejected: </span>
-                <span>{seller.rejectionReason || 'Compliance or document requirements not satisfied.'}</span>
-              </div>
+              {!isSuspended && isVerified && (
+                <button
+                  onClick={() => {
+                    if (onToggleStatus) onToggleStatus(sellerId, 'suspended');
+                    onClose();
+                  }}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all border border-gray-300 flex items-center gap-1 cursor-pointer"
+                  title="Suspend seller account"
+                >
+                  <span>Suspend</span>
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => {
-                onApprove(seller.id);
-                onClose();
-              }}
-              className="px-3 py-1.5 bg-white border border-rose-300 text-rose-700 hover:bg-rose-100/60 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-            >
-              Re-open & Approve
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* REJECTION REASON MODAL / INLINE DRAWER */}
         {showRejectBox && (
@@ -1436,38 +1463,56 @@ export default function SellerDetailModal({
             Audit ID: <span className="font-mono font-bold text-gray-700">{auditRefId}</span> • Submitted: <span className="font-medium text-gray-700">{submittedDate}</span>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {isPending && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {!readOnly && (
               <>
+                {!isVerified && (
+                  <button
+                    onClick={() => {
+                      onApprove(sellerId);
+                      onClose();
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle size={14} />
+                    <span>Approve Seller</span>
+                  </button>
+                )}
+
+                {!isPending && (
+                  <button
+                    onClick={() => {
+                      if (onSetPending) onSetPending(sellerId);
+                      else if (onToggleStatus) onToggleStatus(sellerId, 'pending');
+                      onClose();
+                    }}
+                    className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-colors border border-amber-200 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Set to Pending</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => setShowRejectBox(true)}
                   className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors border border-rose-200 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Ban size={14} />
-                  <span>Reject Application</span>
+                  <span>{isRejected ? 'Edit Rejection Msg' : 'Reject with Msg'}</span>
                 </button>
-                <button
-                  onClick={() => {
-                    onApprove(seller.id);
-                    onClose();
-                  }}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle size={14} />
-                  <span>Approve & Verify Seller</span>
-                </button>
-              </>
-            )}
 
-            {isVerified && (
-              <button
-                onClick={() => {
-                  setShowRejectBox(true);
-                }}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Re-evaluate / Revoke
-              </button>
+                {!isSuspended && isVerified && (
+                  <button
+                    onClick={() => {
+                      if (onToggleStatus) onToggleStatus(sellerId, 'suspended');
+                      onClose();
+                    }}
+                    className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors border border-gray-300 cursor-pointer"
+                  >
+                    Suspend Account
+                  </button>
+                )}
+              </>
             )}
 
             <button

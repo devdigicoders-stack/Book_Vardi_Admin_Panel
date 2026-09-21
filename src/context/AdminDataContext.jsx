@@ -37,7 +37,12 @@ import {
   fetchSubadminsApi,
   createSubadminApi,
   updateSubadminApi,
-  deleteSubadminApi
+  deleteSubadminApi,
+  fetchAnnouncementsApi,
+  createAnnouncementApi,
+  updateAnnouncementApi,
+  toggleAnnouncementStatusApi,
+  deleteAnnouncementApi
 } from '../utils/api';
 
 const AdminDataContext = createContext();
@@ -181,10 +186,23 @@ export const AdminDataProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // 7. Promotions
+  // 7. Promotions & Announcements
   const [promotions, setPromotions] = useState(() => {
     const saved = localStorage.getItem('admin_promotions');
     return saved ? JSON.parse(saved) : [];
+  });
+
+  const [announcements, setAnnouncements] = useState(() => {
+    try {
+      const saved = localStorage.getItem('admin_announcements');
+      return saved ? JSON.parse(saved) : [
+        { id: '1', text: 'Free Shipping on Orders Over ₹499', badge: 'FREE SHIPPING', link: '/offers', priority: 1, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' },
+        { id: '2', text: '10% OFF First Order | Code: SCHOOL10', badge: 'DISCOUNT', link: '/offers', priority: 2, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' },
+        { id: '3', text: '30-Day Hassle-Free Returns on Uniforms', badge: 'TRUST', link: '/about-us', priority: 3, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' }
+      ];
+    } catch {
+      return [];
+    }
   });
 
   // 8. Reviews & Reports
@@ -239,34 +257,48 @@ export const AdminDataProvider = ({ children }) => {
     threshold: 10
   });
 
+  // Helper to sanitize heavy base64 images & PDF document blobs before persisting to localStorage
+  const sanitizeForStorage = (data) => {
+    if (!data) return data;
+    if (typeof data === 'string') {
+      if (data.startsWith('data:') || data.length > 500) return '';
+      return data;
+    }
+    if (Array.isArray(data)) {
+      return data.slice(0, 50).map(item => sanitizeForStorage(item));
+    }
+    if (typeof data === 'object') {
+      const copy = {};
+      for (const key of Object.keys(data)) {
+        const val = data[key];
+        if (typeof val === 'string' && (val.startsWith('data:') || val.length > 500)) {
+          copy[key] = '';
+        } else if (val && typeof val === 'object') {
+          copy[key] = sanitizeForStorage(val);
+        } else {
+          copy[key] = val;
+        }
+      }
+      return copy;
+    }
+    return data;
+  };
+
   // Safe helper to write to localStorage without throwing QuotaExceededError
   const safeSetLocalStorage = (key, data) => {
     try {
-      const stringified = typeof data === 'string' ? data : JSON.stringify(data);
+      const sanitized = (data && typeof data === 'object') ? sanitizeForStorage(data) : data;
+      const stringified = typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized);
       localStorage.setItem(key, stringified);
     } catch (error) {
-      console.warn(`[LocalStorage] Unable to set item "${key}":`, error?.message || error);
       if (error?.name === 'QuotaExceededError' || error?.name === 'NS_ERROR_DOM_QUOTA_REACHED' || error?.code === 22) {
         try {
           if (Array.isArray(data)) {
-            // Trim array or strip inline base64 image data to fit browser storage quota
-            const sanitized = data.slice(0, 100).map((item) => {
-              if (item && typeof item === 'object') {
-                const copy = { ...item };
-                if (typeof copy.image === 'string' && copy.image.startsWith('data:image')) {
-                  copy.image = '';
-                }
-                if (Array.isArray(copy.images)) {
-                  copy.images = copy.images.filter(img => typeof img === 'string' && !img.startsWith('data:image'));
-                }
-                return copy;
-              }
-              return item;
-            });
-            localStorage.setItem(key, JSON.stringify(sanitized));
+            const minimal = sanitizeForStorage(data.slice(0, 10));
+            localStorage.setItem(key, JSON.stringify(minimal));
           }
-        } catch (innerError) {
-          console.warn(`[LocalStorage] Quota fallback failed for "${key}":`, innerError?.message || innerError);
+        } catch {
+          // Gracefully suppress secondary quota errors
         }
       }
     }
@@ -292,6 +324,25 @@ export const AdminDataProvider = ({ children }) => {
 
   // Phase 0: Hydrate initial state from backend API endpoints
   useEffect(() => {
+    fetchAnnouncementsApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.announcements || []);
+      if (list.length > 0) {
+        setAnnouncements(list.map(a => ({
+          id: a._id || a.id,
+          _id: a._id || a.id,
+          text: a.text,
+          badge: a.badge || '',
+          link: a.link || '',
+          priority: a.priority !== undefined ? Number(a.priority) : 1,
+          isActive: a.isActive !== undefined ? Boolean(a.isActive) : true,
+          expiryDate: a.expiryDate || null,
+          bgColor: a.bgColor || '#0f766e',
+          textColor: a.textColor || '#ffffff',
+          isExpired: a.isExpired || false,
+          ...a
+        })).sort((x, y) => x.priority - y.priority));
+      }
+    }).catch(() => {});
     fetchAdminRecentActivitiesApi().then(data => {
       if (Array.isArray(data) && data.length > 0) {
         setAuditLog(data.map((item, idx) => ({
@@ -358,15 +409,45 @@ export const AdminDataProvider = ({ children }) => {
 
     fetchAdminOrdersApi().then(data => {
       if (Array.isArray(data) && data.length > 0) {
-        setOrders(data.map(o => ({
-          id: o.orderId || o._id || o.id,
-          _id: o._id || o.id,
-          customerName: o.customer?.name || o.userName || 'Customer',
-          totalAmount: o.totalAmount || o.total || 0,
-          status: o.overallStatus || o.status || 'Pending',
-          paymentStatus: o.paymentStatus || 'Paid',
-          ...o
-        })));
+        setOrders(data.map(o => {
+          const custName = typeof o.customer === 'object' && o.customer !== null
+            ? (o.customer.name || o.customer.fullName || 'Customer')
+            : (typeof o.customerName === 'string' ? o.customerName : (o.userName || 'Customer'));
+
+          const custEmail = typeof o.customer === 'object' && o.customer !== null
+            ? (o.customer.email || '')
+            : (typeof o.customerEmail === 'string' ? o.customerEmail : '');
+
+          const custPhone = typeof o.customer === 'object' && o.customer !== null
+            ? (o.customer.phone || '')
+            : (typeof o.customerPhone === 'string' ? o.customerPhone : '');
+
+          const formattedAddress = typeof o.shippingAddress === 'object' && o.shippingAddress !== null
+            ? [
+                o.shippingAddress.name || o.shippingAddress.fullName,
+                o.shippingAddress.addressLine || o.shippingAddress.street || o.shippingAddress.address || o.shippingAddress.addressLine1,
+                o.shippingAddress.colony || o.shippingAddress.landmark,
+                o.shippingAddress.city,
+                o.shippingAddress.state,
+                o.shippingAddress.pincode ? `- ${o.shippingAddress.pincode}` : null,
+                o.shippingAddress.phone ? `(Phone: ${o.shippingAddress.phone})` : null
+              ].filter(Boolean).join(', ')
+            : (typeof o.shippingAddress === 'string' ? o.shippingAddress : 'Customer Address');
+
+          return {
+            ...o,
+            id: o.orderId || o._id || o.id,
+            _id: o._id || o.id,
+            customerName: custName,
+            customerEmail: custEmail,
+            customerPhone: custPhone,
+            totalAmount: o.totalAmount || o.total || 0,
+            status: o.overallStatus || o.status || 'Pending',
+            paymentStatus: o.paymentStatus || 'Paid',
+            shippingAddress: formattedAddress,
+            rawShippingAddress: o.shippingAddress
+          };
+        }));
       }
     }).catch(() => {});
 
@@ -690,7 +771,7 @@ export const AdminDataProvider = ({ children }) => {
   const approveSeller = (sellerId) => {
     setSellers(prev => {
       const updated = prev.map(s => {
-        if (s.id === sellerId) {
+        if (s.id === sellerId || s._id === sellerId) {
           return {
             ...s,
             status: 'Verified',
@@ -717,6 +798,7 @@ export const AdminDataProvider = ({ children }) => {
         const parsed = JSON.parse(regData);
         parsed.submissionStatus = 'approved';
         parsed.status = 'approved';
+        parsed.rejectionReason = null;
         localStorage.setItem('bv_seller_reg_data', JSON.stringify(parsed));
       } else {
         localStorage.setItem('bv_seller_reg_data', JSON.stringify({ submissionStatus: 'approved', status: 'approved' }));
@@ -727,6 +809,7 @@ export const AdminDataProvider = ({ children }) => {
         const parsed = JSON.parse(sellerProf);
         parsed.status = 'approved';
         parsed.submissionStatus = 'approved';
+        parsed.rejectionReason = null;
         localStorage.setItem('book_vardi_seller_profile', JSON.stringify(parsed));
       } else {
         localStorage.setItem('book_vardi_seller_profile', JSON.stringify({ status: 'approved', submissionStatus: 'approved' }));
@@ -749,19 +832,19 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Seller Approved', `KYC approved for seller ${sellerId}`);
   };
 
-  const rejectSeller = (sellerId, reason = 'Incomplete GSTIN/KYC') => {
+  const setPendingSeller = (sellerId) => {
     setSellers(prev => {
       const updated = prev.map(s => {
-        if (s.id === sellerId) {
+        if (s.id === sellerId || s._id === sellerId) {
           return {
             ...s,
-            status: 'Rejected',
-            rejectionReason: reason,
+            status: 'Pending',
+            rejectionReason: null,
             rawApplication: s.rawApplication ? {
               ...s.rawApplication,
-              status: 'Rejected',
-              submissionStatus: 'rejected',
-              rejectionReason: reason
+              status: 'Pending',
+              submissionStatus: 'pending',
+              rejectionReason: null
             } : undefined
           };
         }
@@ -769,8 +852,118 @@ export const AdminDataProvider = ({ children }) => {
       });
       return updated;
     });
-    rejectSellerApi(sellerId, reason).catch(() => {});
-    logAudit('Seller Rejected', `Rejected seller ${sellerId} (${reason})`);
+
+    try {
+      localStorage.setItem('book_vardi_seller_status', JSON.stringify('pending'));
+
+      const regData = localStorage.getItem('bv_seller_reg_data');
+      if (regData) {
+        const parsed = JSON.parse(regData);
+        parsed.submissionStatus = 'pending';
+        parsed.status = 'pending';
+        parsed.rejectionReason = null;
+        localStorage.setItem('bv_seller_reg_data', JSON.stringify(parsed));
+      }
+
+      const sellerProf = localStorage.getItem('book_vardi_seller_profile');
+      if (sellerProf) {
+        const parsed = JSON.parse(sellerProf);
+        parsed.status = 'pending';
+        parsed.submissionStatus = 'pending';
+        parsed.rejectionReason = null;
+        localStorage.setItem('book_vardi_seller_profile', JSON.stringify(parsed));
+      }
+
+      const userProf = localStorage.getItem('book_vardi_user_profile');
+      if (userProf) {
+        const parsed = JSON.parse(userProf);
+        parsed.sellerStatus = 'pending';
+        parsed.isSeller = false;
+        localStorage.setItem('book_vardi_user_profile', JSON.stringify(parsed));
+      }
+
+      window.dispatchEvent(new CustomEvent('bv_seller_status_updated', { detail: 'pending' }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    setPendingSellerApi(sellerId).catch(() => {});
+    logAudit('Seller Status Reset', `Seller ${sellerId} status reset to Pending approval`);
+  };
+
+  const rejectSeller = (sellerId, reason = 'Incomplete GSTIN/KYC verification details') => {
+    const trimmedReason = reason?.trim() || 'Incomplete GSTIN/KYC verification details';
+    setSellers(prev => {
+      const updated = prev.map(s => {
+        if (s.id === sellerId || s._id === sellerId) {
+          return {
+            ...s,
+            status: 'Rejected',
+            rejectionReason: trimmedReason,
+            rawApplication: s.rawApplication ? {
+              ...s.rawApplication,
+              status: 'Rejected',
+              submissionStatus: 'rejected',
+              rejectionReason: trimmedReason
+            } : undefined
+          };
+        }
+        return s;
+      });
+      return updated;
+    });
+
+    try {
+      localStorage.setItem('book_vardi_seller_status', JSON.stringify('rejected'));
+
+      const regData = localStorage.getItem('bv_seller_reg_data');
+      if (regData) {
+        const parsed = JSON.parse(regData);
+        parsed.submissionStatus = 'rejected';
+        parsed.status = 'rejected';
+        parsed.rejectionReason = trimmedReason;
+        localStorage.setItem('bv_seller_reg_data', JSON.stringify(parsed));
+      }
+
+      const sellerProf = localStorage.getItem('book_vardi_seller_profile');
+      if (sellerProf) {
+        const parsed = JSON.parse(sellerProf);
+        parsed.status = 'rejected';
+        parsed.submissionStatus = 'rejected';
+        parsed.rejectionReason = trimmedReason;
+        localStorage.setItem('book_vardi_seller_profile', JSON.stringify(parsed));
+      }
+
+      const userProf = localStorage.getItem('book_vardi_user_profile');
+      if (userProf) {
+        const parsed = JSON.parse(userProf);
+        parsed.sellerStatus = 'rejected';
+        parsed.isSeller = false;
+        localStorage.setItem('book_vardi_user_profile', JSON.stringify(parsed));
+      }
+
+      window.dispatchEvent(new CustomEvent('bv_seller_status_updated', { detail: 'rejected' }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    rejectSellerApi(sellerId, trimmedReason).catch(() => {});
+    logAudit('Seller Rejected', `Rejected seller ${sellerId} with message: "${trimmedReason}"`);
+  };
+
+  const toggleSellerStatus = (sellerId, targetStatus, reason = '') => {
+    const lower = String(targetStatus || '').toLowerCase();
+    if (lower === 'approved' || lower === 'verified') {
+      approveSeller(sellerId);
+    } else if (lower === 'pending') {
+      setPendingSeller(sellerId);
+    } else if (lower === 'rejected') {
+      rejectSeller(sellerId, reason);
+    } else if (lower === 'suspended') {
+      setSellers(prev => prev.map(s => (s.id === sellerId || s._id === sellerId) ? { ...s, status: 'Suspended' } : s));
+      toggleSellerStatusApi(sellerId, 'suspended', reason).catch(() => {});
+      logAudit('Seller Suspended', `Suspended seller account ${sellerId}`);
+    }
   };
 
   const updateSellerCommission = async (sellerId, rate) => {
@@ -926,6 +1119,86 @@ export const AdminDataProvider = ({ children }) => {
     });
     deletePromotionApi(id).catch(() => {});
     logAudit('Promotion Deleted', `Deleted promo coupon #${id}`);
+  };
+
+  const addAnnouncement = async (itemData) => {
+    const tempId = String(Date.now());
+    const newItem = {
+      id: tempId,
+      _id: tempId,
+      text: itemData.text.trim(),
+      badge: itemData.badge ? itemData.badge.trim() : '',
+      link: itemData.link ? itemData.link.trim() : '',
+      priority: Number(itemData.priority) || 1,
+      isActive: itemData.isActive !== undefined ? Boolean(itemData.isActive) : true,
+      expiryDate: itemData.expiryDate || null,
+      bgColor: itemData.bgColor || '#0f766e',
+      textColor: itemData.textColor || '#ffffff',
+      createdAt: new Date().toISOString()
+    };
+
+    setAnnouncements(prev => [...prev, newItem].sort((a, b) => (Number(a.priority) || 1) - (Number(b.priority) || 1)));
+    logAudit('Announcement Added', `Added top banner item: "${newItem.text}" (Priority ${newItem.priority})`);
+
+    try {
+      const res = await createAnnouncementApi(itemData);
+      if (res?.success && res.announcement) {
+        const saved = res.announcement;
+        const normalized = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          priority: Number(saved.priority) || 1
+        };
+        setAnnouncements(prev => prev.map(a => (a.id === tempId ? normalized : a)).sort((a, b) => a.priority - b.priority));
+        return normalized;
+      }
+    } catch (e) {
+      console.warn('Backend announcement create fallback:', e);
+    }
+    return newItem;
+  };
+
+  const updateAnnouncement = async (id, updates) => {
+    setAnnouncements(prev => prev.map(a => (a.id === id || a._id === id ? { ...a, ...updates } : a)).sort((a, b) => (Number(a.priority) || 1) - (Number(b.priority) || 1)));
+    logAudit('Announcement Updated', `Updated top banner item #${id}`);
+
+    try {
+      const res = await updateAnnouncementApi(id, updates);
+      if (res?.success && res.announcement) {
+        const saved = res.announcement;
+        const normalized = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          priority: Number(saved.priority) || 1
+        };
+        setAnnouncements(prev => prev.map(a => (a.id === id || a._id === id ? normalized : a)).sort((a, b) => a.priority - b.priority));
+      }
+    } catch (e) {
+      console.warn('Backend announcement update fallback:', e);
+    }
+  };
+
+  const toggleAnnouncementStatus = async (id, targetStatus) => {
+    let resolvedStatus;
+    setAnnouncements(prev => prev.map(a => {
+      if (a.id === id || a._id === id) {
+        resolvedStatus = targetStatus !== undefined ? Boolean(targetStatus) : !a.isActive;
+        return { ...a, isActive: resolvedStatus };
+      }
+      return a;
+    }));
+    logAudit('Announcement Status Toggled', `Toggled top banner item #${id} status`);
+    if (resolvedStatus !== undefined) {
+      toggleAnnouncementStatusApi(id, resolvedStatus).catch(() => {});
+    }
+  };
+
+  const deleteAnnouncement = async (id) => {
+    setAnnouncements(prev => prev.filter(a => a.id !== id && a._id !== id));
+    logAudit('Announcement Deleted', `Deleted top banner item #${id}`);
+    deleteAnnouncementApi(id).catch(() => {});
   };
 
   // ==================== REVIEWS & CONTENT MODERATION ====================
@@ -1138,6 +1411,8 @@ export const AdminDataProvider = ({ children }) => {
     sellers,
     approveSeller,
     rejectSeller,
+    setPendingSeller,
+    toggleSellerStatus,
     updateSellerCommission,
     releaseSellerPayout,
     schools,
@@ -1151,6 +1426,11 @@ export const AdminDataProvider = ({ children }) => {
     promotions,
     addPromotion,
     deletePromotion,
+    announcements,
+    addAnnouncement,
+    updateAnnouncement,
+    toggleAnnouncementStatus,
+    deleteAnnouncement,
     reviews,
     approveReview,
     hideReview,

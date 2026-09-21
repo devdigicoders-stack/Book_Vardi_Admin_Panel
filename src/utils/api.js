@@ -249,6 +249,18 @@ export const rejectSellerApi = async (id, reason = '') => {
   }
 };
 
+export const setPendingSellerApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/pending`, {
+      method: 'PUT',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 export const updateSellerCommissionApi = async (id, rate) => {
   try {
     const res = await fetch(`${API_BASE_URL}/sellers/${id}/commission`, {
@@ -262,12 +274,12 @@ export const updateSellerCommissionApi = async (id, rate) => {
   }
 };
 
-export const toggleSellerStatusApi = async (id, status) => {
+export const toggleSellerStatusApi = async (id, status, reason = '') => {
   try {
     const res = await fetch(`${API_BASE_URL}/sellers/${id}/status`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, reason, rejectionReason: reason })
     });
     return await res.json();
   } catch (error) {
@@ -494,6 +506,69 @@ export const createPromotionApi = async (promo) => {
 export const deletePromotionApi = async (id) => {
   try {
     const res = await fetch(`${SERVER_URL}/coupons/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// Top Announcement Bar APIs
+export const fetchAnnouncementsApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements`);
+    if (!res.ok) throw new Error('API Error');
+    const data = await res.json();
+    return data.announcements || data;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createAnnouncementApi = async (data) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAnnouncementApi = async (id, data) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const toggleAnnouncementStatusApi = async (id, isActive) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ isActive })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAnnouncementApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   ShoppingBag, 
@@ -9,8 +9,10 @@ import {
   AlertCircle, 
   RotateCcw,
   Ban,
-  DollarSign
+  DollarSign,
+  FileText
 } from 'lucide-react';
+import TaxInvoiceModal from './TaxInvoiceModal';
 
 export default function OrderDetailModal({ 
   isOpen, 
@@ -22,12 +24,20 @@ export default function OrderDetailModal({
   onRefundOrder,
   readOnly = false 
 }) {
-  if (!isOpen || !order) return null;
-
-  const [newTracking, setNewTracking] = useState(order.trackingNumber || '');
-  const [selectedStatus, setSelectedStatus] = useState(order.status);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [newTracking, setNewTracking] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('Pending');
   const [refundReason, setRefundReason] = useState('');
   const [showRefundPrompt, setShowRefundPrompt] = useState(false);
+
+  useEffect(() => {
+    if (order) {
+      setNewTracking(order.trackingNumber || '');
+      setSelectedStatus(order.status || 'Pending');
+    }
+  }, [order]);
+
+  if (!isOpen || !order) return null;
 
   const handleSaveTracking = () => {
     if (newTracking.trim()) {
@@ -52,6 +62,36 @@ export default function OrderDetailModal({
       onClose();
     }
   };
+
+  const formattedShippingAddress = React.useMemo(() => {
+    if (!order?.shippingAddress) return 'Customer Address';
+    if (typeof order.shippingAddress === 'string') return order.shippingAddress;
+    if (typeof order.shippingAddress === 'object') {
+      const parts = [
+        order.shippingAddress.name || order.shippingAddress.fullName,
+        order.shippingAddress.addressLine || order.shippingAddress.street || order.shippingAddress.address || order.shippingAddress.addressLine1,
+        order.shippingAddress.colony || order.shippingAddress.landmark,
+        order.shippingAddress.city,
+        order.shippingAddress.state,
+        order.shippingAddress.pincode ? `- ${order.shippingAddress.pincode}` : null,
+        order.shippingAddress.phone ? `(Phone: ${order.shippingAddress.phone})` : null
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : 'Delivery Address';
+    }
+    return String(order.shippingAddress);
+  }, [order?.shippingAddress]);
+
+  const formattedCustomerName = typeof order?.customerName === 'object' 
+    ? (order.customerName?.name || order.customerName?.fullName || 'Customer')
+    : (order?.customerName || order?.customer?.name || 'Customer');
+
+  const formattedCustomerEmail = typeof order?.customerEmail === 'object'
+    ? (order.customerEmail?.email || '')
+    : (order?.customerEmail || order?.customer?.email || '');
+
+  const formattedCustomerPhone = typeof order?.customerPhone === 'object'
+    ? (order.customerPhone?.phone || '')
+    : (order?.customerPhone || order?.customer?.phone || '');
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-xs">
@@ -130,6 +170,12 @@ export default function OrderDetailModal({
                     <RotateCcw size={13} /> Issue Refund
                   </button>
                 )}
+                <button
+                  onClick={() => setIsInvoiceOpen(true)}
+                  className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-teal-200"
+                >
+                  <FileText size={13} /> Tax Invoice & Settlement
+                </button>
               </div>
             </div>
           )}
@@ -208,11 +254,11 @@ export default function OrderDetailModal({
               <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
                 <User size={14} className="text-teal-700" /> Customer Information
               </div>
-              <div className="text-xs text-gray-900 font-semibold">{order.customerName}</div>
-              <div className="text-[11px] text-gray-600">{order.customerEmail}</div>
-              <div className="text-[11px] text-gray-600">{order.customerPhone}</div>
+              <div className="text-xs text-gray-900 font-semibold">{formattedCustomerName}</div>
+              {formattedCustomerEmail && <div className="text-[11px] text-gray-600">{formattedCustomerEmail}</div>}
+              {formattedCustomerPhone && <div className="text-[11px] text-gray-600">{formattedCustomerPhone}</div>}
               <div className="pt-2 text-[10px] text-gray-500 border-t border-gray-200">
-                Payment: <span className="font-bold text-gray-800">{order.paymentMethod}</span> ({order.paymentStatus})
+                Payment: <span className="font-bold text-gray-800">{String(order.paymentMethod || 'Online')}</span> ({String(order.paymentStatus || 'Paid')})
               </div>
             </div>
 
@@ -221,7 +267,7 @@ export default function OrderDetailModal({
               <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
                 <MapPin size={14} className="text-teal-700" /> Shipping Destination
               </div>
-              <div className="text-xs text-gray-700 leading-relaxed">{order.shippingAddress}</div>
+              <div className="text-xs text-gray-700 leading-relaxed">{formattedShippingAddress}</div>
               
               <div className="pt-2 border-t border-gray-200">
                 <label className="block text-[10px] font-bold text-gray-500 mb-1">
@@ -256,6 +302,12 @@ export default function OrderDetailModal({
         </div>
 
       </div>
+
+      <TaxInvoiceModal
+        isOpen={isInvoiceOpen}
+        onClose={() => setIsInvoiceOpen(false)}
+        order={order}
+      />
     </div>
   );
 }

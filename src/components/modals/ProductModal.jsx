@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, CheckCircle2 } from 'lucide-react';
+import { X, Package, CheckCircle2, CreditCard } from 'lucide-react';
 import { CATEGORIES } from '../../constants/categories';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
 
@@ -14,6 +14,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
     stockQuantity: '50',
     sellerId: 'SEL-101',
     sellerName: 'Vardi Uniforms Pvt Ltd',
+    paymentMethodAllowed: 'Both',
     image: '',
     images: [],
     sku: ''
@@ -32,19 +33,20 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
       setFormData({
         name: product.name || '',
         subtitle: product.subtitle || '',
-        price: product.price || '',
-        originalPrice: product.originalPrice || '',
+        price: product.price !== undefined ? String(product.price) : '',
+        originalPrice: product.originalPrice || product.mrp ? String(product.originalPrice || product.mrp) : '',
         category: product.category || 'uniforms',
         badge: product.badge || 'NEW',
         stockQuantity: product.stockQuantity ?? 50,
-        sellerId: product.sellerId || 'SEL-101',
-        sellerName: product.sellerName || 'Vardi Uniforms Pvt Ltd',
+        sellerId: product.sellerId || (sellers[0]?.id || sellers[0]?._id || 'SEL-101'),
+        sellerName: product.sellerName || (sellers[0]?.storeName || sellers[0]?.name || 'Vardi Uniforms Pvt Ltd'),
         paymentMethodAllowed: product.paymentMethodAllowed || 'Both',
         image: prodImages[0] || product.image || '',
         images: prodImages,
         sku: product.sku || ''
       });
     } else {
+      const defaultSeller = sellers[0];
       setFormData({
         name: '',
         subtitle: '',
@@ -53,8 +55,8 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         category: 'uniforms',
         badge: 'NEW',
         stockQuantity: '50',
-        sellerId: sellers[0]?.id || 'SEL-101',
-        sellerName: sellers[0]?.storeName || 'Vardi Uniforms Pvt Ltd',
+        sellerId: defaultSeller?.id || defaultSeller?._id || 'SEL-101',
+        sellerName: defaultSeller?.storeName || (typeof defaultSeller?.name === 'string' ? defaultSeller.name : 'Vardi Uniforms Pvt Ltd'),
         paymentMethodAllowed: 'Both',
         image: '',
         images: [],
@@ -73,12 +75,30 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
       : (formData.image ? [formData.image] : []);
     const primaryImg = finalImages[0] || formData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=80';
 
+    const paymentAllowedStr = formData.paymentMethodAllowed || 'Both';
+    const paymentAllowedArr = paymentAllowedStr === 'Online_Only' 
+      ? ['Online'] 
+      : (paymentAllowedStr === 'COD_Only' ? ['COD'] : ['COD', 'Online']);
+
     onSave({
       ...formData,
       image: primaryImg,
-      images: finalImages
+      images: finalImages,
+      paymentMethodAllowed: paymentAllowedStr,
+      paymentMethodsAllowed: paymentAllowedArr
     });
     onClose();
+  };
+
+  const getSellerLabel = (s, idx) => {
+    if (!s) return `Seller #${idx + 1}`;
+    let val = s.storeName || s.businessName;
+    if (!val) {
+      if (typeof s.name === 'string') val = s.name;
+      else if (typeof s.name === 'object' && s.name !== null) val = s.name.name || s.name.storeName || `Seller #${idx + 1}`;
+    }
+    if (typeof val === 'object') val = val.name || val.storeName || `Seller #${idx + 1}`;
+    return String(val || `Seller #${idx + 1}`);
   };
 
   return (
@@ -94,7 +114,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
               <h3 className="font-display font-bold text-lg text-gray-900">
                 {product ? 'Edit Product' : 'Add New Product'}
               </h3>
-              <p className="text-xs text-gray-500">Marketplace catalog entry with drag & drop images</p>
+              <p className="text-xs text-gray-500">Marketplace catalog entry with payment method configuration</p>
             </div>
           </div>
           <button 
@@ -161,8 +181,8 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden capitalize"
               >
-                {CATEGORIES.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {CATEGORIES.map((c, idx) => (
+                  <option key={c.id || c._id || `cat-${idx}`} value={c.id || c.name}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -198,33 +218,46 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
               <select
                 value={formData.sellerId}
                 onChange={e => {
-                  const s = sellers.find(item => item.id === e.target.value);
+                  const s = sellers.find(item => (item.id === e.target.value || item._id === e.target.value));
+                  const sName = getSellerLabel(s, 0);
                   setFormData({
                     ...formData,
                     sellerId: e.target.value,
-                    sellerName: s ? (s.storeName || s.name) : 'Direct Marketplace'
+                    sellerName: sName !== 'Unknown Seller' ? sName : 'Direct Marketplace'
                   });
                 }}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden"
               >
-                {sellers.map(s => (
-                  <option key={s.id} value={s.id}>{s.storeName || s.name}</option>
-                ))}
+                {sellers.map((s, idx) => {
+                  const sId = s.id || s._id || `sel-${idx}`;
+                  return (
+                    <option key={sId} value={sId}>
+                      {getSellerLabel(s, idx)}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Customer Payment Method Allowed *</label>
+          {/* Allowed Payment Methods Selection */}
+          <div className="p-3 bg-teal-50/60 rounded-2xl border border-teal-100 space-y-2">
+            <label className="block text-xs font-bold text-teal-950 flex items-center gap-1.5">
+              <CreditCard size={14} className="text-teal-700" />
+              <span>Allowed Payment Methods for Product *</span>
+            </label>
             <select
               value={formData.paymentMethodAllowed || 'Both'}
               onChange={e => setFormData({ ...formData, paymentMethodAllowed: e.target.value })}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white text-gray-900"
+              className="w-full px-3.5 py-2 rounded-xl border border-teal-200 text-xs font-bold focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white text-gray-900"
             >
               <option value="Both">💳 Both Online Payment & Cash on Delivery (COD)</option>
               <option value="Online_Only">⚡ Online / Prepaid Only (UPI, Credit/Debit Cards, Net Banking)</option>
               <option value="COD_Only">💵 Cash on Delivery (COD) Only</option>
             </select>
+            <p className="text-[10px] text-teal-800/80">
+              Controls whether customers can order this product via COD, Prepaid Online, or both during checkout.
+            </p>
           </div>
 
           {/* DRAG & DROP MULTI-IMAGE UPLOAD COMPONENT */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   TrendingUp, 
   ShoppingBag, 
@@ -12,7 +12,8 @@ import {
   Clock, 
   Users,
   Package,
-  Sparkles
+  Sparkles,
+  Filter
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 
@@ -23,10 +24,13 @@ export default function DashboardTab({ onNavigateTab }) {
     sellers, 
     schools, 
     users, 
+    reviews,
     supportTickets, 
     auditLog, 
     approveSeller 
   } = useAdminData();
+
+  const [approvalCategoryFilter, setApprovalCategoryFilter] = useState('all');
 
   // Metrics Calculations - dynamically derived from live database records
   const totalGMV = orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
@@ -35,6 +39,7 @@ export default function DashboardTab({ onNavigateTab }) {
   const pendingOrders = orders.filter(o => o.status === 'Pending' || o.overallStatus === 'pending' || o.status === 'placed').length;
   const pendingSellers = sellers.filter(s => s.status === 'Pending Approval' || s.status === 'Pending' || s.status === 'pending');
   const pendingProducts = products.filter(p => p.approvalStatus === 'Pending' || p.approvalStatus === 'pending');
+  const pendingReviews = (reviews || []).filter(r => r.status === 'Pending Approval' || r.status === 'Pending' || r.status === 'pending');
   const lowStockCount = products.filter(p => Number(p.stockQuantity ?? p.stock ?? 50) <= 10).length;
   const activeSchoolsCount = schools.filter(s => s.status === 'Partner Active' || s.status === 'active').length || schools.length;
 
@@ -154,19 +159,46 @@ export default function DashboardTab({ onNavigateTab }) {
         
         {/* Pending Approvals Queue */}
         <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <ShieldCheck size={18} className="text-teal-700" />
               <h3 className="font-display font-bold text-base text-gray-900">Urgent Approval Queue</h3>
             </div>
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-              {pendingSellers.length + pendingProducts.length} Pending Actions
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 self-start sm:self-auto">
+              {pendingSellers.length + pendingProducts.length + pendingReviews.length} Pending Actions
             </span>
           </div>
 
-          <div className="divide-y divide-gray-100">
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            {[
+              { id: 'all', label: 'All Items', count: pendingSellers.length + pendingProducts.length + pendingReviews.length },
+              { id: 'sellers', label: 'Sellers', count: pendingSellers.length },
+              { id: 'products', label: 'Products', count: pendingProducts.length },
+              { id: 'reviews', label: 'Reviews', count: pendingReviews.length }
+            ].map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setApprovalCategoryFilter(cat.id)}
+                className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  approvalCategoryFilter === cat.id
+                    ? 'bg-teal-800 text-white shadow-2xs'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-extrabold ${
+                  approvalCategoryFilter === cat.id ? 'bg-teal-700 text-white' : 'bg-gray-200 text-gray-800'
+                }`}>
+                  {cat.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto no-scrollbar hide-scrollbar pr-1">
             {/* Pending Sellers */}
-            {pendingSellers.map(seller => (
+            {(approvalCategoryFilter === 'all' || approvalCategoryFilter === 'sellers') && pendingSellers.map(seller => (
               <div key={seller.id} className="py-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -174,7 +206,7 @@ export default function DashboardTab({ onNavigateTab }) {
                       {seller.storeName || seller.rawApplication?.storeName || seller.businessName}
                     </span>
                     <span className="px-2 py-0.2 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800">
-                      KYC Review Required
+                      KYC Review
                     </span>
                   </div>
                   <div className="text-[11px] text-gray-500 mt-0.5">
@@ -183,36 +215,62 @@ export default function DashboardTab({ onNavigateTab }) {
                 </div>
                 <button
                   onClick={() => onNavigateTab('sellers')}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
-                  Review Dossier & Docs →
+                  Review Docs →
                 </button>
               </div>
             ))}
 
             {/* Pending Products */}
-            {pendingProducts.map(prod => (
+            {(approvalCategoryFilter === 'all' || approvalCategoryFilter === 'products') && pendingProducts.map(prod => (
               <div key={prod.id} className="py-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
-                  <div>
-                    <div className="font-bold text-xs text-gray-900">{prod.name}</div>
-                    <div className="text-[11px] text-gray-500">₹{prod.price} • By {prod.sellerName}</div>
+                <div className="flex items-center gap-3 min-w-0">
+                  <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-xs text-gray-900 truncate">{prod.name}</span>
+                      <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-blue-100 text-blue-800 shrink-0">Product</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 truncate">₹{prod.price} • By {prod.sellerName || 'Merchant'}</div>
                   </div>
                 </div>
                 <button
                   onClick={() => onNavigateTab('products')}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
-                  Review
+                  Review →
                 </button>
               </div>
             ))}
 
-            {pendingSellers.length === 0 && pendingProducts.length === 0 && (
+            {/* Pending Customer Reviews */}
+            {(approvalCategoryFilter === 'all' || approvalCategoryFilter === 'reviews') && pendingReviews.map(rev => (
+              <div key={rev.id || rev._id} className="py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs text-gray-900 truncate">{rev.productName || 'Customer Review'}</span>
+                    <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-purple-100 text-purple-800 shrink-0">Review</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 truncate mt-0.5">By {rev.customerName || 'User'} • Rating: ★{rev.rating || 5}</div>
+                </div>
+                <button
+                  onClick={() => onNavigateTab('reviews')}
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                >
+                  Moderate →
+                </button>
+              </div>
+            ))}
+
+            {/* Empty state */}
+            {((approvalCategoryFilter === 'all' && pendingSellers.length === 0 && pendingProducts.length === 0 && pendingReviews.length === 0) ||
+              (approvalCategoryFilter === 'sellers' && pendingSellers.length === 0) ||
+              (approvalCategoryFilter === 'products' && pendingProducts.length === 0) ||
+              (approvalCategoryFilter === 'reviews' && pendingReviews.length === 0)) && (
               <div className="py-8 text-center text-gray-400 text-xs">
                 <CheckCircle2 size={28} className="mx-auto text-emerald-500 mb-1.5 opacity-80" />
-                No pending seller KYC or catalog approvals! All clear.
+                No pending items in this category! All clear.
               </div>
             )}
           </div>
