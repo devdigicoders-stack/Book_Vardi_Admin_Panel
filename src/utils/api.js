@@ -700,3 +700,47 @@ export const deleteSubadminApi = async (id) => {
     return { success: false, message: error.message };
   }
 };
+
+// ==========================================
+// 13. School Bulk Orders & Distribution APIs
+// ==========================================
+export const fetchAdminSchoolBulkOrdersApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/list`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch bulk orders');
+    const data = await res.json();
+    return data.orders || data;
+  } catch (error) {
+    console.error('fetchAdminSchoolBulkOrdersApi error:', error);
+    return null;
+  }
+};
+
+export const distributeSchoolBulkOrderApi = async (id, payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/distribute`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const approveSellerQuotationApi = async (id, quoteId) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/approve-quote`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ quoteId })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+

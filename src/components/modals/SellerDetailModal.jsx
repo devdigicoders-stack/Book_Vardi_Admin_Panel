@@ -298,7 +298,7 @@ export default function SellerDetailModal({
   };
 
   const handleSaveCommission = () => {
-    onUpdateCommission(seller.id, commission);
+    onUpdateCommission(sellerId, commission);
     setCommissionSaved(true);
     setTimeout(() => setCommissionSaved(false), 2500);
   };
@@ -306,7 +306,7 @@ export default function SellerDetailModal({
   const handlePayout = () => {
     if (seller.payoutBalance > 0) {
       if (window.confirm(`Discharge payout settlement of ₹${seller.payoutBalance.toLocaleString()} to ${bankName} (A/c: ${bankAccountNumber})?`)) {
-        onReleasePayout(seller.id, seller.payoutBalance);
+        onReleasePayout(sellerId, seller.payoutBalance);
         onClose();
       }
     }
@@ -335,7 +335,7 @@ export default function SellerDetailModal({
                   {currentStatus}
                 </span>
                 <span className="text-[11px] font-mono font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/60">
-                  {seller.id}
+                  {sellerId}
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-0.5 truncate">
@@ -349,7 +349,7 @@ export default function SellerDetailModal({
             {isPending && !readOnly && (
               <button
                 onClick={() => {
-                  onApprove(seller.id);
+                  onApprove(sellerId);
                   onClose();
                 }}
                 className="hidden sm:flex px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs items-center gap-1.5 cursor-pointer"
@@ -513,7 +513,7 @@ export default function SellerDetailModal({
                     window.alert('Please add a rejection comment before rejecting this seller.');
                     return;
                   }
-                  onReject(seller.id, rejectReason.trim());
+                  onReject(sellerId, rejectReason.trim());
                   setShowRejectBox(false);
                   onClose();
                 }}

@@ -23,6 +23,8 @@ import SettingsTab from '../components/tabs/SettingsTab';
 import SupportTab from '../components/tabs/SupportTab';
 import ProfileTab from '../components/tabs/ProfileTab';
 import TeamTab from '../components/tabs/TeamTab';
+import BulkOrdersTab from '../components/tabs/BulkOrdersTab';
+import LogisticsTab from '../components/tabs/LogisticsTab';
 
 const TAB_ORDER = [
   'dashboard',
@@ -31,6 +33,8 @@ const TAB_ORDER = [
   'products',
   'inventory',
   'orders',
+  'bulkOrders',
+  'logistics',
   'finance',
   'sellers',
   'schools',
@@ -77,6 +81,10 @@ export default function AdminDashboard() {
         return <ProductsTab />;
       case 'orders':
         return <OrdersTab />;
+      case 'bulkOrders':
+        return <BulkOrdersTab />;
+      case 'logistics':
+        return <LogisticsTab />;
       case 'sellers':
         return <SellersTab />;
       case 'schools':

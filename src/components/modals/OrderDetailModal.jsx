@@ -37,6 +37,24 @@ export default function OrderDetailModal({
     }
   }, [order]);
 
+  const formattedShippingAddress = React.useMemo(() => {
+    if (!order?.shippingAddress) return 'Customer Address';
+    if (typeof order.shippingAddress === 'string') return order.shippingAddress;
+    if (typeof order.shippingAddress === 'object') {
+      const parts = [
+        order.shippingAddress.name || order.shippingAddress.fullName,
+        order.shippingAddress.addressLine || order.shippingAddress.street || order.shippingAddress.address || order.shippingAddress.addressLine1,
+        order.shippingAddress.colony || order.shippingAddress.landmark,
+        order.shippingAddress.city,
+        order.shippingAddress.state,
+        order.shippingAddress.pincode ? `- ${order.shippingAddress.pincode}` : null,
+        order.shippingAddress.phone ? `(Phone: ${order.shippingAddress.phone})` : null
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : 'Delivery Address';
+    }
+    return String(order.shippingAddress);
+  }, [order?.shippingAddress]);
+
   if (!isOpen || !order) return null;
 
   const handleSaveTracking = () => {
@@ -62,24 +80,6 @@ export default function OrderDetailModal({
       onClose();
     }
   };
-
-  const formattedShippingAddress = React.useMemo(() => {
-    if (!order?.shippingAddress) return 'Customer Address';
-    if (typeof order.shippingAddress === 'string') return order.shippingAddress;
-    if (typeof order.shippingAddress === 'object') {
-      const parts = [
-        order.shippingAddress.name || order.shippingAddress.fullName,
-        order.shippingAddress.addressLine || order.shippingAddress.street || order.shippingAddress.address || order.shippingAddress.addressLine1,
-        order.shippingAddress.colony || order.shippingAddress.landmark,
-        order.shippingAddress.city,
-        order.shippingAddress.state,
-        order.shippingAddress.pincode ? `- ${order.shippingAddress.pincode}` : null,
-        order.shippingAddress.phone ? `(Phone: ${order.shippingAddress.phone})` : null
-      ].filter(Boolean);
-      return parts.length > 0 ? parts.join(', ') : 'Delivery Address';
-    }
-    return String(order.shippingAddress);
-  }, [order?.shippingAddress]);
 
   const formattedCustomerName = typeof order?.customerName === 'object' 
     ? (order.customerName?.name || order.customerName?.fullName || 'Customer')

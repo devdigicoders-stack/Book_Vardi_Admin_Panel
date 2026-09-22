@@ -42,7 +42,10 @@ import {
   createAnnouncementApi,
   updateAnnouncementApi,
   toggleAnnouncementStatusApi,
-  deleteAnnouncementApi
+  deleteAnnouncementApi,
+  fetchAdminSchoolBulkOrdersApi,
+  distributeSchoolBulkOrderApi,
+  approveSellerQuotationApi
 } from '../utils/api';
 
 const AdminDataContext = createContext();
@@ -464,6 +467,24 @@ export const AdminDataProvider = ({ children }) => {
       }
     }).catch(() => {});
 
+    fetchAdminSchoolBulkOrdersApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setSchoolOrders(data.map(o => ({
+          ...o,
+          id: o._id || o.id,
+          referenceId: o.referenceId || `SCH-${o.id}`,
+          schoolName: o.institutionName || o.schoolName || 'Partner School',
+          contactPerson: o.contactName || o.contactPerson || 'Administrator',
+          requirementSummary: Array.isArray(o.requirements) && o.requirements.length > 0
+            ? o.requirements.map(r => `${r.itemName} (${r.quantity})`).join(', ')
+            : (o.additionalNotes || 'Bulk Supplies'),
+          estimatedBudget: o.targetBudgetPerKit || 0,
+          quoteAmount: o.targetBudgetPerKit || 0
+        })));
+      }
+    }).catch(() => {});
+
+
     fetchAdminPromotionsApi().then(data => {
       if (Array.isArray(data) && data.length > 0) {
         setPromotions(data.map(promo => ({
@@ -768,7 +789,7 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   // ==================== SELLER ACTIONS ====================
-  const approveSeller = (sellerId) => {
+  const approveSeller = async (sellerId) => {
     setSellers(prev => {
       const updated = prev.map(s => {
         if (s.id === sellerId || s._id === sellerId) {
@@ -828,11 +849,31 @@ export const AdminDataProvider = ({ children }) => {
       console.error(e);
     }
 
-    approveSellerApi(sellerId).catch(() => {});
+    try {
+      const res = await approveSellerApi(sellerId);
+      if (res && (res.seller || res.message)) {
+        const data = await fetchAdminSellersApi();
+        const list = Array.isArray(data) ? data : (data?.sellers || []);
+        if (list.length > 0) {
+          setSellers(list.map(s => ({
+            id: s._id || s.id,
+            _id: s._id || s.id,
+            storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+            ownerName: s.ownerName || s.name || 'Vendor',
+            status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+            payoutBalance: s.walletBalance || s.payoutBalance || 0,
+            ...s
+          })));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to approve seller via API:", err);
+    }
     logAudit('Seller Approved', `KYC approved for seller ${sellerId}`);
   };
 
-  const setPendingSeller = (sellerId) => {
+  const setPendingSeller = async (sellerId) => {
     setSellers(prev => {
       const updated = prev.map(s => {
         if (s.id === sellerId || s._id === sellerId) {
@@ -887,11 +928,29 @@ export const AdminDataProvider = ({ children }) => {
       console.error(e);
     }
 
-    setPendingSellerApi(sellerId).catch(() => {});
+    try {
+      await setPendingSellerApi(sellerId);
+      const data = await fetchAdminSellersApi();
+      const list = Array.isArray(data) ? data : (data?.sellers || []);
+      if (list.length > 0) {
+        setSellers(list.map(s => ({
+          id: s._id || s.id,
+          _id: s._id || s.id,
+          storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+          ownerName: s.ownerName || s.name || 'Vendor',
+          status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          payoutBalance: s.walletBalance || s.payoutBalance || 0,
+          ...s
+        })));
+      }
+    } catch (err) {
+      console.error("Failed to reset seller status to pending via API:", err);
+    }
     logAudit('Seller Status Reset', `Seller ${sellerId} status reset to Pending approval`);
   };
 
-  const rejectSeller = (sellerId, reason = 'Incomplete GSTIN/KYC verification details') => {
+  const rejectSeller = async (sellerId, reason = 'Incomplete GSTIN/KYC verification details') => {
     const trimmedReason = reason?.trim() || 'Incomplete GSTIN/KYC verification details';
     setSellers(prev => {
       const updated = prev.map(s => {
@@ -947,21 +1006,57 @@ export const AdminDataProvider = ({ children }) => {
       console.error(e);
     }
 
-    rejectSellerApi(sellerId, trimmedReason).catch(() => {});
+    try {
+      await rejectSellerApi(sellerId, trimmedReason);
+      const data = await fetchAdminSellersApi();
+      const list = Array.isArray(data) ? data : (data?.sellers || []);
+      if (list.length > 0) {
+        setSellers(list.map(s => ({
+          id: s._id || s.id,
+          _id: s._id || s.id,
+          storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+          ownerName: s.ownerName || s.name || 'Vendor',
+          status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          payoutBalance: s.walletBalance || s.payoutBalance || 0,
+          ...s
+        })));
+      }
+    } catch (err) {
+      console.error("Failed to reject seller via API:", err);
+    }
     logAudit('Seller Rejected', `Rejected seller ${sellerId} with message: "${trimmedReason}"`);
   };
 
-  const toggleSellerStatus = (sellerId, targetStatus, reason = '') => {
+  const toggleSellerStatus = async (sellerId, targetStatus, reason = '') => {
     const lower = String(targetStatus || '').toLowerCase();
     if (lower === 'approved' || lower === 'verified') {
-      approveSeller(sellerId);
+      await approveSeller(sellerId);
     } else if (lower === 'pending') {
-      setPendingSeller(sellerId);
+      await setPendingSeller(sellerId);
     } else if (lower === 'rejected') {
-      rejectSeller(sellerId, reason);
+      await rejectSeller(sellerId, reason);
     } else if (lower === 'suspended') {
       setSellers(prev => prev.map(s => (s.id === sellerId || s._id === sellerId) ? { ...s, status: 'Suspended' } : s));
-      toggleSellerStatusApi(sellerId, 'suspended', reason).catch(() => {});
+      try {
+        await toggleSellerStatusApi(sellerId, 'suspended', reason);
+        const data = await fetchAdminSellersApi();
+        const list = Array.isArray(data) ? data : (data?.sellers || []);
+        if (list.length > 0) {
+          setSellers(list.map(s => ({
+            id: s._id || s.id,
+            _id: s._id || s.id,
+            storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+            ownerName: s.ownerName || s.name || 'Vendor',
+            status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+            payoutBalance: s.walletBalance || s.payoutBalance || 0,
+            ...s
+          })));
+        }
+      } catch (err) {
+        console.error("Failed to suspend seller via API:", err);
+      }
       logAudit('Seller Suspended', `Suspended seller account ${sellerId}`);
     }
   };
@@ -1078,6 +1173,62 @@ export const AdminDataProvider = ({ children }) => {
     deleteSchoolApi(id).catch(() => {});
     logAudit('School Removed', `Removed school #${id}`);
   };
+
+  const distributeSchoolBulkOrder = async (orderId, { assignmentMode, sellerId, invitedSellerIds }) => {
+    setSchoolOrders(prev => prev.map(o => {
+      if (o.id === orderId || o._id === orderId) {
+        return {
+          ...o,
+          assignmentMode,
+          sellerId: assignmentMode === 'direct' ? sellerId : null,
+          invitedSellerIds: assignmentMode === 'selected' ? invitedSellerIds : [],
+          status: assignmentMode === 'direct' ? 'assigned' : 'published'
+        };
+      }
+      return o;
+    }));
+
+    try {
+      const res = await distributeSchoolBulkOrderApi(orderId, { assignmentMode, sellerId, invitedSellerIds });
+      if (res?.success && res.order) {
+        setSchoolOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId ? { ...o, ...res.order } : o)));
+      }
+    } catch (e) {
+      console.warn('Backend distribution fallback:', e);
+    }
+    logAudit('Bulk Order Distributed', `Distributed bulk order #${orderId} via ${assignmentMode} mode`);
+  };
+
+  const approveSellerQuotation = async (orderId, quoteId) => {
+    setSchoolOrders(prev => prev.map(o => {
+      if (o.id === orderId || o._id === orderId) {
+        const updatedQuotes = (o.quotations || []).map(q => ({
+          ...q,
+          status: (q._id === quoteId || q.id === quoteId) ? 'approved' : 'rejected'
+        }));
+        const winning = updatedQuotes.find(q => q._id === quoteId || q.id === quoteId);
+        return {
+          ...o,
+          quotations: updatedQuotes,
+          acceptedQuoteId: quoteId,
+          sellerId: winning?.sellerId || o.sellerId,
+          status: 'quote_accepted'
+        };
+      }
+      return o;
+    }));
+
+    try {
+      const res = await approveSellerQuotationApi(orderId, quoteId);
+      if (res?.success && res.order) {
+        setSchoolOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId ? { ...o, ...res.order } : o)));
+      }
+    } catch (e) {
+      console.warn('Backend quote approval fallback:', e);
+    }
+    logAudit('Quotation Approved', `Approved quotation #${quoteId} for bulk order #${orderId}`);
+  };
+
 
   // ==================== USER ACTIONS ====================
   const toggleUserStatus = (userId) => {
@@ -1408,6 +1559,8 @@ export const AdminDataProvider = ({ children }) => {
     refundOrder,
     updateOrderTracking,
     schoolOrders,
+    distributeSchoolBulkOrder,
+    approveSellerQuotation,
     sellers,
     approveSeller,
     rejectSeller,

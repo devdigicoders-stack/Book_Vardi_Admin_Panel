@@ -1,8 +1,8 @@
-import React from 'react';
 import {
   LayoutDashboard,
   Package,
   ShoppingBag,
+  Building2,
   Store,
   GraduationCap,
   Users,
@@ -17,7 +17,8 @@ import {
   UserCheck,
   ChevronRight,
   ArrowLeft,
-  Shield
+  Shield,
+  Truck
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
@@ -41,6 +42,8 @@ export const ADMIN_TABS = [
     title: 'Commerce & Orders',
     items: [
       { id: 'orders', label: 'Orders', icon: <ShoppingBag size={17} />, badgeKey: 'pendingOrders' },
+      { id: 'bulkOrders', label: 'Bulk RFQs & B2B', icon: <Building2 size={17} />, badgeKey: 'pendingBulkOrders' },
+      { id: 'logistics', label: 'Logistics', icon: <Truck size={17} /> },
       { id: 'finance', label: 'Finance', icon: <CreditCard size={17} /> }
     ]
   },
