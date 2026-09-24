@@ -1,6 +1,62 @@
 const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_BASE_URL = `${SERVER_URL}/admin`;
 
+export function resolveImageUrl(url) {
+  if (!url) return '';
+  if (typeof url === 'object') {
+    url = url.url || url.dataUrl || url.src || '';
+  }
+  if (typeof url !== 'string' || !url.trim()) return '';
+  const cleanUrl = url.trim();
+  if (/^https?:\/\//i.test(cleanUrl) || cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl;
+  const backendHost = SERVER_URL.replace(/\/api\/?$/, '');
+  const cleanPath = cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`;
+  return `${backendHost}${cleanPath}`;
+}
+
+export function parseSizeVariants(product) {
+  if (!product) return [];
+  let raw = product.sizeVariants || product.variants || product.size_variants;
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((v, idx) => {
+      if (typeof v === 'string') {
+        return {
+          size: v,
+          measureScale: 'size',
+          measureValue: v,
+          price: product?.price || 0,
+          mrp: product?.mrp || product?.originalPrice || 0,
+          stock: product?.stockQuantity || product?.stock || 0,
+          image: product?.image || '',
+          images: Array.isArray(product?.images) ? product.images : (product?.image ? [product.image] : [])
+        };
+      }
+      const rawImage = v?.image || (Array.isArray(v?.images) && v.images[0]) || product?.image || '';
+      const rawImages = Array.isArray(v?.images) && v.images.length > 0 ? v.images : (rawImage ? [rawImage] : []);
+      return {
+        ...v,
+        size: v.size || v.measureValue || v.name || `Variant #${idx + 1}`,
+        measureValue: v.measureValue || v.size || v.name || `Variant #${idx + 1}`,
+        measureScale: v.measureScale || v.scale || 'size',
+        price: v.price !== undefined ? v.price : (product?.price || 0),
+        mrp: v.mrp !== undefined ? v.mrp : (v.originalPrice !== undefined ? v.originalPrice : (product?.mrp || product?.originalPrice || 0)),
+        stock: v.stock !== undefined ? v.stock : (v.stockQuantity !== undefined ? v.stockQuantity : 0),
+        image: rawImage,
+        images: rawImages
+      };
+    });
+  }
+  return [];
+}
+
 // Helper to get auth headers with token injection
 const getAuthHeaders = () => {
   const token = localStorage.getItem('bv_admin_jwt_token');

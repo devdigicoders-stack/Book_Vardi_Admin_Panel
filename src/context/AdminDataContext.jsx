@@ -33,6 +33,7 @@ import {
   moderateReviewApi,
   deleteAdminReviewApi,
   fetchAdminSettingsApi,
+  updateSettingsApi,
   fetchAdminRecentActivitiesApi,
   fetchSubadminsApi,
   createSubadminApi,
@@ -686,64 +687,66 @@ export const AdminDataProvider = ({ children }) => {
     }
   };
 
-  const approveProduct = (id, comment = '') => {
-    const trimmedComment = comment?.trim?.() || '';
-    setProducts(prev => {
-      const updated = prev.map(p => p.id === id ? {
-        ...p,
-        approvalStatus: 'Approved',
-        approvalComment: trimmedComment || p.approvalComment || '',
-        rejectionReason: null
-      } : p);
-
-      return updated;
-    });
-    logAudit('Approve Product', `Approved product catalog item #${id}${trimmedComment ? ` (${trimmedComment})` : ''}`);
-  };
-
-  const updateProductApprovalStatus = (id, status, remark = '') => {
+  const updateProductApprovalStatus = async (id, status, remark = '') => {
     const validStatus = ['Approved', 'Pending', 'Rejected'].includes(status) ? status : 'Pending';
     const trimmedRemark = remark?.trim?.() || '';
 
-    setProducts(prev => {
-      const updated = prev.map(p => {
-        if (p.id !== id) return p;
+    const matchFn = (p) => p.id === id || p._id === id || String(p.id) === String(id) || String(p._id) === String(id);
 
-        const nextRemark = trimmedRemark || p.approvalComment || p.rejectionReason || '';
+    setProducts(prev => prev.map(p => {
+      if (!matchFn(p)) return p;
+      const nextRemark = trimmedRemark || p.approvalComment || p.rejectionReason || '';
+      return {
+        ...p,
+        approvalStatus: validStatus,
+        approvalComment: validStatus === 'Rejected' ? nextRemark : (trimmedRemark || p.approvalComment || ''),
+        rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || p.rejectionReason || 'Quality standards not met') : null,
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: adminUser?.name || adminUser?.role || 'Marketplace Administrator'
+      };
+    }));
 
-        return {
-          ...p,
-          approvalStatus: validStatus,
-          approvalComment: validStatus === 'Rejected' ? nextRemark : (trimmedRemark || p.approvalComment || ''),
-          rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || p.rejectionReason || 'Quality standards not met') : null,
-          reviewedAt: new Date().toISOString(),
-          reviewedBy: adminUser?.name || adminUser?.role || 'Marketplace Administrator'
+    setInventory(prev => prev.map(p => {
+      if (!matchFn(p)) return p;
+      const nextRemark = trimmedRemark || p.approvalComment || p.rejectionReason || '';
+      return {
+        ...p,
+        approvalStatus: validStatus,
+        approvalComment: validStatus === 'Rejected' ? nextRemark : (trimmedRemark || p.approvalComment || ''),
+        rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || p.rejectionReason || 'Quality standards not met') : null,
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: adminUser?.name || adminUser?.role || 'Marketplace Administrator'
+      };
+    }));
+
+    try {
+      const res = await updateProductApprovalApi(id, validStatus, trimmedRemark);
+      if (res?.success && res?.product) {
+        const saved = res.product;
+        const normalizedSaved = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          approvalStatus: saved.approvalStatus || validStatus,
+          approvalComment: saved.approvalComment || trimmedRemark,
+          rejectionReason: saved.rejectionReason || (validStatus === 'Rejected' ? trimmedRemark : null)
         };
-      });
+        setProducts(prev => prev.map(p => (matchFn(p) ? { ...p, ...normalizedSaved } : p)));
+        setInventory(prev => prev.map(p => (matchFn(p) ? { ...p, ...normalizedSaved } : p)));
+      }
+    } catch (err) {
+      console.warn('Backend product approval status update error:', err);
+    }
 
-      return updated;
-    });
-
-    updateProductApprovalApi(id, validStatus, trimmedRemark).catch(() => {});
     logAudit('Product Status Updated', `Product #${id} marked as ${validStatus}${trimmedRemark ? ` (${trimmedRemark})` : ''}`);
   };
 
+  const approveProduct = (id, comment = '') => {
+    return updateProductApprovalStatus(id, 'Approved', comment);
+  };
+
   const rejectProduct = (id, reason = 'Quality standards not met') => {
-    const trimmedReason = reason?.trim?.() || '';
-    const finalReason = trimmedReason || 'Quality standards not met';
-    setProducts(prev => {
-      const updated = prev.map(p => p.id === id ? {
-        ...p,
-        approvalStatus: 'Rejected',
-        rejectionReason: finalReason,
-        approvalComment: finalReason
-      } : p);
-
-      return updated;
-    });
-
-    updateProductApprovalApi(id, 'Rejected', finalReason).catch(() => {});
-    logAudit('Reject Product', `Rejected product #${id} (${finalReason})`);
+    return updateProductApprovalStatus(id, 'Rejected', reason);
   };
 
   const deleteProduct = (id) => {
@@ -1134,6 +1137,28 @@ export const AdminDataProvider = ({ children }) => {
     });
     updateSchoolRadiusApi(validKm).catch(() => {});
     logAudit('School Radius Updated', `Admin updated school discovery radius to ${validKm} km`);
+  };
+
+  const updatePlatformSettings = async (newSettingsData) => {
+    const minVal = newSettingsData.minOrderFreeShipping !== undefined ? Number(newSettingsData.minOrderFreeShipping) : (newSettingsData.freeShippingThreshold !== undefined ? Number(newSettingsData.freeShippingThreshold) : (settings.minOrderFreeShipping || 99));
+    const updated = {
+      ...settings,
+      ...newSettingsData,
+      minOrderFreeShipping: minVal,
+      freeShippingThreshold: minVal
+    };
+    setSettings(updated);
+    try {
+      localStorage.setItem('admin_settings', JSON.stringify(updated));
+      localStorage.setItem('bv_free_shipping_threshold', JSON.stringify(minVal));
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('bv_settings_updated', { detail: updated }));
+    try {
+      await updateSettingsApi(updated);
+    } catch (err) {
+      console.error('Failed to save admin settings to API:', err);
+    }
+    return updated;
   };
 
   const addSchool = (newSchool) => {
@@ -1593,6 +1618,7 @@ export const AdminDataProvider = ({ children }) => {
     replyTicket,
     settings,
     setSettings,
+    updatePlatformSettings,
     notifications,
     broadcastNotification,
     markNotificationRead,

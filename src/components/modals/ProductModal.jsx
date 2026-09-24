@@ -38,15 +38,14 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         category: product.category || 'uniforms',
         badge: product.badge || 'NEW',
         stockQuantity: product.stockQuantity ?? 50,
-        sellerId: product.sellerId || (sellers[0]?.id || sellers[0]?._id || 'SEL-101'),
-        sellerName: product.sellerName || (sellers[0]?.storeName || sellers[0]?.name || 'Vardi Uniforms Pvt Ltd'),
+        sellerId: product.sellerId || 'self',
+        sellerName: product.sellerName || 'Book Vardi Verified Seller',
         paymentMethodAllowed: product.paymentMethodAllowed || 'Both',
         image: prodImages[0] || product.image || '',
         images: prodImages,
         sku: product.sku || ''
       });
     } else {
-      const defaultSeller = sellers[0];
       setFormData({
         name: '',
         subtitle: '',
@@ -55,8 +54,8 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         category: 'uniforms',
         badge: 'NEW',
         stockQuantity: '50',
-        sellerId: defaultSeller?.id || defaultSeller?._id || 'SEL-101',
-        sellerName: defaultSeller?.storeName || (typeof defaultSeller?.name === 'string' ? defaultSeller.name : 'Vardi Uniforms Pvt Ltd'),
+        sellerId: 'self',
+        sellerName: 'Book Vardi Verified Seller',
         paymentMethodAllowed: 'Both',
         image: '',
         images: [],
@@ -73,7 +72,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
     const finalImages = (formData.images && formData.images.length > 0) 
       ? formData.images 
       : (formData.image ? [formData.image] : []);
-    const primaryImg = finalImages[0] || formData.image || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=80';
+    const primaryImg = finalImages[0] || formData.image || '';
 
     const paymentAllowedStr = formData.paymentMethodAllowed || 'Both';
     const paymentAllowedArr = paymentAllowedStr === 'Online_Only' 
@@ -181,9 +180,15 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden capitalize"
               >
-                {CATEGORIES.map((c, idx) => (
-                  <option key={c.id || c._id || `cat-${idx}`} value={c.id || c.name}>{c.name}</option>
-                ))}
+                {CATEGORIES.map((c, idx) => {
+                  const catId = typeof c === 'string' ? c : (c.id || c.name || `cat-${idx}`);
+                  const catName = typeof c === 'string' ? c : (c.name || c.label || c.id);
+                  return (
+                    <option key={catId} value={catId}>
+                      {catName}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div>
@@ -214,25 +219,35 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Assigned Seller</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Assigned Seller / Merchant *</label>
               <select
-                value={formData.sellerId}
+                value={formData.sellerId || 'self'}
                 onChange={e => {
-                  const s = sellers.find(item => (item.id === e.target.value || item._id === e.target.value));
-                  const sName = getSellerLabel(s, 0);
-                  setFormData({
-                    ...formData,
-                    sellerId: e.target.value,
-                    sellerName: sName !== 'Unknown Seller' ? sName : 'Direct Marketplace'
-                  });
+                  const val = e.target.value;
+                  if (val === 'self') {
+                    setFormData({
+                      ...formData,
+                      sellerId: 'self',
+                      sellerName: 'Book Vardi Verified Seller'
+                    });
+                  } else {
+                    const s = sellers.find(item => (String(item.id || item._id) === String(val)));
+                    const sName = getSellerLabel(s, 0);
+                    setFormData({
+                      ...formData,
+                      sellerId: val,
+                      sellerName: sName !== 'Unknown Seller' ? sName : 'Partner Merchant'
+                    });
+                  }
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold text-gray-800 bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
               >
+                <option value="self">🏢 Self (Book Vardi Direct / In-House Store)</option>
                 {sellers.map((s, idx) => {
                   const sId = s.id || s._id || `sel-${idx}`;
                   return (
                     <option key={sId} value={sId}>
-                      {getSellerLabel(s, idx)}
+                      🏪 {getSellerLabel(s, idx)}
                     </option>
                   );
                 })}

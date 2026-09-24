@@ -12,10 +12,11 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function SettingsTab() {
-  const { settings, setSettings, logAudit, schoolRadiusKm, updateSchoolRadius } = useAdminData();
+  const { settings, setSettings, updatePlatformSettings, logAudit, schoolRadiusKm, updateSchoolRadius } = useAdminData();
   const [formData, setFormData] = useState({
     ...settings,
-    schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25
+    schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25,
+    minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : 99)
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -23,17 +24,22 @@ export default function SettingsTab() {
     setFormData(prev => ({
       ...prev,
       ...settings,
-      schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25
+      schoolRadiusKm: schoolRadiusKm || settings?.schoolRadiusKm || 25,
+      minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : (prev.minOrderFreeShipping || 99))
     }));
   }, [settings, schoolRadiusKm]);
 
   const handleSave = (e) => {
     e.preventDefault();
-    setSettings(formData);
+    if (updatePlatformSettings) {
+      updatePlatformSettings(formData);
+    } else if (setSettings) {
+      setSettings(formData);
+    }
     if (formData.schoolRadiusKm) {
       updateSchoolRadius(Number(formData.schoolRadiusKm));
     }
-    logAudit('Platform Settings Updated', 'Updated marketplace commissions, school discovery radius, tax & shipping parameters');
+    logAudit('Platform Settings Updated', `Updated platform settings (Free Shipping Threshold: ₹${formData.minOrderFreeShipping || 99}, Radius: ${formData.schoolRadiusKm}km)`);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
   };
@@ -91,6 +97,25 @@ export default function SettingsTab() {
                 />
                 <span className="text-xs text-gray-500">
                   Applied automatically to all new merchant signups
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Free Shipping Order Threshold (₹)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value={formData.minOrderFreeShipping !== undefined ? formData.minOrderFreeShipping : (formData.freeShippingThreshold || 99)}
+                  onChange={e => setFormData({ ...formData, minOrderFreeShipping: Number(e.target.value), freeShippingThreshold: Number(e.target.value) })}
+                  className="w-28 px-3.5 py-2 text-sm font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+                />
+                <span className="text-xs text-gray-500">
+                  Minimum cart subtotal required for customer to unlock 100% Free Doorstep Shipping
                 </span>
               </div>
             </div>

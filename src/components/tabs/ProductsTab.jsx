@@ -16,12 +16,16 @@ import {
   Zap,
   Check,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Layers
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { CATEGORIES } from '../../constants/categories';
 import ProductFormPage from './ProductFormPage';
 import ProductReviewModal from '../modals/ProductReviewModal';
+import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
 
 export default function ProductsTab() {
   const {
@@ -44,6 +48,7 @@ export default function ProductsTab() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [reviewingProduct, setReviewingProduct] = useState(null);
   const [previewProduct, setPreviewProduct] = useState(null);
+  const [expandedProductId, setExpandedProductId] = useState(null);
 
   // Status Metrics
   const pendingProducts = products.filter(p => p.approvalStatus === 'Pending');
@@ -280,10 +285,16 @@ export default function ProductsTab() {
             onChange={e => setSelectedCategory(e.target.value)}
             className="px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-700 bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden capitalize cursor-pointer"
           >
-            <option value="all">All Categories</option>
-            {CATEGORIES.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
+            <option key="cat-all" value="all">All Categories</option>
+            {CATEGORIES.map((c, idx) => {
+              const catId = typeof c === 'string' ? c : (c.id || c.name || `cat-${idx}`);
+              const catName = typeof c === 'string' ? c : (c.name || c.label || c.id);
+              return (
+                <option key={catId} value={catId}>
+                  {catName}
+                </option>
+              );
+            })}
           </select>
 
           {/* Status Filter */}
@@ -320,146 +331,278 @@ export default function ProductsTab() {
                 const status = p.approvalStatus || 'Approved';
                 const hasRemark = Boolean(p.approvalComment || p.rejectionReason);
                 const remarkText = p.rejectionReason || p.approvalComment || '';
+                const pId = p._id || p.id;
+                const isExpanded = expandedProductId === pId;
+                const pVariants = parseSizeVariants(p);
+                const hasVariants = pVariants.length > 0;
 
                 return (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-gray-50/70 transition-colors cursor-pointer"
-                    onClick={() => setPreviewProduct(p)}
-                  >
-                    
-                    {/* Thumbnail & Title */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src={p.image || (Array.isArray(p.images) && p.images[0]) || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=150'} 
-                          alt={p.name} 
-                          className="w-12 h-12 rounded-xl object-cover border border-gray-200 shrink-0 bg-white"
-                        />
-                        <div className="min-w-0 max-w-xs">
-                          <div className="font-bold text-gray-900 truncate">{p.name}</div>
-                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.sku || `SKU-${p.id}`}</div>
-                          {p.badge && (
-                            <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-                              {p.badge}
-                            </span>
+                  <React.Fragment key={pId}>
+                    <tr
+                      className="hover:bg-gray-50/70 transition-colors cursor-pointer"
+                      onClick={() => setPreviewProduct(p)}
+                    >
+                      
+                      {/* Thumbnail & Title */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {(() => {
+                            const rawImg = p.image || (Array.isArray(p.images) && p.images[0]);
+                            const imgUrl = rawImg ? resolveImageUrl(rawImg) : '';
+                            return imgUrl ? (
+                              <img 
+                                src={imgUrl} 
+                                alt={p.name} 
+                                className="w-12 h-12 rounded-xl object-cover border border-gray-200 shrink-0 bg-white"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl border border-gray-200 shrink-0 bg-gray-100 flex items-center justify-center text-gray-400 text-[10px] font-bold">
+                                No Img
+                              </div>
+                            );
+                          })()}
+                          <div className="min-w-0 max-w-xs">
+                            <div className="font-bold text-gray-900 truncate">{p.name}</div>
+                            <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.sku || `SKU-${p.id}`}</div>
+                            {p.badge && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                {p.badge}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Category */}
+                      <td className="px-4 py-3 capitalize font-semibold text-gray-700 whitespace-nowrap">
+                        {p.category}
+                      </td>
+
+                      {/* Price */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-gray-900">₹{p.price}</span>
+                          {hasVariants && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedProductId(isExpanded ? null : pId);
+                              }}
+                              className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Click to expand variant list & details"
+                            >
+                              <Layers size={11} />
+                              <span>{p.sizeVariants.length} Variants</span>
+                              {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            </button>
                           )}
                         </div>
-                      </div>
-                    </td>
-
-                    {/* Category */}
-                    <td className="px-4 py-3 capitalize font-semibold text-gray-700 whitespace-nowrap">
-                      {p.category}
-                    </td>
-
-                    {/* Price */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-gray-900">₹{p.price}</span>
-                        {Array.isArray(p.sizeVariants) && p.sizeVariants.length > 0 && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-teal-50 text-teal-800 border border-teal-200">
-                            {p.sizeVariants.length} Sizes
-                          </span>
+                        {p.originalPrice && p.originalPrice > p.price && (
+                          <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
                         )}
-                      </div>
-                      {p.originalPrice && p.originalPrice > p.price && (
-                        <div className="text-[10px] text-gray-400 line-through">₹{p.originalPrice}</div>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Stock */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                        (p.stockQuantity ?? 50) <= 5 ? 'bg-rose-100 text-rose-800' :
-                        (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
-                        'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {p.stockQuantity ?? 50} units
-                      </span>
-                    </td>
+                      {/* Stock */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                          (p.stockQuantity ?? 50) <= 5 ? 'bg-rose-100 text-rose-800' :
+                          (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
+                          'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {p.stockQuantity ?? 50} units
+                        </span>
+                      </td>
 
-                    {/* Seller */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-gray-800 font-semibold flex items-center gap-1.5">
-                        <Store size={13} className="text-teal-700" />
-                        <span>{p.sellerName || 'Direct Marketplace'}</span>
-                      </div>
-                    </td>
+                      {/* Seller */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-gray-800 font-semibold flex items-center gap-1.5">
+                          <Store size={13} className="text-teal-700" />
+                          <span>{p.sellerName || 'Direct Marketplace'}</span>
+                        </div>
+                      </td>
 
-                    {/* Approval Status & Remarks */}
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <div className="space-y-1 max-w-xs">
-                        <button
-                          type="button"
-                          onClick={() => setReviewingProduct(p)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all cursor-pointer shadow-2xs border ${
-                            status === 'Approved' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' :
-                            status === 'Rejected' ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100' :
-                            'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 animate-pulse'
-                          }`}
-                          title="Click to review product and change approval status"
-                        >
-                          {status === 'Approved' && <CheckCircle2 size={12} className="text-emerald-600" />}
-                          {status === 'Pending' && <Clock size={12} className="text-amber-600" />}
-                          {status === 'Rejected' && <AlertTriangle size={12} className="text-rose-600" />}
-                          <span>{status === 'Pending' ? 'Pending Review' : status}</span>
-                        </button>
-
-                        {/* Remark snippet */}
-                        {hasRemark && (
-                          <div
-                            className={`text-[10px] truncate max-w-[200px] flex items-center gap-1 ${
-                              status === 'Rejected' ? 'text-rose-700 font-medium' : 'text-gray-500'
+                      {/* Approval Status & Remarks */}
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <div className="space-y-1 max-w-xs">
+                          <button
+                            type="button"
+                            onClick={() => setReviewingProduct(p)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all cursor-pointer shadow-2xs border ${
+                              status === 'Approved' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' :
+                              status === 'Rejected' ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100' :
+                              'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 animate-pulse'
                             }`}
-                            title={remarkText}
+                            title="Click to review product and change approval status"
                           >
-                            <MessageSquare size={10} className="shrink-0 opacity-70" />
-                            <span className="truncate">{remarkText}</span>
+                            {status === 'Approved' && <CheckCircle2 size={12} className="text-emerald-600" />}
+                            {status === 'Pending' && <Clock size={12} className="text-amber-600" />}
+                            {status === 'Rejected' && <AlertTriangle size={12} className="text-rose-600" />}
+                            <span>{status === 'Pending' ? 'Pending Review' : status}</span>
+                          </button>
+
+                          {/* Remark snippet */}
+                          {hasRemark && (
+                            <div
+                              className={`text-[10px] truncate max-w-[200px] flex items-center gap-1 ${
+                                status === 'Rejected' ? 'text-rose-700 font-medium' : 'text-gray-500'
+                              }`}
+                              title={remarkText}
+                            >
+                              <MessageSquare size={10} className="shrink-0 opacity-70" />
+                              <span className="truncate">{remarkText}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setReviewingProduct(p)}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold ${
+                              status === 'Pending' 
+                                ? 'bg-amber-500 text-white hover:bg-amber-600 px-2.5 shadow-2xs' 
+                                : 'text-teal-800 hover:bg-teal-50'
+                            }`}
+                            title={canEdit ? "Review & Update Approval Status" : "Inspect Product Details (View-Only)"}
+                          >
+                            <ShieldCheck size={15} />
+                            {status === 'Pending' && <span>Inspect</span>}
+                          </button>
+                          
+                          {canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Details"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+
+                              <button
+                                onClick={() => handleDelete(p.id, p.name)}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Product"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Inline Expandable Sub-row for Variant Products Expanded Details */}
+                    {isExpanded && hasVariants && (
+                      <tr className="bg-teal-50/40 border-y border-teal-100">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="space-y-3 bg-white p-4 rounded-xl border border-teal-200 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-extrabold text-teal-950 uppercase tracking-wider flex items-center gap-1.5">
+                                <Layers size={14} className="text-teal-700" />
+                                <span>Variant Products Expanded Details & Prices ({pVariants.length})</span>
+                              </span>
+                              <span className="text-[10px] text-gray-500 font-bold">SKU: {p.sku || 'N/A'}</span>
+                            </div>
+
+                            {/* Variant Preview Image Layout in Row */}
+                            <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 border-b border-gray-100 scrollbar-thin">
+                              {pVariants.map((v, vIdx) => {
+                                const vRawImg = v.image || (Array.isArray(v.images) && v.images[0]) || p.image || (Array.isArray(p.images) && p.images[0]);
+                                const vImgUrl = vRawImg ? resolveImageUrl(vRawImg) : '';
+                                const vVal = v.measureValue || v.size || `Var #${vIdx + 1}`;
+
+                                return (
+                                  <div
+                                    key={vIdx}
+                                    className="flex items-center gap-2.5 p-2 rounded-xl bg-teal-50/60 border border-teal-200/80 shrink-0 min-w-[175px]"
+                                  >
+                                    {vImgUrl ? (
+                                      <img
+                                        src={vImgUrl}
+                                        alt={vVal}
+                                        className="w-12 h-12 rounded-lg object-cover border border-white shadow-2xs shrink-0 bg-white"
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                      />
+                                    ) : (
+                                      <div className="w-12 h-12 rounded-lg bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-center shrink-0 border border-teal-200">
+                                        {vVal.slice(0, 3)}
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-extrabold text-xs text-gray-900 truncate">{vVal}</div>
+                                      <div className="text-[11px] font-bold text-teal-800 flex items-center gap-1 mt-0.5">
+                                        <span>₹{v.price}</span>
+                                        {(v.mrp || v.originalPrice) && (
+                                          <span className="text-[9px] text-gray-400 line-through">₹{v.mrp || v.originalPrice}</span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                        {v.stockQuantity ?? v.stock ?? 0} in stock
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-[10px] border-b border-gray-200">
+                                  <tr>
+                                    <th className="px-3 py-2">Variant Value</th>
+                                    <th className="px-3 py-2">Variant Photo</th>
+                                    <th className="px-3 py-2">Scale</th>
+                                    <th className="px-3 py-2">Price (₹)</th>
+                                    <th className="px-3 py-2">MRP (₹)</th>
+                                    <th className="px-3 py-2">Stock Quantity</th>
+                                    <th className="px-3 py-2">SKU</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {pVariants.map((v, vIdx) => {
+                                    const vRawImg = v.image || (Array.isArray(v.images) && v.images[0]) || p.image || (Array.isArray(p.images) && p.images[0]);
+                                    const vImgUrl = vRawImg ? resolveImageUrl(vRawImg) : '';
+
+                                    return (
+                                      <tr key={vIdx} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 font-bold text-gray-900">
+                                          {v.measureValue || v.size || `Variant #${vIdx + 1}`}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {vImgUrl ? (
+                                            <img
+                                              src={vImgUrl}
+                                              alt={v.size}
+                                              className="w-8 h-8 rounded-lg object-cover border border-gray-200 bg-white"
+                                            />
+                                          ) : (
+                                            <span className="text-[10px] text-gray-400 italic">No photo</span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-800 text-[10px] uppercase font-bold border border-teal-200">
+                                            {v.measureScale || 'size'}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 font-extrabold text-gray-900">₹{v.price}</td>
+                                        <td className="px-3 py-2 text-gray-400 line-through">₹{v.mrp || v.originalPrice || Math.round(v.price * 1.25)}</td>
+                                        <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} units</td>
+                                        <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{v.sku || '-'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setReviewingProduct(p)}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold ${
-                            status === 'Pending' 
-                              ? 'bg-amber-500 text-white hover:bg-amber-600 px-2.5 shadow-2xs' 
-                              : 'text-teal-800 hover:bg-teal-50'
-                          }`}
-                          title={canEdit ? "Review & Update Approval Status" : "Inspect Product Details (View-Only)"}
-                        >
-                          <ShieldCheck size={15} />
-                          {status === 'Pending' && <span>Inspect</span>}
-                        </button>
-                        
-                        {canEdit && (
-                          <>
-                            <button
-                              onClick={() => handleOpenEdit(p)}
-                              className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                              title="Edit Details"
-                            >
-                              <Edit3 size={15} />
-                            </button>
-
-                            <button
-                              onClick={() => handleDelete(p.id, p.name)}
-                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Product"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-
-                  </tr>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
 
@@ -494,11 +637,22 @@ export default function ProductsTab() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
               <div className="p-5 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50">
-                <img
-                  src={previewProduct.image || 'https://images.unsplash.com/photo-1593032465175-481ac7f401a0?w=800'}
-                  alt={previewProduct.name}
-                  className="w-full h-[300px] md:h-full object-contain rounded-2xl border border-gray-200 bg-white"
-                />
+                {(() => {
+                  const rawImg = previewProduct.image || (Array.isArray(previewProduct.images) && previewProduct.images[0]);
+                  const imgUrl = rawImg ? resolveImageUrl(rawImg) : '';
+                  return imgUrl ? (
+                    <img
+                      src={imgUrl}
+                      alt={previewProduct.name}
+                      className="w-full h-[300px] md:h-full object-contain rounded-2xl border border-gray-200 bg-white"
+                    />
+                  ) : (
+                    <div className="w-full h-[300px] md:h-full rounded-2xl border border-gray-200 bg-gray-100 flex flex-col items-center justify-center text-gray-400 text-xs font-bold">
+                      <Package size={32} className="mb-2 text-gray-300" />
+                      <span>No Image Available</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="p-5 space-y-4">
@@ -565,6 +719,74 @@ export default function ProductsTab() {
                 </div>
               </div>
             </div>
+
+            {/* Variant Product Expanded Details Table at Bottom */}
+            {(() => {
+              const previewVariants = parseSizeVariants(previewProduct);
+              if (previewVariants.length === 0) return null;
+
+              return (
+                <div className="p-5 border-t border-gray-100 bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-extrabold text-teal-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers size={14} className="text-teal-700" />
+                      <span>Variant Products Expanded Details ({previewVariants.length})</span>
+                    </h4>
+                    <span className="text-[10px] text-gray-500 font-bold">SKU: {previewProduct.sku || 'N/A'}</span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-gray-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-[10px] border-b border-gray-200">
+                        <tr>
+                          <th className="px-3 py-2">Variant Value</th>
+                          <th className="px-3 py-2">Variant Photo</th>
+                          <th className="px-3 py-2">Scale</th>
+                          <th className="px-3 py-2">Price (₹)</th>
+                          <th className="px-3 py-2">MRP (₹)</th>
+                          <th className="px-3 py-2">Stock Quantity</th>
+                          <th className="px-3 py-2">SKU</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {previewVariants.map((v, vIdx) => {
+                          const vRawImg = v.image || (Array.isArray(v.images) && v.images[0]) || previewProduct.image || (Array.isArray(previewProduct.images) && previewProduct.images[0]);
+                          const vImgUrl = vRawImg ? resolveImageUrl(vRawImg) : '';
+
+                        return (
+                          <tr key={vIdx} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-bold text-gray-900">
+                              {v.measureValue || v.size || `Variant #${vIdx + 1}`}
+                            </td>
+                            <td className="px-3 py-2">
+                              {vImgUrl ? (
+                                <img
+                                  src={vImgUrl}
+                                  alt={v.size}
+                                  className="w-8 h-8 rounded-lg object-cover border border-gray-200 bg-white"
+                                />
+                              ) : (
+                                <span className="text-[10px] text-gray-400 italic">No photo</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-800 text-[10px] uppercase font-bold border border-teal-200">
+                                {v.measureScale || 'size'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-extrabold text-gray-900">₹{v.price}</td>
+                            <td className="px-3 py-2 text-gray-400 line-through">₹{v.mrp || v.originalPrice || Math.round(v.price * 1.25)}</td>
+                            <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} units</td>
+                            <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{v.sku || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
           </div>
         </div>
       )}

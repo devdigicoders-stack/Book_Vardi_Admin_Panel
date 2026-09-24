@@ -92,46 +92,46 @@ export default function SellerDetailModal({
 
   // Normalized seller and rawApplication data
   const app = seller.rawApplication || {};
-  const storeName = seller.storeName || app.storeName || seller.businessName || 'BookVardi Merchant Store';
-  const legalBusinessName = app.legalBusinessName || seller.businessName || seller.storeName || 'Vardi Retail Entity';
-  const tradeName = app.tradeName || seller.storeName || 'Book Vardi Partner';
-  const businessType = app.businessType || 'Private Limited';
-  const yearStarted = app.yearStarted || '2021';
-  const annualTurnoverEstimate = app.annualTurnoverEstimate || '₹25L - ₹50L';
+  const storeName = seller.storeName || app.storeName || seller.name || 'Merchant Store';
+  const legalBusinessName = seller.legalBusinessName || app.legalBusinessName || seller.businessName || seller.storeName || seller.name || 'N/A';
+  const tradeName = seller.tradeName || app.tradeName || seller.storeName || 'N/A';
+  const businessType = seller.businessType || app.businessType || 'Proprietorship';
+  const yearStarted = seller.yearStarted || app.yearStarted || 'N/A';
+  const annualTurnoverEstimate = seller.annualTurnoverEstimate || app.annualTurnoverEstimate || 'N/A';
 
-  const ownerName = app.ownerFullName || seller.ownerName || seller.name || 'Merchant Owner';
-  const ownerDesignation = app.ownerDesignation || 'Director / Managing Partner';
-  const ownerPan = app.ownerPan || seller.pan || seller.ownerPan || 'N/A';
-  const ownerAadhaarLast4 = app.ownerAadhaarLast4 || (seller.aadhaar ? String(seller.aadhaar).slice(-4) : 'N/A');
+  const ownerName = seller.ownerDetails?.ownerFullName || app.ownerFullName || seller.ownerName || seller.name || 'N/A';
+  const ownerDesignation = seller.ownerDetails?.ownerDesignation || app.ownerDesignation || 'Proprietor / Owner';
+  const ownerPan = seller.documents?.panNumber || seller.ownerDetails?.ownerPan || app.ownerPan || seller.pan || seller.ownerPan || seller.businessPan || 'N/A';
+  const ownerAadhaarLast4 = seller.documents?.aadhaarNumber ? String(seller.documents.aadhaarNumber).slice(-4) : (seller.ownerDetails?.ownerAadhaarLast4 || app.ownerAadhaarLast4 || (seller.aadhaar ? String(seller.aadhaar).slice(-4) : 'N/A'));
 
-  const businessPan = app.businessPan || seller.businessPan || seller.pan || app.ownerPan || 'N/A';
-  const gstin = app.gstin || seller.gstin || (app.hasGstExemption || seller.hasGstExemption ? 'GST Exempted' : 'N/A');
-  const msmeNumber = app.msmeRegistrationNumber || seller.msmeRegistrationNumber || seller.documents?.msmeRegistrationNumber || 'N/A';
-  const cinNumber = app.cinNumber || seller.cinNumber || seller.documents?.cinNumber || 'N/A';
+  const businessPan = seller.documents?.panNumber || seller.businessPan || app.businessPan || seller.pan || ownerPan;
+  const gstin = seller.gstNumber || seller.gstin || app.gstin || (seller.hasGstExemption || app.hasGstExemption ? 'GST Exempted' : 'N/A');
+  const msmeNumber = seller.msmeRegistrationNumber || seller.documents?.msmeRegistrationNumber || app.msmeRegistrationNumber || 'N/A';
+  const cinNumber = seller.cinNumber || seller.documents?.cinNumber || app.cinNumber || 'N/A';
 
-  const addressLine1 = app.addressLine1 || seller.address?.split(',')[0] || 'Plot 42, Industrial Area, Phase-III';
-  const addressLine2 = app.addressLine2 || '';
-  const city = app.city || seller.city || 'New Delhi';
-  const state = app.state || seller.state || 'Delhi';
-  const pincode = app.pincode || '110020';
-  const country = app.country || 'India';
-  const fullAddress = `${addressLine1}${addressLine2 ? ', ' + addressLine2 : ''}, ${city}, ${state} - ${pincode}, ${country}`;
+  const addressLine1 = seller.addressDetails?.addressLine1 || app.addressLine1 || seller.address || 'N/A';
+  const addressLine2 = seller.addressDetails?.addressLine2 || app.addressLine2 || '';
+  const city = seller.city || app.city || 'N/A';
+  const state = seller.state || app.state || 'N/A';
+  const pincode = seller.pincode || app.pincode || 'N/A';
+  const country = seller.addressDetails?.country || app.country || 'India';
+  const fullAddress = seller.address ? seller.address : `${addressLine1}${addressLine2 ? ', ' + addressLine2 : ''}, ${city}, ${state} - ${pincode}, ${country}`;
 
-  const addressProofType = app.addressProofType || 'Electricity Bill';
-  const addressProofDocNumber = app.addressProofDocNumber || 'EB-2026-98124';
-  const addressProofFileName = app.addressProofFileName || 'electricity_bill_okhla_feb2026.pdf';
+  const addressProofType = seller.addressProofDetails?.addressProofType || app.addressProofType || 'Address Proof Document';
+  const addressProofDocNumber = seller.addressProofDetails?.addressProofDocNumber || app.addressProofDocNumber || 'N/A';
+  const addressProofFileName = seller.documents?.addressProofDoc || app.addressProofFileName || 'address_proof.pdf';
 
-  const bankName = app.bankName || seller.bankDetails?.bank || 'HDFC Bank Ltd';
-  const bankBranch = app.bankBranch || seller.bankDetails?.branch || 'Okhla Phase-III, New Delhi';
-  const bankAccountNumber = app.bankAccountNumber || seller.bankDetails?.account || '50200084920194';
-  const bankIfscCode = app.bankIfscCode || seller.bankDetails?.ifsc || 'HDFC0000240';
-  const bankAccountHolder = app.bankAccountHolder || legalBusinessName;
-  const accountType = app.accountType || 'Current Account';
+  const bankName = seller.bankDetails?.bankName || seller.bankDetails?.bank || app.bankName || seller.bankName || seller.bank || 'N/A';
+  const bankBranch = seller.bankDetails?.branchName || seller.bankDetails?.branch || app.bankBranch || seller.bankBranch || seller.branch || 'N/A';
+  const bankAccountNumber = seller.bankDetails?.accountNumber || seller.bankDetails?.account || app.bankAccountNumber || seller.bankAccountNumber || seller.accountNumber || seller.account || 'N/A';
+  const bankIfscCode = seller.bankDetails?.ifscCode || seller.bankDetails?.ifsc || app.bankIfscCode || seller.bankIfscCode || seller.ifscCode || seller.ifsc || 'N/A';
+  const bankAccountHolder = seller.bankDetails?.accountHolderName || seller.bankDetails?.holderName || app.bankAccountHolder || seller.bankAccountHolder || seller.name || 'N/A';
+  const accountType = seller.bankDetails?.accountType || app.accountType || 'Savings / Current Account';
 
-  const storeSlug = app.storeSlug || seller.storeSlug || 'book-vardi-official';
-  const storeTagline = app.storeTagline || 'Certified School Uniforms, Textbooks & STEM Academic Kits';
-  const storeDescription = app.storeDescription || 'Premier provider of school textbooks, uniform sets, drawing guides and geometry supplies with fast campus delivery.';
-  const storeLogo = app.storeLogo || seller.storeLogo || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=200&auto=format&fit=crop&q=80';
+  const storeSlug = seller.storeSlug || app.storeSlug || seller.storeName?.toLowerCase().replace(/[^a-z0-0]/g, '-') || 'seller-store';
+  const storeTagline = seller.storeDetails?.storeTagline || app.storeTagline || seller.tagline || 'Partner Merchant';
+  const storeDescription = seller.storeDetails?.storeDescription || app.storeDescription || seller.description || 'Verified merchant store on BookVardi platform.';
+  const storeLogo = seller.storeDetails?.storeLogo || seller.documents?.profilePhoto || app.storeLogo || seller.storeLogo || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=200&auto=format&fit=crop&q=80';
 
   const categories = app.selectedCategories || (seller.category ? [seller.category] : ['Uniforms & Schoolwear', 'NCERT & CBSE Textbooks', 'Notebooks & Paper Crafts']);
   const brands = Array.isArray(app.primaryBrands) ? app.primaryBrands : ['Classmate', 'Doms', 'Camlin', 'Oxford'];

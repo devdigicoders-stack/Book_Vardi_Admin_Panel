@@ -19,15 +19,20 @@ import {
   Phone,
   Mail,
   MapPin,
-  Sparkles
+  Sparkles,
+  Eye
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
+import BulkOrderPreviewModal from './BulkOrderPreviewModal';
 
 export default function BulkOrdersTab() {
   const { schoolOrders, sellers, distributeSchoolBulkOrder, approveSellerQuotation } = useAdminData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // Preview Expanded Detail Modal State
+  const [previewOrder, setPreviewOrder] = useState(null);
 
   // Distribution Modal State
   const [distributeModalOrder, setDistributeModalOrder] = useState(null);
@@ -289,7 +294,7 @@ export default function BulkOrdersTab() {
                       {order.totalQuantity || order.quantity || 100} Units
                     </div>
                     <div className="text-[11px] text-gray-500">
-                      Target Budget: ₹{Number(order.targetBudgetPerKit || order.estimatedBudget || 0).toLocaleString()}
+                      Target Budget: {(order.targetBudgetPerKit || order.estimatedBudget) && Number(order.targetBudgetPerKit || order.estimatedBudget) > 0 ? `₹${Number(order.targetBudgetPerKit || order.estimatedBudget).toLocaleString()}` : 'Open to Quotes'}
                     </div>
                   </div>
 
@@ -338,6 +343,14 @@ export default function BulkOrdersTab() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPreviewOrder(order)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold rounded-xl transition-colors cursor-pointer border border-teal-200"
+                    >
+                      <Eye size={14} />
+                      <span>Expanded Detail</span>
+                    </button>
+
                     <button
                       onClick={() => handleOpenDistribute(order)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
@@ -655,6 +668,24 @@ export default function BulkOrdersTab() {
           </div>
         </div>
       )}
+
+      {/* ========================================== */}
+      {/* MODAL 3: EXPANDED BULK ORDER PREVIEW MODAL */}
+      {/* ========================================== */}
+      <BulkOrderPreviewModal
+        order={previewOrder}
+        onClose={() => setPreviewOrder(null)}
+        userRole="admin"
+        sellers={sellers}
+        onDistribute={(orderId, payload) => {
+          distributeSchoolBulkOrder(orderId, payload);
+          setPreviewOrder(null);
+        }}
+        onApproveQuote={(orderId, quoteId) => {
+          approveSellerQuotation(orderId, quoteId);
+          setPreviewOrder(null);
+        }}
+      />
 
     </div>
   );
