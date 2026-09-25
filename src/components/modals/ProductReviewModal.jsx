@@ -71,18 +71,17 @@ export default function ProductReviewModal({
       });
     }
 
-    if (Array.isArray(prod.sizeVariants)) {
-      prod.sizeVariants.forEach(v => {
-        const vImg = extractUrl(v.image);
-        if (vImg && !list.includes(vImg)) list.push(vImg);
-        if (Array.isArray(v.images)) {
-          v.images.forEach(img => {
-            const u = extractUrl(img);
-            if (u && !list.includes(u)) list.push(u);
-          });
-        }
-      });
-    }
+    const variants = parseSizeVariants(prod);
+    variants.forEach(v => {
+      const vImg = extractUrl(v.image);
+      if (vImg && !list.includes(vImg)) list.push(vImg);
+      if (Array.isArray(v.images)) {
+        v.images.forEach(img => {
+          const u = extractUrl(img);
+          if (u && !list.includes(u)) list.push(u);
+        });
+      }
+    });
 
     const resolved = list.map(img => resolveImageUrl(img)).filter(Boolean);
     return [...new Set(resolved)];
@@ -385,20 +384,19 @@ export default function ProductReviewModal({
                                   setPreviewImageModalTitle(`Variant: ${vVal}`);
                                 }
                               }}
-                              className="flex items-center gap-2.5 p-2 rounded-xl bg-teal-50/60 hover:bg-teal-100/70 border border-teal-200/80 shrink-0 min-w-[175px] cursor-pointer transition-all"
+                              className="flex items-center gap-2.5 p-2 rounded-xl bg-teal-50/60 hover:bg-teal-100/70 border border-teal-200/80 shrink-0 min-w-[175px] cursor-pointer transition-all shadow-2xs"
                             >
-                              {vImgUrl ? (
-                                <img
-                                  src={vImgUrl}
-                                  alt={vVal}
-                                  className="w-12 h-12 rounded-lg object-cover border border-white shadow-2xs shrink-0 bg-white"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                />
-                              ) : (
-                                <div className="w-12 h-12 rounded-lg bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-center shrink-0 border border-teal-200">
-                                  {vVal.slice(0, 3)}
-                                </div>
-                              )}
+                              <div className="relative w-12 h-12 rounded-lg bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-center shrink-0 border border-teal-200 overflow-hidden">
+                                {vImgUrl ? (
+                                  <img
+                                    src={vImgUrl}
+                                    alt={vVal}
+                                    className="w-full h-full object-cover relative z-10"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  />
+                                ) : null}
+                                <span className="select-none absolute z-0">{vVal.slice(0, 3)}</span>
+                              </div>
                               <div className="min-w-0 flex-1">
                                 <div className="font-extrabold text-xs text-gray-900 truncate">{vVal}</div>
                                 <div className="text-[11px] font-bold text-teal-800 flex items-center gap-1 mt-0.5">
@@ -452,11 +450,17 @@ export default function ProductReviewModal({
                                             setPreviewImageModalUrl(img);
                                             setPreviewImageModalTitle(`Variant: ${v.measureValue || v.size || `#${vIdx + 1}`} (Photo ${imgIdx + 1})`);
                                           }}
-                                          className="relative group w-9 h-9 rounded-lg overflow-hidden border border-gray-200 hover:border-teal-600 hover:ring-2 hover:ring-teal-200 transition-all cursor-pointer bg-gray-50 shrink-0"
+                                          className="relative group w-9 h-9 rounded-lg overflow-hidden border border-gray-200 hover:border-teal-600 hover:ring-2 hover:ring-teal-200 transition-all cursor-pointer bg-teal-50 shrink-0 flex items-center justify-center"
                                           title="Click to view full photo"
                                         >
-                                          <img src={img} alt="" className="w-full h-full object-cover" />
-                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                          <img
+                                            src={img}
+                                            alt=""
+                                            className="w-full h-full object-cover relative z-10"
+                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                          />
+                                          <span className="text-[9px] font-bold text-teal-900 absolute z-0 select-none">IMG</span>
+                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity z-20">
                                             <Eye size={12} />
                                           </div>
                                         </button>

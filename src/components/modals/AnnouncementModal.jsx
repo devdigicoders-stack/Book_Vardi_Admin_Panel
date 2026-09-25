@@ -126,7 +126,7 @@ export default function AnnouncementModal({ isOpen, onClose, onSave, announcemen
               required
               value={text}
               onChange={e => setText(e.target.value)}
-              placeholder="e.g. Free Shipping on Orders Over ₹499 | Use Code: FREESHIP"
+              placeholder="e.g. Free Shipping on Orders Over ₹499 | Limited Time Offer"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 outline-hidden focus:ring-2 focus:ring-brand-yellow font-medium"
             />
           </div>

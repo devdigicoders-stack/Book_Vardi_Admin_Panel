@@ -201,7 +201,7 @@ export const AdminDataProvider = ({ children }) => {
       const saved = localStorage.getItem('admin_announcements');
       return saved ? JSON.parse(saved) : [
         { id: '1', text: 'Free Shipping on Orders Over ₹499', badge: 'FREE SHIPPING', link: '/offers', priority: 1, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' },
-        { id: '2', text: '10% OFF First Order | Code: SCHOOL10', badge: 'DISCOUNT', link: '/offers', priority: 2, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' },
+        { id: '2', text: 'Exclusive Student & School Discounts Available', badge: 'DISCOUNT', link: '/offers', priority: 2, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' },
         { id: '3', text: '30-Day Hassle-Free Returns on Uniforms', badge: 'TRUST', link: '/about-us', priority: 3, isActive: true, expiryDate: null, bgColor: '#0f766e', textColor: '#ffffff' }
       ];
     } catch {
@@ -537,6 +537,32 @@ export const AdminDataProvider = ({ children }) => {
       }
     }).catch(() => {});
 
+    // Auto-poll products every 10 seconds for real-time seller submission updates
+    const pollInterval = setInterval(() => {
+      fetchAdminProductsApi().then(data => {
+        const list = Array.isArray(data) ? data : (data?.products || []);
+        if (list.length > 0) {
+          setProducts(list.map(p => ({
+            id: p._id || p.id,
+            _id: p._id || p.id,
+            name: p.name || p.title || 'Product',
+            price: Number(p.price || 0),
+            originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+            mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+            category: p.category || 'uniforms',
+            approvalStatus: p.approvalStatus || 'Approved',
+            stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+            stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+            image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
+            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
+            sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
+            sizes: Array.isArray(p.sizes) ? p.sizes : [],
+            ...p
+          })));
+        }
+      }).catch(() => {});
+    }, 10000);
+
     // Sync product approval notifications & product submissions in real-time
     const syncFromStorage = () => {
       try {
@@ -564,6 +590,7 @@ export const AdminDataProvider = ({ children }) => {
     window.addEventListener('adminProductsUpdated', handleProdsEvent);
 
     return () => {
+      clearInterval(pollInterval);
       window.removeEventListener('storage', syncFromStorage);
       window.removeEventListener('adminNotificationReceived', handleNotifEvent);
       window.removeEventListener('adminProductsUpdated', handleProdsEvent);
