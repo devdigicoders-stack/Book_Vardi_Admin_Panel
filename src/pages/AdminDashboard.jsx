@@ -9,6 +9,7 @@ import { Eye, ShieldAlert } from 'lucide-react';
 // Admin Tabs
 import DashboardTab from '../components/tabs/DashboardTab';
 import ProductsTab from '../components/tabs/ProductsTab';
+import CategoriesTab from '../components/tabs/CategoriesTab';
 import OrdersTab from '../components/tabs/OrdersTab';
 import SellersTab from '../components/tabs/SellersTab';
 import SchoolsTab from '../components/tabs/SchoolsTab';
@@ -31,6 +32,7 @@ const TAB_ORDER = [
   'analytics',
   'notifications',
   'products',
+  'categories',
   'inventory',
   'orders',
   'bulkOrders',
@@ -79,6 +81,8 @@ export default function AdminDashboard() {
         return <DashboardTab onNavigateTab={setActiveTab} />;
       case 'products':
         return <ProductsTab />;
+      case 'categories':
+        return <CategoriesTab />;
       case 'orders':
         return <OrdersTab />;
       case 'bulkOrders':

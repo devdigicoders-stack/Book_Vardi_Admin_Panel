@@ -10,7 +10,9 @@ import {
   RotateCcw,
   Ban,
   DollarSign,
-  FileText
+  FileText,
+  CreditCard,
+  XCircle
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
 
@@ -130,6 +132,34 @@ export default function OrderDetailModal({
         {/* Content Body */}
         <div className="space-y-6">
 
+          {/* Customer Cancellation Alert Banner */}
+          {(order.status === 'Cancelled' || order.cancellationReason || order.cancelledBy) && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-2 text-xs shadow-xs">
+              <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-rose-700">
+                <XCircle size={16} />
+                <span>Order Cancelled by Customer</span>
+              </div>
+              <div className="p-3 bg-white/80 rounded-xl border border-rose-100 text-xs text-rose-900 space-y-1">
+                <p><strong>Cancelled By:</strong> <span className="font-semibold text-gray-900">{order.cancelledBy || formattedCustomerName || 'Customer'}</span></p>
+                <p><strong>Cancellation Reason:</strong> <span className="font-semibold text-gray-900">{order.cancellationReason || 'Cancelled by customer'}</span></p>
+                {order.cancelledAt && (
+                  <p className="text-[11px] text-gray-500">
+                    <strong>Cancelled On:</strong> {new Date(order.cancelledAt).toLocaleString('en-IN')}
+                  </p>
+                )}
+              </div>
+              {order.refundStatus && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2">
+                  <CreditCard size={15} className="text-emerald-700 shrink-0" />
+                  <div>
+                    <strong className="font-black text-emerald-900">Refund Status: </strong>
+                    <span className="font-semibold">{order.refundStatus}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Quick Actions Bar / View-Only Status */}
           {readOnly ? (
             <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/70 flex items-center justify-between gap-3 text-xs">
@@ -239,10 +269,122 @@ export default function OrderDetailModal({
                   </div>
                 </div>
               ))}
-              <div className="p-3 bg-gray-50 flex items-center justify-between">
-                <span className="text-xs font-extrabold text-gray-700">Total Order Amount</span>
-                <span className="font-display font-extrabold text-base text-teal-900">₹{order.total}</span>
-              </div>
+              {(() => {
+                const subtotalVal = Number(order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
+                const shipVal = Number(order.shippingFee ?? order.shippingCost ?? 0);
+                const couponVal = Number(order.discountAmount ?? order.discount ?? 0);
+                const grandVal = Number(order.total || order.totalAmount || (subtotalVal + shipVal - couponVal));
+
+                let totalTaxable = 0;
+                let totalTax = 0;
+                (order.items || []).forEach(item => {
+                  const qty = Number(item.quantity || 1);
+                  const unitPrice = Number(item.price || 0);
+                  const grossPrice = unitPrice * qty;
+                  const gstRate = Number(item.gstPercent ?? item.gstPercentage ?? item.gstRate ?? item.gst ?? 5);
+                  if (gstRate > 0) {
+                    const taxable = grossPrice / (1 + gstRate / 100);
+                    totalTaxable += taxable;
+                    totalTax += (grossPrice - taxable);
+                  } else {
+                    totalTaxable += grossPrice;
+                  }
+                });
+
+                const parseStateKeyFromText = (text) => {
+                  if (!text) return '';
+                  const str = String(text).toLowerCase();
+                  const states = [
+                    { key: 'uttarpradesh', aliases: ['uttar pradesh', 'uttarpradesh', 'up', 'noida', 'lucknow', 'kanpur', 'ghaziabad', 'agra', 'varanasi', 'prayagraj'] },
+                    { key: 'delhi', aliases: ['delhi', 'new delhi', 'nct of delhi', 'nct', 'dl'] },
+                    { key: 'maharashtra', aliases: ['maharashtra', 'mumbai', 'pune', 'nagpur', 'thane', 'mh'] },
+                    { key: 'karnataka', aliases: ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'ka'] },
+                    { key: 'tamilnadu', aliases: ['tamil nadu', 'tamilnadu', 'chennai', 'coimbatore', 'tn'] },
+                    { key: 'haryana', aliases: ['haryana', 'gurugram', 'gurgaon', 'faridabad', 'hr'] },
+                    { key: 'rajasthan', aliases: ['rajasthan', 'jaipur', 'jodhpur', 'udaipur', 'rj'] },
+                    { key: 'westbengal', aliases: ['west bengal', 'westbengal', 'kolkata', 'wb'] },
+                    { key: 'gujarat', aliases: ['gujarat', 'ahmedabad', 'surat', 'vadodara', 'gj'] },
+                    { key: 'punjab', aliases: ['punjab', 'ludhiana', 'amritsar', 'pb'] },
+                    { key: 'madhyapradesh', aliases: ['madhya pradesh', 'madhyapradesh', 'bhopal', 'indore', 'mp'] },
+                    { key: 'bihar', aliases: ['bihar', 'patna', 'br'] },
+                    { key: 'telangana', aliases: ['telangana', 'hyderabad', 'tg', 'ts'] },
+                    { key: 'andhrapradesh', aliases: ['andhra pradesh', 'andhrapradesh', 'visakhapatnam', 'ap'] },
+                    { key: 'kerala', aliases: ['kerala', 'kochi', 'thiruvananthapuram', 'kl'] },
+                    { key: 'uttarakhand', aliases: ['uttarakhand', 'dehradun', 'uk'] }
+                  ];
+
+                  for (const st of states) {
+                    for (const alias of st.aliases) {
+                      if (new RegExp(`\\b${alias}\\b`, 'i').test(str)) {
+                        return st.key;
+                      }
+                    }
+                  }
+                  return str.trim();
+                };
+
+                const getDynamicState = (obj, fallbackText) => {
+                  if (obj && typeof obj === 'object') {
+                    if (obj.state && String(obj.state).trim()) return parseStateKeyFromText(obj.state);
+                    const combined = `${obj.street || ''} ${obj.addressLine || ''} ${obj.city || ''} ${obj.address || ''}`;
+                    if (combined.trim()) return parseStateKeyFromText(combined);
+                  }
+                  return parseStateKeyFromText(fallbackText || '');
+                };
+
+                const firstSellerObj = order.items?.[0]?.sellerId;
+                const sellerStateKey = getDynamicState(firstSellerObj, `${order.sellerState || ''} ${order.sellerCity || ''} ${order.sellerAddress || ''}`);
+                const customerStateKey = getDynamicState(order.shippingAddress, typeof order.shippingAddress === 'string' ? order.shippingAddress : '');
+
+                const isSameState = !sellerStateKey || !customerStateKey || sellerStateKey === customerStateKey;
+                const sellerStateStr = (typeof firstSellerObj === 'object' ? firstSellerObj.state || firstSellerObj.city : '') || order.sellerState || sellerStateKey || 'Seller Location';
+                const customerStateStr = (typeof order.shippingAddress === 'object' ? order.shippingAddress?.state || order.shippingAddress?.city : '') || customerStateKey || 'Customer Location';
+
+                return (
+                  <div className="p-3.5 bg-gray-50 border-t border-gray-200 space-y-2 text-xs">
+                    <div className="flex justify-between text-gray-700">
+                      <span>Items Subtotal:</span>
+                      <span className="font-mono font-bold">₹{subtotalVal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500 text-[11px]">
+                      <span>Base Taxable Value (Excl. GST):</span>
+                      <span className="font-mono">₹{totalTaxable.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-800 text-[11px] bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                      <div>
+                        <span className="font-bold block">GST Tax Breakdown ({isSameState ? 'Intra-State Same State' : 'Inter-State Different State'}):</span>
+                        {isSameState ? (
+                          <span className="text-[10px]">CGST (50%): ₹{(totalTax / 2).toFixed(2)} • SGST (50%): ₹{(totalTax / 2).toFixed(2)}</span>
+                        ) : (
+                          <span className="text-[10px]">IGST (Integrated 100%): ₹{totalTax.toFixed(2)} • Supply ({sellerStateStr} ➔ {customerStateStr})</span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold self-center">₹{totalTax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-700">
+                      <span>Delivery Charges:</span>
+                      <span className="font-mono font-bold text-emerald-700">
+                        {shipVal === 0 ? 'Not Applied (FREE)' : `₹${shipVal.toFixed(2)}`}
+                      </span>
+                    </div>
+                    {couponVal > 0 ? (
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Offer / Coupon Applied:</span>
+                        <span className="font-mono">-₹{couponVal.toFixed(2)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-gray-400 text-[11px]">
+                        <span>Offer / Coupon:</span>
+                        <span className="font-mono">Not Applied (₹0.00)</span>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-gray-300 flex items-center justify-between font-black text-gray-900">
+                      <span className="text-xs">Total Order Amount</span>
+                      <span className="font-display font-black text-base text-teal-900 font-mono">₹{grandVal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

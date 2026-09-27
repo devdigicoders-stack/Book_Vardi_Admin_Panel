@@ -863,3 +863,55 @@ export const approveSellerQuotationApi = async (id, quoteId) => {
   }
 };
 
+// ==========================================
+// 14. Categories CRUD APIs
+// ==========================================
+export const fetchAdminCategoriesApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/tree`);
+    if (!res.ok) throw new Error('Failed to fetch categories');
+    return await res.json();
+  } catch (error) {
+    console.error('fetchAdminCategoriesApi error:', error);
+    return null;
+  }
+};
+
+export const createAdminCategoryApi = async (categoryData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminCategoryApi = async (id, categoryData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminCategoryApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+

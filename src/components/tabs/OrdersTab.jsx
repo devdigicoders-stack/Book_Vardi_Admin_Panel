@@ -166,14 +166,21 @@ export default function OrdersTab() {
 
                     {/* Status */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                        order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
-                        order.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
-                        order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {order.status}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                          order.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
+                          order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {order.status}
+                        </span>
+                        {(order.status === 'Cancelled' || order.cancellationReason) && (
+                          <span className="text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 truncate max-w-[130px]" title={`Cancelled by ${order.cancelledBy || 'Customer'}. Reason: ${order.cancellationReason || 'Customer requested cancellation'}`}>
+                            Reason: {order.cancellationReason || 'Cancelled'}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Tracking */}

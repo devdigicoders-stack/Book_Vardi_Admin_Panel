@@ -25,7 +25,7 @@ import {
   BookOpen,
   Layers3
 } from 'lucide-react';
-import { CATEGORIES } from '../../constants/categories';
+import { CATEGORIES, CATEGORY_STRUCTURE, normalizeCategory, getSubCategories } from '../../constants/categories';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
 
@@ -125,7 +125,14 @@ export const CATEGORY_FORM_SCHEMA = {
 };
 
 export function getCategorySchema(categoryKey) {
-  const cat = String(categoryKey || '').toLowerCase().trim();
+  const normCat = normalizeCategory(categoryKey);
+  const cat = normCat.toLowerCase();
+  if (cat.includes('uniform')) return CATEGORY_FORM_SCHEMA['uniforms'] || CATEGORY_FORM_SCHEMA['uniform'];
+  if (cat.includes('book')) return CATEGORY_FORM_SCHEMA['ncert'] || CATEGORY_FORM_SCHEMA['books'];
+  if (cat.includes('notebook') || cat.includes('stationery') || cat.includes('stationary')) return CATEGORY_FORM_SCHEMA['notebooks'] || CATEGORY_FORM_SCHEMA['stationery'];
+  if (cat.includes('footwear') || cat.includes('shoe')) return CATEGORY_FORM_SCHEMA['shoes'];
+  if (cat.includes('bag') || cat.includes('kit')) return CATEGORY_FORM_SCHEMA['bags'];
+
   return CATEGORY_FORM_SCHEMA[cat] || {
     showMeterCalculation: true,
     showSizeChart: true,
@@ -204,8 +211,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
     subtitle: '',
     price: '',
     originalPrice: '',
-    category: 'uniforms',
-    subCategory: '',
+    category: 'School Uniform',
+    subCategory: 'Ready to wear',
     gst: '5',
     isGstInclusive: true,
     schoolName: '',
@@ -302,8 +309,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         subtitle: product.subtitle || '',
         price: product.price !== undefined ? String(product.price) : '',
         originalPrice: product.originalPrice || product.mrp ? String(product.originalPrice || product.mrp) : '',
-        category: product.category || 'uniforms',
-        subCategory: product.subCategory || '',
+        category: normalizeCategory(product.category),
+        subCategory: product.subCategory || (getSubCategories(product.category)[0] || 'Ready to wear'),
         gst: product.gst !== undefined ? String(product.gst) : (product.gstPercentage !== undefined ? String(product.gstPercentage) : '5'),
         isGstInclusive: product.isGstInclusive !== undefined ? Boolean(product.isGstInclusive) : true,
         schoolName: product.schoolName || '',
@@ -407,8 +414,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         subtitle: '',
         price: '',
         originalPrice: '',
-        category: 'uniforms',
-        subCategory: '',
+        category: 'School Uniform',
+        subCategory: 'Ready to wear',
         schoolName: '',
         gender: 'Unisex',
         badge: '',
@@ -621,8 +628,13 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
           ? ['Online'] 
           : (paymentAllowedStr === 'COD_Only' ? ['COD'] : ['COD', 'Online']);
 
+        const selectedGstNum = Number(formData.gst !== undefined && formData.gst !== null ? formData.gst : 5);
         const payload = {
           ...formData,
+          gst: selectedGstNum,
+          gstPercent: selectedGstNum,
+          gstPercentage: selectedGstNum,
+          gstRate: selectedGstNum,
           bundleType: 'single',
           price: sizeVariants.length > 0 ? minVariantPrice : Number(formData.price),
           originalPrice: Number(formData.originalPrice) || Math.round(minVariantPrice * 1.25),
@@ -970,29 +982,35 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                         <label className="block text-xs font-bold text-gray-700 mb-1.5">Primary Category *</label>
                         <select
                           value={formData.category}
-                          onChange={e => setFormData({ ...formData, category: e.target.value })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden capitalize"
+                          onChange={e => {
+                            const selectedCat = normalizeCategory(e.target.value);
+                            const subs = getSubCategories(selectedCat);
+                            setFormData({
+                              ...formData,
+                              category: selectedCat,
+                              subCategory: subs[0] || ''
+                            });
+                          }}
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
                         >
-                          {CATEGORIES.map((c, idx) => {
-                            const catId = typeof c === 'string' ? c : (c.id || c.name || `cat-${idx}`);
-                            const catName = typeof c === 'string' ? c : (c.name || c.label || c.id);
-                            return (
-                              <option key={catId} value={catId}>
-                                {catName}
-                              </option>
-                            );
-                          })}
+                          {CATEGORY_STRUCTURE.map((c) => (
+                            <option key={c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Sub-Category</label>
-                        <input
-                          type="text"
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Sub-Category *</label>
+                        <select
                           value={formData.subCategory}
                           onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
-                          placeholder="e.g. Shirts, Practice Books, Pencils"
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden"
-                        />
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
+                        >
+                          {getSubCategories(formData.category).map(sub => (
+                            <option key={sub} value={sub}>{sub}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 

@@ -18,7 +18,8 @@ import {
   ChevronRight,
   ArrowLeft,
   Shield,
-  Truck
+  Truck,
+  Layers
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
@@ -35,6 +36,7 @@ export const ADMIN_TABS = [
     title: 'Catalog & Stock',
     items: [
       { id: 'products', label: 'Products', icon: <Package size={17} />, badgeKey: 'pendingProducts' },
+      { id: 'categories', label: 'Categories', icon: <Layers size={17} /> },
       { id: 'inventory', label: 'Inventory', icon: <Box size={17} />, badgeKey: 'lowStock' }
     ]
   },
