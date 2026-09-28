@@ -447,6 +447,20 @@ export const cancelOrderAdminApi = async (id, reason = '') => {
   }
 };
 
+export const updateReturnExchangeStatusApi = async (orderId, payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${orderId}/return-exchange/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+
 // ==========================================
 // 6. Schools & Geo Discovery APIs
 // ==========================================

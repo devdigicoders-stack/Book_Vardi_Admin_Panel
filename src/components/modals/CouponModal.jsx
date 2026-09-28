@@ -18,13 +18,29 @@ export default function CouponModal({ isOpen, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.code.trim()) return;
+    const cleanCode = formData.code.toUpperCase().trim();
+    const discNum = Number(formData.discountValue);
+    const minNum = Number(formData.minOrderValue || 0);
+    const maxDiscNum = Number(formData.maxDiscount || 0);
+    const limitNum = Number(formData.usageLimit || 0);
+    const discType = formData.discountType;
+    const backendType = discType === 'flat' ? 'fixed' : 'percentage';
+
     onSave({
       ...formData,
-      code: formData.code.toUpperCase().trim(),
-      discountValue: Number(formData.discountValue),
-      minOrderValue: Number(formData.minOrderValue),
-      maxDiscount: Number(formData.maxDiscount),
-      usageLimit: Number(formData.usageLimit)
+      code: cleanCode,
+      title: (formData.title || '').trim() || `${cleanCode} Promo Offer`,
+      discount: discNum,
+      discountValue: discNum,
+      type: backendType,
+      discountType: discType,
+      minAmount: minNum,
+      minOrderValue: minNum,
+      minOrderAmount: minNum,
+      maxDiscount: maxDiscNum,
+      expiryDate: formData.validUntil,
+      validUntil: formData.validUntil,
+      usageLimit: limitNum
     });
     onClose();
   };

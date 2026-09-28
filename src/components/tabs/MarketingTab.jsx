@@ -254,41 +254,49 @@ export default function MarketingTab() {
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {promotions.map((promo) => (
-            <div
-              key={promo.id}
-              className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs space-y-3 relative overflow-hidden"
-            >
-              <div className="flex items-start justify-between">
-                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-brand-yellow/30 text-teal-950 border border-brand-yellow">
-                  {promo.code}
-                </span>
-                {canEdit && (
-                  <button
-                    onClick={() => deletePromotion(promo.id)}
-                    className="p-1 text-gray-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
-                    title="Delete Coupon"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
+          {promotions.map((promo) => {
+            const promoId = promo._id || promo.id;
+            const discountVal = promo.discountValue ?? promo.discount ?? 0;
+            const isPercent = promo.discountType === 'percentage' || promo.type === 'percentage';
+            const minCart = promo.minOrderValue ?? promo.minAmount ?? promo.minOrderAmount ?? 0;
+            const validDate = promo.validUntil || (promo.expiryDate ? new Date(promo.expiryDate).toLocaleDateString('en-IN') : '');
 
-              <div>
-                <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{promo.title}</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">
-                  {promo.discountType === 'percentage' ? `${promo.discountValue}% OFF` : `Flat ₹${promo.discountValue} OFF`} 
-                  {promo.maxDiscount ? ` (Up to ₹${promo.maxDiscount})` : ''}
-                </p>
-              </div>
+            return (
+              <div
+                key={promoId || promo.code}
+                className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs space-y-3 relative overflow-hidden"
+              >
+                <div className="flex items-start justify-between">
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-brand-yellow/30 text-teal-950 border border-brand-yellow">
+                    {promo.code}
+                  </span>
+                  {canEdit && (
+                    <button
+                      onClick={() => deletePromotion(promoId)}
+                      className="p-1 text-gray-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
+                      title="Delete Coupon"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
 
-              <div className="pt-2 border-t border-gray-100 text-[10px] text-gray-500 space-y-1">
-                <div>Min Cart Value: <span className="font-bold text-gray-800">₹{promo.minOrderValue}</span></div>
-                <div>Usage Count: <span className="font-bold text-teal-800">{promo.usageCount || 0} redeemed</span></div>
-                {promo.validUntil && <div>Valid Till: <span className="font-semibold text-gray-700">{promo.validUntil}</span></div>}
+                <div>
+                  <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{promo.title || `${promo.code} Offer`}</h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {isPercent ? `${discountVal}% OFF` : `Flat ₹${discountVal} OFF`} 
+                    {promo.maxDiscount ? ` (Up to ₹${promo.maxDiscount})` : ''}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100 text-[10px] text-gray-500 space-y-1">
+                  <div>Min Cart Value: <span className="font-bold text-gray-800">₹{minCart}</span></div>
+                  <div>Usage Count: <span className="font-bold text-teal-800">{promo.usageCount || 0} redeemed</span></div>
+                  {validDate && <div>Valid Till: <span className="font-semibold text-gray-700">{validDate}</span></div>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

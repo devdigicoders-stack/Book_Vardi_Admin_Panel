@@ -20,6 +20,7 @@ export default function OrdersTab() {
     orders, 
     schoolOrders, 
     updateOrderStatus, 
+    updateReturnExchangeStatus,
     cancelOrder, 
     refundOrder, 
     updateOrderTracking,
@@ -28,7 +29,7 @@ export default function OrdersTab() {
 
   const canEdit = isEditor ? isEditor('orders') : true;
 
-  const [orderType, setOrderType] = useState('retail'); // retail, school
+  const [orderType, setOrderType] = useState('retail'); // retail, school, returns
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -36,10 +37,27 @@ export default function OrdersTab() {
 
   // Filter regular orders
   const filteredRetailOrders = orders.filter(o => {
-    const matchesSearch = o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          o.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (o.trackingNumber && o.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+    const searchLower = searchTerm.toLowerCase();
+    const custName = typeof o.customerName === 'object' ? (o.customerName?.name || '') : String(o.customerName || '');
+    const matchesSearch = o.id.toLowerCase().includes(searchLower) ||
+                          custName.toLowerCase().includes(searchLower) ||
+                          (o.trackingNumber && o.trackingNumber.toLowerCase().includes(searchLower));
+
+    let matchesStatus = statusFilter === 'all';
+    if (!matchesStatus) {
+      if (statusFilter === 'returns_exchanges') {
+        matchesStatus = Boolean(o.returnRequest || o.status?.includes('return') || o.status?.includes('exchange') || o.status?.includes('refund'));
+      } else {
+        matchesStatus = o.status === statusFilter || 
+                        o.rawStatus === statusFilter || 
+                        (o.returnRequest && (o.returnRequest.status === statusFilter || o.returnRequest.status === statusFilter.toLowerCase().replace(/ /g, '_')));
+      }
+    }
+
+    if (orderType === 'returns') {
+      return matchesSearch && (Boolean(o.returnRequest) || o.status?.includes('return') || o.status?.includes('exchange') || o.status?.includes('refund'));
+    }
+
     return matchesSearch && matchesStatus;
   });
 
@@ -57,6 +75,8 @@ export default function OrdersTab() {
     setModalOpen(true);
   };
 
+  const returnRequestsCount = orders.filter(o => Boolean(o.returnRequest) || o.status?.includes('return') || o.status?.includes('exchange') || o.status?.includes('refund')).length;
+
   return (
     <div className="space-y-6">
       
@@ -67,7 +87,7 @@ export default function OrdersTab() {
             <ShoppingBag className="text-teal-700" size={24} /> Marketplace Orders Management
           </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Full oversight of customer retail checkouts, institutional school bulk POs, shipment tracking & refunds.
+            Full oversight of customer retail checkouts, institutional school bulk POs, shipment tracking, returns, exchanges & refunds.
           </p>
         </div>
 
@@ -75,19 +95,27 @@ export default function OrdersTab() {
         <div className="bg-gray-200/80 p-1 rounded-xl flex items-center gap-1">
           <button
             onClick={() => setOrderType('retail')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               orderType === 'retail' ? 'bg-white text-teal-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             Retail Orders ({orders.length})
           </button>
           <button
+            onClick={() => setOrderType('returns')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              orderType === 'returns' ? 'bg-white text-amber-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <RotateCcw size={13} className="text-amber-600" /> Returns & Exchanges ({returnRequestsCount})
+          </button>
+          <button
             onClick={() => setOrderType('school')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               orderType === 'school' ? 'bg-white text-teal-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            School Bulk Orders ({schoolOrders.length})
+            School Bulk POs ({schoolOrders.length})
           </button>
         </div>
       </div>
@@ -100,7 +128,7 @@ export default function OrdersTab() {
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            placeholder={orderType === 'retail' ? "Search order ID, customer or tracking..." : "Search school name or contact..."}
+            placeholder={orderType === 'school' ? "Search school name or contact..." : "Search order ID, customer or tracking..."}
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden"
           />
         </div>
@@ -117,6 +145,16 @@ export default function OrdersTab() {
             <option value="Shipped">Shipped</option>
             <option value="Delivered">Delivered</option>
             <option value="Cancelled">Cancelled</option>
+            <option value="returns_exchanges">Return / Exchange Requests</option>
+            <option value="return_requested">Return Requested</option>
+            <option value="exchange_requested">Exchange Requested</option>
+            <option value="return_approved">Return Approved</option>
+            <option value="exchange_approved">Exchange Approved</option>
+            <option value="pickup_scheduled">Pickup Scheduled</option>
+            <option value="product_received">Product Received</option>
+            <option value="refund_completed">Refund Completed</option>
+            <option value="exchange_dispatched">Exchange Dispatched</option>
+            <option value="exchanged">Exchanged</option>
           </select>
         </div>
       </div>
@@ -265,6 +303,7 @@ export default function OrdersTab() {
         onUpdateTracking={updateOrderTracking}
         onCancelOrder={cancelOrder}
         onRefundOrder={refundOrder}
+        onUpdateReturnExchangeStatus={updateReturnExchangeStatus}
         readOnly={!canEdit}
       />
 

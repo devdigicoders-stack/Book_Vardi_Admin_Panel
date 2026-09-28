@@ -19,6 +19,7 @@ import {
   updateSellerCommissionApi,
   toggleSellerStatusApi,
   updateOrderStatusApi,
+  updateReturnExchangeStatusApi,
   createSchoolApi,
   updateSchoolApi,
   deleteSchoolApi,
@@ -487,17 +488,35 @@ export const AdminDataProvider = ({ children }) => {
 
 
     fetchAdminPromotionsApi().then(data => {
-      if (Array.isArray(data) && data.length > 0) {
-        setPromotions(data.map(promo => ({
-          id: promo._id || promo.id,
-          _id: promo._id || promo.id,
-          code: promo.code,
-          discount: promo.discount,
-          type: promo.type,
-          minAmount: promo.minAmount,
-          status: promo.status || 'active',
-          ...promo
-        })));
+      if (Array.isArray(data)) {
+        setPromotions(data.map(promo => {
+          const disc = promo.discount !== undefined ? promo.discount : (promo.discountValue || 0);
+          const isFlat = promo.discountType === 'flat' || promo.type === 'fixed' || promo.type === 'flat';
+          const minOrd = promo.minOrderValue !== undefined ? promo.minOrderValue : (promo.minAmount || promo.minOrderAmount || 0);
+          const validDate = promo.validUntil || (promo.expiryDate ? new Date(promo.expiryDate).toISOString().split('T')[0] : '');
+
+          return {
+            id: promo._id || promo.id,
+            _id: promo._id || promo.id,
+            code: promo.code,
+            title: promo.title || `${promo.code} Promo Offer`,
+            discount: disc,
+            discountValue: disc,
+            type: isFlat ? 'fixed' : 'percentage',
+            discountType: isFlat ? 'flat' : 'percentage',
+            minAmount: minOrd,
+            minOrderValue: minOrd,
+            minOrderAmount: minOrd,
+            maxDiscount: promo.maxDiscount || 0,
+            validUntil: validDate,
+            expiryDate: promo.expiryDate || validDate,
+            usageLimit: promo.usageLimit || 0,
+            usageCount: promo.usageCount || 0,
+            status: promo.status || 'active',
+            createdRole: promo.createdRole || 'admin',
+            applicableProducts: promo.applicableProducts || []
+          };
+        }));
       }
     }).catch(() => {});
 
@@ -696,6 +715,8 @@ export const AdminDataProvider = ({ children }) => {
           ...saved,
           id: saved._id || saved.id,
           _id: saved._id || saved.id,
+          sellerId: saved.sellerId || updates.sellerId,
+          sellerName: saved.sellerName || updates.sellerName,
           stock: saved.stock ?? saved.stockQuantity ?? 0,
           stockQuantity: saved.stock ?? saved.stockQuantity ?? 0,
           price: Number(saved.price || 0),
@@ -816,6 +837,25 @@ export const AdminDataProvider = ({ children }) => {
       return updated;
     });
     logAudit('Tracking Assigned', `Assigned tracking ${trackingNumber} to ${orderId}`);
+  };
+
+  const updateReturnExchangeStatus = async (orderId, payload) => {
+    try {
+      const res = await updateReturnExchangeStatusApi(orderId, payload);
+      if (res?.success) {
+        const refreshedOrders = await fetchAdminOrdersApi();
+        if (refreshedOrders && Array.isArray(refreshedOrders)) {
+          setOrders(refreshedOrders);
+        } else if (refreshedOrders?.orders && Array.isArray(refreshedOrders.orders)) {
+          setOrders(refreshedOrders.orders);
+        }
+        logAudit('Return/Exchange Updated', `Order ${orderId} return/exchange updated to ${payload.status}`);
+      }
+      return res;
+    } catch (err) {
+      console.error('Error updating return/exchange status:', err);
+      return { success: false, message: err.message };
+    }
   };
 
   // ==================== SELLER ACTIONS ====================
@@ -1300,27 +1340,58 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   // ==================== PROMOTIONS & MARKETING ====================
-  const addPromotion = (promo) => {
+  const addPromotion = async (promo) => {
+    const tempId = Date.now();
+    const disc = promo.discountValue ?? promo.discount ?? 0;
+    const isFlat = promo.discountType === 'flat' || promo.type === 'fixed' || promo.type === 'flat';
+    const minOrd = promo.minOrderValue ?? promo.minAmount ?? promo.minOrderAmount ?? 0;
+    const validDate = promo.validUntil || (promo.expiryDate ? new Date(promo.expiryDate).toISOString().split('T')[0] : '');
+
     const item = {
-      id: Date.now(),
-      status: 'active',
+      id: tempId,
+      _id: tempId,
+      code: promo.code,
+      title: promo.title || `${promo.code} Promo Offer`,
+      discount: disc,
+      discountValue: disc,
+      type: isFlat ? 'fixed' : 'percentage',
+      discountType: isFlat ? 'flat' : 'percentage',
+      minAmount: minOrd,
+      minOrderValue: minOrd,
+      minOrderAmount: minOrd,
+      maxDiscount: promo.maxDiscount || 0,
+      validUntil: validDate,
+      expiryDate: promo.expiryDate || validDate,
+      usageLimit: promo.usageLimit || 0,
       usageCount: 0,
+      status: 'active',
+      createdRole: 'admin',
       ...promo
     };
-    setPromotions(prev => {
-      const updated = [item, ...prev];
-      return updated;
-    });
-    createPromotionApi(promo).catch(() => {});
+
+    setPromotions(prev => [item, ...prev]);
+
+    try {
+      const res = await createPromotionApi(promo);
+      if (res && (res.coupon || res._id)) {
+        const saved = res.coupon || res;
+        const realId = saved._id || saved.id;
+        setPromotions(prev => prev.map(p => (p.id === tempId || p.code === promo.code) ? { ...p, id: realId, _id: realId } : p));
+      }
+    } catch (err) {
+      console.warn("createPromotionApi warning:", err);
+    }
+
     logAudit('Promotion Created', `Created campaign code ${promo.code}`);
   };
 
-  const deletePromotion = (id) => {
-    setPromotions(prev => {
-      const updated = prev.filter(p => p.id !== id && p._id !== id);
-      return updated;
-    });
-    deletePromotionApi(id).catch(() => {});
+  const deletePromotion = async (id) => {
+    setPromotions(prev => prev.filter(p => p.id !== id && p._id !== id));
+    try {
+      await deletePromotionApi(id);
+    } catch (err) {
+      console.warn("deletePromotionApi warning:", err);
+    }
     logAudit('Promotion Deleted', `Deleted promo coupon #${id}`);
   };
 
@@ -1607,6 +1678,7 @@ export const AdminDataProvider = ({ children }) => {
     quickRestock,
     orders,
     updateOrderStatus,
+    updateReturnExchangeStatus,
     cancelOrder,
     refundOrder,
     updateOrderTracking,

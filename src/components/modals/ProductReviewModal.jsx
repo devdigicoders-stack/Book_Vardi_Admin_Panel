@@ -332,9 +332,17 @@ export default function ProductReviewModal({
                     </span>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                    <span className="text-[10px] text-gray-400 block font-bold uppercase">Return Policy</span>
-                    <span className={`font-extrabold text-xs ${product.isReturnable === false ? 'text-rose-600' : 'text-emerald-700'}`}>
-                      {product.isReturnable === false ? 'Non-Returnable' : `${product.returnWindowDays || 7}-Day Easy Returns`}
+                    <span className="text-[10px] text-gray-400 block font-bold uppercase">Return & Exchange Policy</span>
+                    <span className="font-extrabold text-xs block">
+                      {product.isReturnable !== false && product.isExchangeable !== false && product.isRefundable !== false ? (
+                        <span className="text-emerald-700">✅ {product.returnWindowDays || 7}-Day Return & Exchange</span>
+                      ) : product.isReturnable !== false && product.isExchangeable === false ? (
+                        <span className="text-blue-700">🔄 {product.returnWindowDays || 7}-Day Return Only (Non-Exchangeable)</span>
+                      ) : product.isReturnable === false && (product.isExchangeable !== false || product.isRefundable !== false) ? (
+                        <span className="text-purple-700">🔄 {product.returnWindowDays || 7}-Day Exchange Only (No Return)</span>
+                      ) : (
+                        <span className="text-rose-600">⚠️ Non-Returnable & Non-Exchangeable</span>
+                      )}
                     </span>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">

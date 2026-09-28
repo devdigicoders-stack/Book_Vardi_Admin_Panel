@@ -20,7 +20,8 @@ import {
   Mail,
   MapPin,
   Sparkles,
-  Eye
+  Eye,
+  Package
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import BulkOrderPreviewModal from './BulkOrderPreviewModal';
@@ -610,6 +611,82 @@ export default function BulkOrdersTab() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Descriptive Item Breakdown Table */}
+                      {Array.isArray(quote.itemPrices) && quote.itemPrices.length > 0 && (
+                        <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                          <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between text-[11px] font-extrabold text-gray-700">
+                            <span className="flex items-center gap-1.5">
+                              <Package size={13} className="text-teal-700" /> Itemized Pricing & Scale Breakdown
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium">{quote.itemPrices.length} Items</span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-200">
+                                  <th className="py-2 px-3">Product Demand</th>
+                                  <th className="py-2 px-2 text-center">Qty</th>
+                                  <th className="py-2 px-2 text-right">User Budget</th>
+                                  <th className="py-2 px-2 text-right bg-emerald-50 text-emerald-950">Seller Price</th>
+                                  <th className="py-2 px-3 text-right">Line Total</th>
+                                  <th className="py-2 px-3">Scale Note</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {quote.itemPrices.map((item, ipIdx) => {
+                                  const custBudget = Number(item.customerBudget || 0);
+                                  const sellerPrice = Number(item.pricePerUnit || 0);
+                                  const lineTotal = Number(item.totalPrice) || ((Number(item.quantity) || 1) * sellerPrice);
+
+                                  return (
+                                    <tr key={ipIdx} className="hover:bg-teal-50/20">
+                                      <td className="py-2 px-3">
+                                        <div className="font-bold text-gray-900 line-clamp-1">{item.itemName}</div>
+                                        <div className="text-[10px] text-gray-400">{item.category}</div>
+                                      </td>
+                                      <td className="py-2 px-2 text-center font-bold text-gray-700">{item.quantity}</td>
+                                      <td className="py-2 px-2 text-right font-medium text-gray-600">
+                                        {custBudget > 0 ? `₹${custBudget.toLocaleString()}` : 'N/A'}
+                                      </td>
+                                      <td className="py-2 px-2 text-right font-black bg-emerald-50/70 text-emerald-900 font-mono">
+                                        ₹{sellerPrice.toLocaleString()}
+                                      </td>
+                                      <td className="py-2 px-3 text-right font-black text-gray-900 font-mono">
+                                        ₹{lineTotal.toLocaleString()}
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        {item.discountTierNote ? (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold">
+                                            💡 {item.discountTierNote}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-400 text-[10px] italic">Standard batch rate</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overall Volume Discount Note Banner */}
+                      {quote.volumeDiscountNote && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 flex items-start gap-2 text-xs text-amber-950">
+                          <Sparkles size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-extrabold text-[10px] uppercase tracking-wider text-amber-900">
+                              Volume Incentive & Scale Discount Note
+                            </div>
+                            <div className="font-medium mt-0.5 text-amber-950 text-[11px]">
+                              {quote.volumeDiscountNote}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2 text-[11px] bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                         <div>

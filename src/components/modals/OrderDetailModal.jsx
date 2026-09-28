@@ -12,7 +12,12 @@ import {
   DollarSign,
   FileText,
   CreditCard,
-  XCircle
+  XCircle,
+  Store,
+  Phone,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
 
@@ -24,6 +29,7 @@ export default function OrderDetailModal({
   onUpdateTracking, 
   onCancelOrder, 
   onRefundOrder,
+  onUpdateReturnExchangeStatus,
   readOnly = false 
 }) {
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
@@ -31,6 +37,39 @@ export default function OrderDetailModal({
   const [selectedStatus, setSelectedStatus] = useState('Pending');
   const [refundReason, setRefundReason] = useState('');
   const [showRefundPrompt, setShowRefundPrompt] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const [returnActionState, setReturnActionState] = useState({
+    showRejectInput: false,
+    rejectionReason: '',
+    showPickupInput: false,
+    pickupDate: '',
+    showRefundInput: false,
+    refundTxnId: '',
+    showDispatchInput: false,
+    exchangeAwb: '',
+    exchangeCourier: ''
+  });
+
+  const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}) => {
+    if (onUpdateReturnExchangeStatus && order?.id) {
+      await onUpdateReturnExchangeStatus(order.id, {
+        status: newStatus,
+        ...extraPayload
+      });
+      setReturnActionState({
+        showRejectInput: false,
+        rejectionReason: '',
+        showPickupInput: false,
+        pickupDate: '',
+        showRefundInput: false,
+        refundTxnId: '',
+        showDispatchInput: false,
+        exchangeAwb: '',
+        exchangeCourier: ''
+      });
+    }
+  };
 
   useEffect(() => {
     if (order) {
@@ -149,11 +188,282 @@ export default function OrderDetailModal({
                 )}
               </div>
               {order.refundStatus && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2">
-                  <CreditCard size={15} className="text-emerald-700 shrink-0" />
-                  <div>
-                    <strong className="font-black text-emerald-900">Refund Status: </strong>
-                    <span className="font-semibold">{order.refundStatus}</span>
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={15} className="text-emerald-700 shrink-0" />
+                    <div>
+                      <strong className="font-black text-emerald-900">Refund Status: </strong>
+                      <span className="font-semibold">{order.refundStatus}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Customer Provided Receiving Payout Details Box */}
+          {(order.refundDetails || order.returnRequest?.refundDetails) && (
+            <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-teal-950 space-y-2 text-xs shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-teal-800">
+                  <CreditCard size={16} />
+                  <span>Customer Receiving Refund Payout Account</span>
+                </div>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-700 text-white uppercase">
+                  {(order.refundDetails?.method || order.returnRequest?.refundDetails?.method) === 'UPI' ? 'UPI Transfer' : 'Bank Transfer'}
+                </span>
+              </div>
+
+              {(() => {
+                const details = order.refundDetails || order.returnRequest?.refundDetails;
+                if (!details || (!details.upiId && !details.accountNumber)) return null;
+
+                return (
+                  <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5 font-mono text-xs">
+                    {details.method === 'UPI' ? (
+                      <p><strong>UPI ID:</strong> <span className="text-teal-950 font-bold bg-teal-50 px-2 py-0.5 rounded">{details.upiId}</span></p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <p><strong>Account Holder:</strong> <span className="font-bold text-gray-900">{details.accountHolderName}</span></p>
+                        <p><strong>Bank Name:</strong> <span className="font-bold text-gray-900">{details.bankName}</span></p>
+                        <p><strong>Account Number:</strong> <span className="font-bold text-gray-900">{details.accountNumber}</span></p>
+                        <p><strong>IFSC Code:</strong> <span className="font-bold text-gray-900">{details.ifscCode}</span></p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Return / Exchange Request Management Card */}
+          {order.returnRequest && (
+            <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-amber-200/60 pb-2.5">
+                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-amber-900">
+                  <RotateCcw size={16} className="text-amber-700" />
+                  <span>{order.returnRequest.requestType === 'exchange' ? '🔄 Product Exchange Request' : '📦 Product Return & Refund Request'}</span>
+                </div>
+                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
+                  order.returnRequest.status?.includes('approved') ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                  order.returnRequest.status?.includes('completed') || order.returnRequest.status === 'exchanged' || order.returnRequest.status === 'refund_completed' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                  order.returnRequest.status === 'rejected' ? 'bg-rose-100 text-rose-900 border-rose-300' :
+                  'bg-amber-100 text-amber-900 border-amber-300'
+                }`}>
+                  {order.returnRequest.status?.replace(/_/g, ' ')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">Reason for Request</div>
+                  <div className="font-semibold text-gray-800">{order.returnRequest.reason || 'N/A'}</div>
+                  {order.returnRequest.targetSize && (
+                    <div className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded inline-block mt-1">
+                      Requested Replacement Size: {order.returnRequest.targetSize}
+                    </div>
+                  )}
+                  {order.returnRequest.rejectionReason && (
+                    <div className="text-[11px] font-bold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 block mt-1">
+                      Rejection Reason: {order.returnRequest.rejectionReason}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1 text-gray-700">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase">Logistics & Payout Details</div>
+                  {order.returnRequest.pickupDate && (
+                    <div><strong>Scheduled Pickup:</strong> {new Date(order.returnRequest.pickupDate).toLocaleDateString('en-IN')}</div>
+                  )}
+                  {order.returnRequest.refundTxnId && (
+                    <div><strong>Refund Txn ID:</strong> <span className="font-mono font-bold text-emerald-800">{order.returnRequest.refundTxnId}</span></div>
+                  )}
+                  {order.returnRequest.exchangeAwb && (
+                    <div><strong>Exchange AWB:</strong> <span className="font-mono font-bold text-blue-800">{order.returnRequest.exchangeAwb}</span> ({order.returnRequest.exchangeCourier || 'Courier'})</div>
+                  )}
+                  <div className="text-[10px] text-gray-400 pt-1">
+                    Requested on: {order.returnRequest.requestedAt ? new Date(order.returnRequest.requestedAt).toLocaleString('en-IN') : 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Action Workflow Buttons */}
+              {!readOnly && (
+                <div className="pt-2 border-t border-amber-200/60 space-y-2">
+                  <div className="text-[11px] font-bold text-amber-900">Admin Action Workflow:</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(order.returnRequest.status === 'return_requested' || order.returnRequest.status === 'exchange_requested') && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleReturnExchangeStatusUpdate(order.returnRequest.requestType === 'exchange' ? 'exchange_approved' : 'return_approved')}
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          ✓ Approve Request
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
+                          className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          ✕ Reject Request
+                        </button>
+                      </>
+                    )}
+
+                    {(order.returnRequest.status === 'return_approved' || order.returnRequest.status === 'exchange_approved') && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
+                        className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        📅 Schedule Pickup
+                      </button>
+                    )}
+
+                    {order.returnRequest.status === 'pickup_scheduled' && (
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('product_received')}
+                        className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        📦 Mark Product Received & Restore Stock
+                      </button>
+                    )}
+
+                    {(order.returnRequest.status === 'product_received' || (order.returnRequest.requestType === 'return' && order.returnRequest.status === 'return_approved')) && order.returnRequest.requestType === 'return' && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        💳 Mark Refund Completed
+                      </button>
+                    )}
+
+                    {(order.returnRequest.status === 'product_received' || (order.returnRequest.requestType === 'exchange' && order.returnRequest.status === 'exchange_approved')) && order.returnRequest.requestType === 'exchange' && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
+                        className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        🚚 Dispatch Replacement Unit
+                      </button>
+                    )}
+
+                    {order.returnRequest.status === 'exchange_dispatched' && (
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('exchanged')}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        ✓ Complete Exchange
+                      </button>
+                    )}
+                  </div>
+
+                  {returnActionState.showRejectInput && (
+                    <div className="p-3 bg-white rounded-xl border border-rose-200 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Reason for rejection (e.g., Item used or tag missing)"
+                        value={returnActionState.rejectionReason}
+                        onChange={e => setReturnActionState(prev => ({ ...prev, rejectionReason: e.target.value }))}
+                        className="w-full px-3 py-1.5 text-xs border border-rose-300 rounded-lg outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('rejected', { rejectionReason: returnActionState.rejectionReason })}
+                        className="px-3 py-1 bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Confirm Rejection
+                      </button>
+                    </div>
+                  )}
+
+                  {returnActionState.showPickupInput && (
+                    <div className="p-3 bg-white rounded-xl border border-blue-200 space-y-2">
+                      <label className="block text-[11px] font-bold text-gray-700">Select Pickup Date:</label>
+                      <input
+                        type="date"
+                        value={returnActionState.pickupDate}
+                        onChange={e => setReturnActionState(prev => ({ ...prev, pickupDate: e.target.value }))}
+                        className="px-3 py-1.5 text-xs border border-blue-300 rounded-lg outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('pickup_scheduled', { pickupDate: returnActionState.pickupDate })}
+                        className="ml-2 px-3 py-1 bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Confirm Pickup Date
+                      </button>
+                    </div>
+                  )}
+
+                  {returnActionState.showRefundInput && (
+                    <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Enter Refund Transaction ID / Reference (e.g. TXN987654321)"
+                        value={returnActionState.refundTxnId}
+                        onChange={e => setReturnActionState(prev => ({ ...prev, refundTxnId: e.target.value }))}
+                        className="w-full px-3 py-1.5 text-xs border border-emerald-300 rounded-lg outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('refund_completed', { refundTxnId: returnActionState.refundTxnId })}
+                        className="px-3 py-1 bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Confirm Refund Completed
+                      </button>
+                    </div>
+                  )}
+
+                  {returnActionState.showDispatchInput && (
+                    <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Courier Partner Name (e.g. Delhivery)"
+                          value={returnActionState.exchangeCourier}
+                          onChange={e => setReturnActionState(prev => ({ ...prev, exchangeCourier: e.target.value }))}
+                          className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Replacement AWB Tracking Number"
+                          value={returnActionState.exchangeAwb}
+                          onChange={e => setReturnActionState(prev => ({ ...prev, exchangeAwb: e.target.value }))}
+                          className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleReturnExchangeStatusUpdate('exchange_dispatched', { exchangeAwb: returnActionState.exchangeAwb, exchangeCourier: returnActionState.exchangeCourier })}
+                        className="px-3 py-1 bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        Confirm Replacement Dispatched
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Return/Exchange Event Timeline */}
+              {Array.isArray(order.returnRequest.timeline) && order.returnRequest.timeline.length > 0 && (
+                <div className="pt-2 border-t border-amber-200/60">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900 mb-1.5">
+                    Request Event Timeline Log
+                  </div>
+                  <div className="space-y-1 font-mono text-[11px]">
+                    {order.returnRequest.timeline.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-gray-700">
+                        <span className="text-amber-600 font-bold">•</span>
+                        <span className="font-bold">{item.label}</span>
+                        <span className="text-[10px] text-gray-400">({new Date(item.timestamp).toLocaleString('en-IN')})</span>
+                        {item.note && <span className="text-gray-500 italic">- {item.note}</span>}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -180,6 +490,12 @@ export default function OrderDetailModal({
                   <option value="Shipped">Shipped</option>
                   <option value="Delivered">Delivered</option>
                   <option value="Cancelled">Cancelled</option>
+                  <option value="refund_approved">Refund Approved</option>
+                  <option value="refund_initiated">Refund Initiated</option>
+                  <option value="refund_completed">Refund Completed</option>
+                  <option value="return_requested">Return Requested</option>
+                  <option value="return_approved">Return Approved</option>
+                  <option value="product_return_received">Product Return Received</option>
                 </select>
               </div>
 
@@ -261,11 +577,21 @@ export default function OrderDetailModal({
                         {item.color && `Color: ${item.color} • `}
                         Qty: {item.quantity}
                       </div>
+                      <div className="text-[10px] text-teal-900 font-medium flex items-center gap-1 mt-0.5">
+                        <Store size={10} className="text-teal-700 shrink-0" />
+                        <span>Sold by: <strong className="font-bold text-teal-950">{item.storeName || item.sellerName || item.sellerDetails?.storeName || (typeof item.sellerId === 'object' ? item.sellerId.storeName : '') || order.sellerDetails?.storeName || 'Partner Merchant'}</strong></span>
+                        {(item.sellerPhone || item.sellerDetails?.phone) && (
+                          <span className="text-gray-500">({item.sellerPhone || item.sellerDetails?.phone})</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-xs text-gray-900">₹{item.price * item.quantity}</div>
                     <div className="text-[10px] text-gray-400">₹{item.price} each</div>
+                    <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-1 ${(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'}`}>
+                      {(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? '🛵 Self-Delivery' : `🚚 ${item.thirdPartyDetails?.courierName || order.courierName || 'Courier'}`}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -440,6 +766,145 @@ export default function OrderDetailModal({
             </div>
 
           </div>
+
+          {/* Fulfillment Channel & Seller Details */}
+          {(() => {
+            const isSelf = order.deliveryMode === 'self_delivery' ||
+              order.deliveryType === 'self_delivery' ||
+              order.deliveryType === 'self' ||
+              Boolean(order.selfDeliveryDetails?.deliveryPartnerToken);
+
+            const selfDetails = order.selfDeliveryDetails || order.items?.[0]?.selfDeliveryDetails;
+            const sellerDetails = order.sellerDetails || order.items?.[0]?.sellerDetails || (order.items?.[0]?.sellerId && typeof order.items[0].sellerId === 'object' ? order.items[0].sellerId : null);
+
+            const storeName = sellerDetails?.storeName || sellerDetails?.name || order.items?.[0]?.storeName || order.items?.[0]?.sellerName || 'Partner Merchant';
+            const sellerContactPhone = sellerDetails?.phone || order.items?.[0]?.sellerPhone || '';
+            const sellerAddressStr = sellerDetails?.address || sellerDetails?.city || '';
+
+            const tokenVal = selfDetails?.deliveryPartnerToken || order.trackingNumber || `DLV-${order.id}`;
+            const clientAppUrl = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+            const selfDeliveryUrl = selfDetails?.trackingUrl || `${clientAppUrl}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+
+            const courierName = order.courierName || order.items?.[0]?.thirdPartyDetails?.courierName || 'Third-Party Logistics';
+            const awbNumber = order.trackingNumber || order.items?.[0]?.thirdPartyDetails?.trackingNumber || '';
+
+            return (
+              <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-teal-950">
+                    <Truck size={15} className="text-teal-700" />
+                    <span>Fulfillment Method & Seller Details</span>
+                  </div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${isSelf ? 'bg-teal-700 text-white' : 'bg-blue-700 text-white'}`}>
+                    {isSelf ? '🛵 Direct Self-Delivery (Store Fleet)' : `🚚 3rd-Party Carrier (${courierName})`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  
+                  {/* Seller Card */}
+                  <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
+                      <Store size={11} className="text-teal-700" /> Assigned Seller / Store
+                    </span>
+                    <div className="font-bold text-xs text-gray-900">{storeName}</div>
+                    {sellerContactPhone && (
+                      <div className="text-[11px] text-gray-600 flex items-center gap-1">
+                        <Phone size={11} className="text-gray-400" /> {sellerContactPhone}
+                      </div>
+                    )}
+                    {sellerAddressStr && (
+                      <div className="text-[10px] text-gray-500">{sellerAddressStr}</div>
+                    )}
+                  </div>
+
+                  {/* Delivery Mode Details */}
+                  {isSelf ? (
+                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
+                        <User size={11} className="text-teal-700" /> Driver / Rider Details
+                      </span>
+                      <div className="text-xs">
+                        <strong className="text-gray-900">{selfDetails?.deliveryPersonName || 'Store Assigned Rider'}</strong>
+                        {selfDetails?.deliveryPersonPhone && (
+                          <span className="text-gray-600 ml-1.5 font-mono">({selfDetails.deliveryPersonPhone})</span>
+                        )}
+                      </div>
+                      {selfDetails?.vehicleNumber && (
+                        <div className="text-[10px] text-gray-500 font-mono">
+                          Vehicle: <span className="font-bold text-gray-800">{selfDetails.vehicleNumber}</span>
+                        </div>
+                      )}
+                      {selfDetails?.deliveryOtp && (
+                        <div className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
+                          Delivery Verification OTP: {selfDetails.deliveryOtp}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
+                        <Truck size={11} className="text-teal-700" /> Courier Logistics
+                      </span>
+                      <div className="text-xs font-bold text-gray-900">{courierName}</div>
+                      <div className="text-[11px] font-mono text-gray-600">
+                        AWB: {awbNumber || 'Awaiting assignment'}
+                      </div>
+                      {order.trackingUrl && (
+                        <a
+                          href={order.trackingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:underline pt-0.5"
+                        >
+                          <span>Direct Carrier Tracking</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Self-Delivery Link with Copy & Open */}
+                {isSelf && (
+                  <div className="p-2.5 bg-white rounded-xl border border-teal-100 space-y-1">
+                    <span className="text-[10px] font-bold text-gray-600 flex items-center gap-1">
+                      <ExternalLink size={11} className="text-teal-700" /> Self-Delivery Tracking & Verification URL:
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        readOnly
+                        value={selfDeliveryUrl}
+                        className="flex-1 px-2.5 py-1 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-lg text-gray-700 truncate select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selfDeliveryUrl);
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2000);
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-teal-800 hover:bg-teal-900 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        {copiedLink ? 'Copied!' : 'Copy Link'}
+                      </button>
+                      <a
+                        href={selfDeliveryUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                      >
+                        <ExternalLink size={11} /> Open Link
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            );
+          })()}
 
         </div>
 

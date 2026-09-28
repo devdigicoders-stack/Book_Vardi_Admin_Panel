@@ -191,6 +191,18 @@ const MEASURE_SCALES = [
   { id: 'unit', label: 'General Unit (Pair, Pack, Set)', defaultUnit: 'Unit', placeholder: 'e.g. Pair, Pack, Roll, Dozen' }
 ];
 
+export function parseBool(val, defaultVal = true) {
+  if (val === undefined || val === null) return defaultVal;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    if (s === 'false' || s === '0' || s === 'off' || s === 'no') return false;
+    if (s === 'true' || s === '1' || s === 'on' || s === 'yes') return true;
+  }
+  if (typeof val === 'number') return val !== 0;
+  return Boolean(val);
+}
+
 export default function ProductFormPage({ product, sellers = [], existingProducts = [], onSave, onBack }) {
   const isEdit = Boolean(product);
 
@@ -232,6 +244,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
     minMeter: '0.5',
     meterStep: '0.5',
     isReturnable: true,
+    isExchangeable: true,
+    isRefundable: true,
     returnWindowDays: '7',
     enableSizeChart: false,
     sizeChart: {
@@ -312,13 +326,53 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         category: normalizeCategory(product.category),
         subCategory: product.subCategory || (getSubCategories(product.category)[0] || 'Ready to wear'),
         gst: product.gst !== undefined ? String(product.gst) : (product.gstPercentage !== undefined ? String(product.gstPercentage) : '5'),
-        isGstInclusive: product.isGstInclusive !== undefined ? Boolean(product.isGstInclusive) : true,
+        isGstInclusive: parseBool(product.isGstInclusive, true),
         schoolName: product.schoolName || '',
         gender: product.gender || 'Unisex',
         badge: product.badge || product.badgeTag || 'NEW',
         stockQuantity: product.stockQuantity !== undefined ? String(product.stockQuantity) : (product.stock !== undefined ? String(product.stock) : '50'),
-        sellerId: product.sellerId || 'self',
-        sellerName: product.sellerName || 'Book Vardi Verified Seller',
+        sellerId: (() => {
+          let rawId = '';
+          if (typeof product.sellerId === 'object' && product.sellerId !== null) {
+            rawId = product.sellerId._id || product.sellerId.id || product.sellerId.sellerId || '';
+          } else if (typeof product.sellerId === 'string' || typeof product.sellerId === 'number') {
+            rawId = String(product.sellerId);
+          }
+          let rawName = product.sellerName || product.storeName || product.sellerStoreName || product.legalBusinessName || '';
+          if (!rawName && typeof product.sellerId === 'object' && product.sellerId !== null) {
+            rawName = product.sellerId.storeName || (typeof product.sellerId.name === 'string' ? product.sellerId.name : '') || product.sellerId.legalBusinessName || '';
+          }
+          if (rawId && rawId !== 'self') {
+            const matched = sellers.find(s => String(s.id || s._id) === String(rawId) || (rawName && (s.storeName === rawName || s.name === rawName)));
+            return matched ? String(matched.id || matched._id) : String(rawId);
+          }
+          if (rawName && rawName !== 'Book Vardi Verified Seller' && rawName !== 'Self') {
+            const matchedByName = sellers.find(s => s.storeName === rawName || s.name === rawName);
+            return matchedByName ? String(matchedByName.id || matchedByName._id) : 'self';
+          }
+          return 'self';
+        })(),
+        sellerName: (() => {
+          let rawId = '';
+          if (typeof product.sellerId === 'object' && product.sellerId !== null) {
+            rawId = product.sellerId._id || product.sellerId.id || product.sellerId.sellerId || '';
+          } else if (typeof product.sellerId === 'string' || typeof product.sellerId === 'number') {
+            rawId = String(product.sellerId);
+          }
+          let rawName = product.sellerName || product.storeName || product.sellerStoreName || product.legalBusinessName || '';
+          if (!rawName && typeof product.sellerId === 'object' && product.sellerId !== null) {
+            rawName = product.sellerId.storeName || (typeof product.sellerId.name === 'string' ? product.sellerId.name : '') || product.sellerId.legalBusinessName || '';
+          }
+          if (rawId && rawId !== 'self') {
+            const matched = sellers.find(s => String(s.id || s._id) === String(rawId) || (rawName && (s.storeName === rawName || s.name === rawName)));
+            return matched ? (matched.storeName || (typeof matched.name === 'string' ? matched.name : rawName) || 'Partner Merchant') : (rawName || 'Partner Merchant');
+          }
+          if (rawName && rawName !== 'Book Vardi Verified Seller' && rawName !== 'Self') {
+            const matchedByName = sellers.find(s => s.storeName === rawName || s.name === rawName);
+            return matchedByName ? (matchedByName.storeName || (typeof matchedByName.name === 'string' ? matchedByName.name : rawName) || rawName) : rawName;
+          }
+          return product.sellerName || 'Book Vardi Verified Seller';
+        })(),
         paymentMethodAllowed: product.paymentMethodAllowed || 'Both',
         approvalStatus: product.approvalStatus || 'Pending',
         approvalComment: product.approvalComment || '',
@@ -330,6 +384,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         minMeter: product.minMeter !== undefined ? String(product.minMeter) : '0.5',
         meterStep: product.meterStep !== undefined ? String(product.meterStep) : '0.5',
         isReturnable: product.isReturnable !== undefined ? Boolean(product.isReturnable) : true,
+        isExchangeable: product.isExchangeable !== undefined ? Boolean(product.isExchangeable) : (product.isRefundable !== undefined ? Boolean(product.isRefundable) : true),
+        isRefundable: product.isRefundable !== undefined ? Boolean(product.isRefundable) : true,
         returnWindowDays: product.returnWindowDays !== undefined ? String(product.returnWindowDays) : '7',
         enableSizeChart: Boolean(product.sizeChart && product.sizeChart.rows && product.sizeChart.rows.length > 0),
         sizeChart: (product.sizeChart && product.sizeChart.rows && product.sizeChart.rows.length > 0) ? product.sizeChart : {
@@ -635,6 +691,7 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
           gstPercent: selectedGstNum,
           gstPercentage: selectedGstNum,
           gstRate: selectedGstNum,
+          isGstInclusive: parseBool(formData.isGstInclusive, true),
           bundleType: 'single',
           price: sizeVariants.length > 0 ? minVariantPrice : Number(formData.price),
           originalPrice: Number(formData.originalPrice) || Math.round(minVariantPrice * 1.25),
@@ -650,6 +707,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
           meterStep: Number(formData.meterStep) || 0.5,
           unit: formData.isMeterBased ? 'meter' : (formData.unit || 'piece'),
           isReturnable: Boolean(formData.isReturnable),
+          isExchangeable: Boolean(formData.isExchangeable),
+          isRefundable: Boolean(formData.isRefundable ?? formData.isExchangeable ?? formData.isReturnable),
           returnWindowDays: Number(formData.returnWindowDays) || 7,
           sizeChart: formData.enableSizeChart ? formData.sizeChart : { rows: [] },
           sizes: sizeVariants.map(v => v.size || v.measureValue),
@@ -1124,13 +1183,20 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                             setFormData({
                               ...formData,
                               sellerId: val,
-                              sellerName: found ? (found.storeName || (typeof found.name === 'string' ? found.name : 'Partner Merchant') || 'Partner Merchant') : 'Partner Merchant'
+                              sellerName: found
+                                ? (found.storeName || (typeof found.name === 'string' ? found.name : 'Partner Merchant') || 'Partner Merchant')
+                                : (val === String(formData.sellerId) ? (formData.sellerName || 'Partner Merchant') : 'Partner Merchant')
                             });
                           }
                         }}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-800 bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
                       >
                         <option value="self">🏢 Self (Book Vardi Direct / In-House Store)</option>
+                        {formData.sellerId && formData.sellerId !== 'self' && !sellers.some(s => String(s.id || s._id) === String(formData.sellerId)) && (
+                          <option value={formData.sellerId}>
+                            🏪 {formData.sellerName || 'Assigned Merchant'} (Original Merchant)
+                          </option>
+                        )}
                         {sellers.map(s => (
                           <option key={s.id || s._id} value={s.id || s._id}>
                             🏪 {s.storeName || (typeof s.name === 'string' ? s.name : 'Merchant')} ({s.sellerPhone || s.email || 'Partner Merchant'})
@@ -1220,35 +1286,68 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                     </div>
                   )}
 
-                  {/* 2. Return Policy Settings */}
-                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-gray-900">
+                  {/* 2. Return & Exchange Policy Settings */}
+                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200">
+                      <label className="flex items-center gap-2.5 cursor-pointer font-bold text-xs text-gray-900 select-none">
                         <input
                           type="checkbox"
                           checked={formData.isReturnable}
                           onChange={e => setFormData({ ...formData, isReturnable: e.target.checked })}
                           className="w-4 h-4 rounded text-brand-teal focus:ring-brand-teal cursor-pointer"
                         />
-                        <span>Product is Returnable / Exchangeable</span>
+                        <span>Item is Returnable (Physical Return Supported)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2.5 cursor-pointer font-bold text-xs text-gray-900 select-none">
+                        <input
+                          type="checkbox"
+                          checked={formData.isExchangeable}
+                          onChange={e => setFormData({ ...formData, isExchangeable: e.target.checked, isRefundable: e.target.checked })}
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <span>Item is Exchangeable (Size & Replacement Supported)</span>
                       </label>
                     </div>
-                    {formData.isReturnable ? (
-                      <div className="pt-2 border-t border-gray-200">
-                        <label className="block text-[11px] font-bold text-gray-700 mb-1">Return Window (Days)</label>
-                        <input
-                          type="number"
-                          value={formData.returnWindowDays}
-                          onChange={e => setFormData({ ...formData, returnWindowDays: e.target.value })}
-                          className="w-48 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs"
-                          placeholder="7"
-                        />
+
+                    {(formData.isReturnable || formData.isExchangeable) && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">Return / Exchange Window (Days) *</label>
+                          <input
+                            type="number"
+                            value={formData.returnWindowDays}
+                            onChange={e => setFormData({ ...formData, returnWindowDays: e.target.value })}
+                            className="w-48 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold"
+                            placeholder="7"
+                          />
+                        </div>
+                        <span className="text-[11px] text-gray-500">
+                          Specify days within which customer can claim return or exchange (e.g. 7-Day Policy).
+                        </span>
                       </div>
-                    ) : (
-                      <p className="text-[11px] text-amber-700 font-medium">
-                        This product will be marked as "Non-Returnable" on the storefront.
-                      </p>
                     )}
+
+                    {/* Summary Status Badge */}
+                    <div className="text-[11px] font-semibold">
+                      {formData.isReturnable && formData.isExchangeable ? (
+                        <p className="text-emerald-800 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                          ✅ <strong>Full Return & Size Exchange Policy:</strong> Customers can return or request size replacement for this item within {formData.returnWindowDays || 7} days.
+                        </p>
+                      ) : formData.isReturnable && !formData.isExchangeable ? (
+                        <p className="text-blue-800 bg-blue-50 border border-blue-200 p-2.5 rounded-lg">
+                          🔄 <strong>Returnable Only (Non-Exchangeable):</strong> Customers can return for refund, but size replacement/exchange is not supported.
+                        </p>
+                      ) : !formData.isReturnable && formData.isExchangeable ? (
+                        <p className="text-purple-800 bg-purple-50 border border-purple-200 p-2.5 rounded-lg">
+                          🔄 <strong>Exchangeable Only (No Return):</strong> Size exchange or replacement allowed without monetary return.
+                        </p>
+                      ) : (
+                        <p className="text-rose-800 bg-rose-50 border border-rose-200 p-2.5 rounded-lg">
+                          ⚠️ <strong>Final Sale:</strong> This item is strictly Non-Returnable and Non-Exchangeable on the storefront.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* 3. Apparel Size Chart Editor (Only shown for Clothing & Uniforms) */}
