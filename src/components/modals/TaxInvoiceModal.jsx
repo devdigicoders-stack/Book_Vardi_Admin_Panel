@@ -9,8 +9,12 @@ import {
   Lock,
   Building,
   Store,
-  DollarSign
+  DollarSign,
+  Truck,
+  ExternalLink,
+  User
 } from 'lucide-react';
+import { SERVER_URL } from '../../utils/api';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=150&auto=format&fit=crop&q=80';
 
@@ -26,13 +30,13 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
   if (!isOpen || !order) return null;
 
   const orderStatus = String(order.status || order.overallStatus || '').toLowerCase();
-  const confirmed = orderStatus === 'confirmed' || orderStatus === 'shipped' || orderStatus === 'delivered' || orderStatus === 'processing' || order.paymentStatus === 'paid' || order.paymentStatus === 'Paid';
+  const confirmed = orderStatus === 'confirmed' || orderStatus === 'shipped' || orderStatus === 'out for delivery' || orderStatus === 'out_for_delivery' || orderStatus === 'delivered' || orderStatus === 'processing' || order.paymentStatus === 'paid' || order.paymentStatus === 'Paid';
 
-  const shippingAddr = typeof order.shippingAddress === 'object'
+  const shippingAddr = typeof order.shippingAddress === 'object' && order.shippingAddress !== null
     ? order.shippingAddress
-    : { street: order.address || order.shippingAddress || 'Customer Delivery Address' };
+    : (typeof order.rawShippingAddress === 'object' && order.rawShippingAddress !== null ? order.rawShippingAddress : {});
 
-  const formattedAddressStr = typeof order.shippingAddress === 'string'
+  const formattedAddressStr = typeof order.shippingAddress === 'string' && !order.shippingAddress.toLowerCase().includes('customer')
     ? order.shippingAddress
     : [
         shippingAddr.street || shippingAddr.addressLine || shippingAddr.address,
@@ -95,6 +99,8 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
   const discount = Number(order.discount ?? order.discountAmount ?? 0);
   const grandTotal = Number(order.total || order.totalAmount || (subtotal + shippingCost - discount));
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const isPlaceholderName = (name) => {
     if (!name || typeof name !== 'string') return true;
     const lower = name.trim().toLowerCase();
@@ -103,14 +109,252 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
       lower === 'bookvardimerchant' ||
       lower === 'bookvardi merchant' ||
       lower === 'book vardi partner merchant' ||
+      lower === 'book vardi partner store' ||
+      lower === 'bookvardi verified seller' ||
+      lower === 'bookvardi verified seller hub' ||
       lower === 'partner merchant' ||
       lower === 'unknown seller' ||
       lower === 'new merchant' ||
       lower === 'merchant store' ||
       lower === 'direct marketplace' ||
+      lower === 'seller' ||
+      lower === 'merchant' ||
       lower === 'n/a'
     );
   };
+
+  const isGenericCust = (name) => {
+    if (!name || typeof name !== 'string') return true;
+    const lower = name.trim().toLowerCase();
+    return (
+      lower === '' ||
+      lower === 'student' ||
+      lower === 'student customer' ||
+      lower === 'customer' ||
+      lower === 'valued customer' ||
+      lower === 'verified customer' ||
+      lower === 'user' ||
+      lower === 'n/a'
+    );
+  };
+
+  const resolveSeller = () => {
+    const firstItem = items[0] || {};
+    const itemSellerObj = (firstItem.sellerId && typeof firstItem.sellerId === 'object') ? firstItem.sellerId : null;
+    const itemSellerDetails = firstItem.sellerDetails || null;
+    const orderSellerDetails = (order.sellerDetails && typeof order.sellerDetails === 'object') ? order.sellerDetails : null;
+    const orderSellerObj = (order.sellerId && typeof order.sellerId === 'object') ? order.sellerId : null;
+
+    const candObjs = [itemSellerDetails, itemSellerObj, orderSellerDetails, orderSellerObj].filter(Boolean);
+
+    let matchedStoredSeller = null;
+    const rawSellerId = String(firstItem.sellerId?._id || firstItem.sellerId || order.sellerId?._id || order.sellerId || '');
+    if (rawSellerId && rawSellerId !== '[object Object]') {
+      try {
+        const savedSellers = localStorage.getItem('admin_sellers') || localStorage.getItem('bv_sync_sellers') || localStorage.getItem('bv_registered_users');
+        if (savedSellers) {
+          const sList = JSON.parse(savedSellers);
+          if (Array.isArray(sList)) {
+            matchedStoredSeller = sList.find(s => String(s.id || s._id || s.sellerId || '') === rawSellerId);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!matchedStoredSeller) {
+      const prodIdStr = String(firstItem.productId || firstItem.id || firstItem._id || '');
+      if (prodIdStr) {
+        try {
+          const catalogSaved = localStorage.getItem('admin_products') || localStorage.getItem('bv_sync_products') || localStorage.getItem('bv_seller_products');
+          if (catalogSaved) {
+            const catalog = JSON.parse(catalogSaved);
+            if (Array.isArray(catalog)) {
+              const matchedProd = catalog.find(p => String(p.id || p._id || p.productId) === prodIdStr);
+              if (matchedProd) {
+                const pSellerId = String(matchedProd.sellerId || '');
+                if (pSellerId) {
+                  const savedSellers = localStorage.getItem('admin_sellers') || localStorage.getItem('bv_sync_sellers');
+                  if (savedSellers) {
+                    const sList = JSON.parse(savedSellers);
+                    if (Array.isArray(sList)) {
+                      matchedStoredSeller = sList.find(s => String(s.id || s._id || s.sellerId || '') === pSellerId);
+                    }
+                  }
+                }
+                if (!matchedStoredSeller && (matchedProd.sellerStoreName || matchedProd.storeName)) {
+                  matchedStoredSeller = {
+                    storeName: matchedProd.sellerStoreName || matchedProd.storeName,
+                    sellerName: matchedProd.sellerName || matchedProd.sellerStoreName || matchedProd.storeName
+                  };
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (matchedStoredSeller) {
+      candObjs.push(matchedStoredSeller);
+    }
+
+    const storeCandidates = [
+      ...candObjs.map(o => o.storeName),
+      ...candObjs.map(o => o.businessName),
+      ...candObjs.map(o => o.name),
+      ...candObjs.map(o => o.sellerName),
+      firstItem.sellerStoreName,
+      firstItem.storeName,
+      firstItem.sellerName,
+      order.sellerStoreName,
+      order.sellerName,
+      order.storeName
+    ];
+
+    let storeName = '';
+    for (const sc of storeCandidates) {
+      if (sc && !isPlaceholderName(sc)) {
+        storeName = sc;
+        break;
+      }
+    }
+    if (!storeName) {
+      storeName = 'Book Vardi Partner Store';
+    }
+
+    const ownerName = candObjs.map(o => o.ownerName || o.ownerFullName || o.contactPerson || o.name).find(Boolean) || '';
+    const phone = candObjs.map(o => o.phone || o.mobile || o.contactPhone).find(Boolean) || firstItem.sellerPhone || order.sellerPhone || '+91 94500 00000';
+    const email = candObjs.map(o => o.email).find(Boolean) || firstItem.sellerEmail || order.sellerEmail || 'sellersupport@bookvardi.com';
+    const address = candObjs.map(o => o.address || o.addressLine || o.addressLine1 || o.street).find(Boolean) || firstItem.sellerAddress || order.sellerAddress || 'Book Vardi Fulfillment Center, Sector 4';
+    const city = candObjs.map(o => o.city).find(Boolean) || firstItem.sellerCity || order.sellerCity || 'Lucknow';
+    const state = candObjs.map(o => o.state).find(Boolean) || firstItem.sellerState || order.sellerState || 'Uttar Pradesh';
+    const pincode = candObjs.map(o => o.pincode || o.pin).find(Boolean) || firstItem.sellerPincode || '226001';
+    const gstNumber = candObjs.map(o => o.gstNumber || o.gstin || o.gst).find(Boolean) || order.gstNumber || '09AAACB1234F1Z9';
+
+    return {
+      storeName,
+      ownerName,
+      phone,
+      email,
+      address,
+      city,
+      state,
+      pincode,
+      gstNumber
+    };
+  };
+
+  const resolvedSeller = resolveSeller();
+
+  const resolveConsumer = () => {
+    const rawAddr = (typeof order.rawShippingAddress === 'object' && order.rawShippingAddress !== null)
+      ? order.rawShippingAddress
+      : (typeof order.shippingAddress === 'object' && order.shippingAddress !== null ? order.shippingAddress : {});
+
+    // Try matching user from localStorage admin_users or bv_registered_users if order has userId or phone
+    let matchedUser = null;
+    const orderUserId = String(order.userId?._id || order.userId || order.user?._id || order.user || '');
+    const orderPhone = String(rawAddr.phone || rawAddr.mobile || order.customerPhone || order.customer?.phone || order.phone || '').replace(/\D/g, '');
+
+    try {
+      const savedUsers = localStorage.getItem('admin_users') || localStorage.getItem('bv_registered_users');
+      if (savedUsers) {
+        const uList = JSON.parse(savedUsers);
+        if (Array.isArray(uList)) {
+          matchedUser = uList.find(u => {
+            const uId = String(u.id || u._id || '');
+            const uPhone = String(u.phone || '').replace(/\D/g, '');
+            return (orderUserId && uId === orderUserId) || (orderPhone && uPhone && (orderPhone.endsWith(uPhone) || uPhone.endsWith(orderPhone)));
+          });
+        }
+      }
+    } catch (e) {}
+
+    const phoneCandidates = [
+      rawAddr.phone,
+      rawAddr.mobile,
+      rawAddr.contactPhone,
+      matchedUser?.phone,
+      typeof order.customerPhone === 'string' ? order.customerPhone : null,
+      order.customer?.phone,
+      order.userPhone,
+      order.user?.phone,
+      order.userId?.phone,
+      order.phone
+    ].filter(Boolean);
+    const phone = phoneCandidates[0] || '';
+
+    const emailCandidates = [
+      rawAddr.email,
+      matchedUser?.email,
+      typeof order.customerEmail === 'string' ? order.customerEmail : null,
+      order.customer?.email,
+      order.userEmail,
+      order.user?.email,
+      order.userId?.email,
+      order.email
+    ].filter(Boolean);
+    const email = emailCandidates[0] || '';
+
+    const nameCandidates = [
+      rawAddr.name,
+      rawAddr.fullName,
+      rawAddr.recipientName,
+      rawAddr.contactPerson,
+      matchedUser?.name,
+      typeof order.customerName === 'string' ? order.customerName : null,
+      order.customer?.name,
+      order.userName,
+      order.user?.name,
+      order.userId?.name
+    ].filter(nc => nc && !isGenericCust(nc));
+
+    let name = nameCandidates[0] || '';
+    if (!name) {
+      if (matchedUser && !isGenericCust(matchedUser.name)) {
+        name = matchedUser.name;
+      } else if (order.school) {
+        name = `Student / Consumer (${order.school})`;
+      } else {
+        name = phone ? `Verified Buyer (${phone.slice(-4)})` : 'Verified Retail Consumer';
+      }
+    }
+
+    let street = '';
+    let cityStatePin = '';
+
+    if (rawAddr.addressLine || rawAddr.street || rawAddr.address || rawAddr.addressLine1) {
+      street = [
+        rawAddr.houseNumber || rawAddr.flat || rawAddr.flatNo,
+        rawAddr.addressLine || rawAddr.street || rawAddr.address || rawAddr.addressLine1,
+        rawAddr.colony || rawAddr.landmark || rawAddr.area
+      ].filter(Boolean).join(', ');
+      cityStatePin = [
+        rawAddr.city,
+        rawAddr.state
+      ].filter(Boolean).join(', ') + (rawAddr.pincode ? ` - ${rawAddr.pincode}` : '');
+    } else if (typeof order.shippingAddress === 'string' && order.shippingAddress.trim() && !order.shippingAddress.toLowerCase().includes('customer address') && !order.shippingAddress.toLowerCase().includes('customer delivery address')) {
+      street = order.shippingAddress.trim();
+    } else if (typeof order.address === 'string' && order.address.trim() && !order.address.toLowerCase().includes('customer address') && !order.address.toLowerCase().includes('customer delivery address')) {
+      street = order.address.trim();
+    } else if (matchedUser?.addresses && matchedUser.addresses.length > 0) {
+      const uAddr = matchedUser.addresses.find(a => a.isDefault) || matchedUser.addresses[0];
+      street = [uAddr.addressLine || uAddr.street, uAddr.landmark].filter(Boolean).join(', ');
+      cityStatePin = [uAddr.city, uAddr.state].filter(Boolean).join(', ') + (uAddr.pincode ? ` - ${uAddr.pincode}` : '');
+    } else {
+      street = rawAddr.city ? `${rawAddr.city}, ${rawAddr.state || 'India'}` : 'Delivery Location on File';
+    }
+
+    return {
+      name,
+      phone,
+      email,
+      street,
+      cityStatePin
+    };
+  };
+
+  const resolvedConsumer = resolveConsumer();
 
   const getItemSellerName = (item) => {
     if (item?.sellerId && typeof item.sellerId === 'object') {
@@ -175,7 +419,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
       if (c && !isPlaceholderName(c)) return c;
     }
 
-    return 'BookVardi Verified Seller';
+    return resolvedSeller.storeName || 'BookVardi Verified Seller';
   };
 
   // Helper to resolve dynamic seller commission rate
@@ -232,12 +476,64 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
       }
     } catch (e) {}
 
-    return 8;
+    return 5;
   };
 
   const marketplaceCommissionRate = getSellerCommissionRate();
   const marketplaceCommission = Math.round((grandTotal * (marketplaceCommissionRate / 100)) * 100) / 100;
   const sellerPayout = Math.round((grandTotal - marketplaceCommission) * 100) / 100;
+
+  // Logistics tracking resolution: strictly visible when product is Out for Delivery & partner decided
+  const normStatus = String(order.overallStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+  const isOut = normStatus === 'out for delivery' || normStatus === 'delivered';
+  const isSelf = String(order.deliveryMode || order.deliveryType || '').toLowerCase().includes('self') || Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
+  const isThirdParty = String(order.deliveryMode || order.deliveryType || '').toLowerCase().includes('third') || Boolean(order.courierName || order.thirdPartyDetails?.courierName);
+  const hasPartner = isSelf || isThirdParty || Boolean(order.courierName || order.selfDeliveryDetails?.deliveryPersonName);
+
+  const hasTracking = isOut && hasPartner && Boolean(order.trackingNumber || order.selfDeliveryDetails?.deliveryPartnerToken || order.thirdPartyDetails?.trackingNumber);
+
+  const deliveryPartnerDisplay = isSelf 
+    ? (order.selfDeliveryDetails?.deliveryPersonName ? `Direct Self-Delivery (Rider: ${order.selfDeliveryDetails.deliveryPersonName})` : 'Direct Self-Delivery (Store Fleet)')
+    : (order.courierName || order.thirdPartyDetails?.courierName || '3rd-Party Logistics Carrier');
+
+  const trackingNumberDisplay = order.trackingNumber || (isSelf ? order.selfDeliveryDetails?.deliveryPartnerToken : order.thirdPartyDetails?.trackingNumber) || '';
+
+  const trackingLinkDisplay = order.trackingUrl || order.selfDeliveryDetails?.trackingUrl || order.thirdPartyDetails?.trackingUrl || '';
+
+  const handleDownloadPDF = async () => {
+    if (!confirmed) {
+      alert('⚠️ Tax Invoice & Certificate is generated only when an order is confirmed strictly.');
+      return;
+    }
+    try {
+      setIsDownloading(true);
+      const token = localStorage.getItem('bv_admin_jwt_token');
+      const orderIdentifier = order.id || order.orderId || order._id;
+      const res = await fetch(`${SERVER_URL}/orders/${orderIdentifier}/invoice`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`Server responded with status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoice_${orderIdentifier}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Invoice download error:', err);
+      alert('Could not download server PDF. Switching to browser print view instead.');
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const handlePrint = () => {
     if (!confirmed) {
@@ -267,12 +563,23 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
 
           <div className="flex items-center gap-2">
             {confirmed && (
-              <button
-                onClick={handlePrint}
-                className="px-3 py-1.5 bg-brand-teal hover:bg-teal-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Printer size={13} /> Print Invoice
-              </button>
+              <>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={isDownloading}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  title="Download Official GST Tax Invoice PDF"
+                >
+                  <Download size={13} className={isDownloading ? 'animate-bounce' : ''} />
+                  {isDownloading ? 'Downloading...' : 'Download PDF'}
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="px-3 py-1.5 bg-brand-teal hover:bg-teal-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Printer size={13} /> Print Invoice
+                </button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -328,21 +635,111 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
             </div>
           </div>
 
-          {/* Customer & Shipping Information */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <div>
-              <span className="text-[10px] uppercase font-black text-gray-400 block mb-1">Billed To (Customer)</span>
-              <p className="font-extrabold text-gray-900">{typeof order.customerName === 'object' ? (order.customerName?.name || 'Customer') : (order.customerName || order.customer?.name || 'Customer')}</p>
-              <p className="text-gray-600 mt-0.5">{formattedAddressStr}</p>
-              <p className="text-gray-500 mt-1">Phone: {typeof order.customerPhone === 'object' ? (order.customerPhone?.phone || 'N/A') : (order.customerPhone || order.customer?.phone || 'N/A')}</p>
+          {/* 3-Column Info: Sold By (Seller), Billed & Shipped To (Customer), Order & Tax Meta */}
+          <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 text-xs bg-gray-50 p-4 rounded-xl border border-gray-200">
+            {/* 1. Sold By (Verified Seller) */}
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-black text-amber-800 flex items-center gap-1">
+                <Store size={12} className="text-amber-700" /> Sold By (Verified Seller)
+              </span>
+              <p className="font-extrabold text-gray-900 text-sm">{resolvedSeller.storeName}</p>
+              {resolvedSeller.ownerName && resolvedSeller.ownerName !== resolvedSeller.storeName && (
+                <p className="text-gray-600 text-[11px]">Prop: {resolvedSeller.ownerName}</p>
+              )}
+              {resolvedSeller.address && (
+                <p className="text-gray-600 text-[11px] leading-relaxed">{resolvedSeller.address}</p>
+              )}
+              {(resolvedSeller.city || resolvedSeller.state || resolvedSeller.pincode) && (
+                <p className="text-gray-600 text-[11px]">
+                  {[resolvedSeller.city, resolvedSeller.state].filter(Boolean).join(', ')}
+                  {resolvedSeller.pincode ? ` - ${resolvedSeller.pincode}` : ''}
+                </p>
+              )}
+              {resolvedSeller.phone && (
+                <p className="text-gray-500 text-[11px]">Phone: <span className="font-medium text-gray-700">{resolvedSeller.phone}</span></p>
+              )}
+              {resolvedSeller.email && (
+                <p className="text-gray-500 text-[11px]">Email: <span className="font-medium text-gray-700">{resolvedSeller.email}</span></p>
+              )}
+              {resolvedSeller.gstNumber && (
+                <p className="text-[10px] font-mono text-gray-500 mt-1">
+                  GSTIN: <span className="font-bold text-gray-800">{resolvedSeller.gstNumber}</span>
+                </p>
+              )}
             </div>
-            <div>
-              <span className="text-[10px] uppercase font-black text-gray-400 block mb-1">Order Details</span>
+
+            {/* 2. Billed & Shipped To (Customer) */}
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-black text-teal-800 flex items-center gap-1">
+                <User size={12} className="text-teal-700" /> Billed & Shipped To (Customer)
+              </span>
+              <p className="font-extrabold text-gray-900 text-sm">{resolvedConsumer.name}</p>
+              {resolvedConsumer.street && (
+                <p className="text-gray-600 text-[11px] leading-relaxed">{resolvedConsumer.street}</p>
+              )}
+              {resolvedConsumer.cityStatePin && (
+                <p className="text-gray-600 text-[11px]">{resolvedConsumer.cityStatePin}</p>
+              )}
+              {resolvedConsumer.phone && (
+                <p className="text-gray-500 text-[11px]">Phone: <span className="font-medium text-gray-700">{resolvedConsumer.phone}</span></p>
+              )}
+              {resolvedConsumer.email && (
+                <p className="text-gray-500 text-[11px]">Email: <span className="font-medium text-gray-700">{resolvedConsumer.email}</span></p>
+              )}
+            </div>
+
+            {/* 3. Order & Tax Meta */}
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-black text-gray-500 flex items-center gap-1">
+                <FileText size={12} className="text-gray-500" /> Order & Tax Meta
+              </span>
               <p className="text-gray-700">Order ID: <strong className="font-mono text-gray-900">#{order.id}</strong></p>
-              <p className="text-gray-700">Payment Method: <strong className="text-gray-900">{order.paymentMethod || 'Online UPI'}</strong></p>
-              <p className="text-gray-700">School/Institution: <strong>{order.school || 'General Retail'}</strong></p>
+              <p className="text-gray-700">Invoice No: <strong className="font-mono text-brand-teal">INV-{order.id}</strong></p>
+              <p className="text-gray-700">Invoice Date: <strong className="text-gray-900">{order.date || new Date().toLocaleDateString('en-GB')}</strong></p>
+              <p className="text-gray-700">Payment: <strong className="text-gray-900">{order.paymentMethod || 'Online UPI'}</strong> ({order.paymentStatus || 'Paid'})</p>
+              <p className="text-gray-700">School / Entity: <strong className="text-gray-900">{order.school || 'General Retail'}</strong></p>
             </div>
           </div>
+
+          {/* Dispatch & Live Delivery Tracking Details */}
+          {hasTracking ? (
+            <div className="p-3.5 bg-teal-50/80 rounded-xl border border-teal-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-black text-teal-800 flex items-center gap-1.5">
+                  <Truck size={14} className="text-teal-700" /> Dispatch & Delivery Tracking Details
+                </span>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-700">
+                  <div>
+                    Delivery Mode: <strong className="text-gray-900">{deliveryPartnerDisplay}</strong>
+                  </div>
+                  <div>
+                    Tracking ID / AWB: <strong className="font-mono text-teal-950 font-bold bg-white px-2 py-0.5 rounded border border-teal-200">{trackingNumberDisplay}</strong>
+                  </div>
+                </div>
+                {trackingLinkDisplay && (
+                  <div className="text-[10px] text-gray-500 font-mono break-all pt-0.5">
+                    Live Tracking URL: <a href={trackingLinkDisplay} target="_blank" rel="noreferrer" className="text-teal-700 hover:underline">{trackingLinkDisplay}</a>
+                  </div>
+                )}
+              </div>
+              {trackingLinkDisplay && (
+                <a
+                  href={trackingLinkDisplay}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0 print:hidden"
+                >
+                  <span>Track Shipment</span>
+                  <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-[11px] text-gray-500 flex items-center justify-between">
+              <span>Logistics Status: <strong className="text-gray-700">{isOut ? 'Out for Delivery (Awaiting Partner Assignment)' : 'Awaiting Out for Delivery Dispatch'}</strong></span>
+              <span className="text-[10px] text-gray-400 italic">Official Tracking ID & Link generated upon Out for Delivery</span>
+            </div>
+          )}
 
           {/* Itemized Table with Product-Level Seller & GST Applied Breakdown */}
           <div className="border border-gray-200 rounded-xl overflow-hidden text-xs">

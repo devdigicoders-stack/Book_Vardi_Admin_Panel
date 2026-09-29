@@ -17,7 +17,8 @@ import {
   Phone,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Lock
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
 
@@ -38,6 +39,14 @@ export default function OrderDetailModal({
   const [refundReason, setRefundReason] = useState('');
   const [showRefundPrompt, setShowRefundPrompt] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedAwb, setCopiedAwb] = useState(false);
+
+  // Delivery Partner Decision State
+  const [deliveryModeInput, setDeliveryModeInput] = useState('third_party'); // 'third_party' or 'self_delivery'
+  const [courierInput, setCourierInput] = useState('Delhivery');
+  const [driverNameInput, setDriverNameInput] = useState('');
+  const [driverPhoneInput, setDriverPhoneInput] = useState('');
+  const [vehicleNumberInput, setVehicleNumberInput] = useState('');
 
   const [returnActionState, setReturnActionState] = useState({
     showRejectInput: false,
@@ -75,6 +84,17 @@ export default function OrderDetailModal({
     if (order) {
       setNewTracking(order.trackingNumber || '');
       setSelectedStatus(order.status || 'Pending');
+
+      const isSelf = order.deliveryMode === 'self_delivery' ||
+        order.deliveryType === 'self_delivery' ||
+        order.deliveryType === 'self' ||
+        Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
+
+      setDeliveryModeInput(isSelf ? 'self_delivery' : 'third_party');
+      setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || 'Delhivery');
+      setDriverNameInput(order.selfDeliveryDetails?.deliveryPersonName || '');
+      setDriverPhoneInput(order.selfDeliveryDetails?.deliveryPersonPhone || '');
+      setVehicleNumberInput(order.selfDeliveryDetails?.vehicleNumber || '');
     }
   }, [order]);
 
@@ -98,10 +118,49 @@ export default function OrderDetailModal({
 
   if (!isOpen || !order) return null;
 
-  const handleSaveTracking = () => {
-    if (newTracking.trim()) {
-      onUpdateTracking(order.id, newTracking.trim());
+  const handleSaveDeliveryDetails = () => {
+    const isSelf = deliveryModeInput === 'self_delivery';
+    const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
+    const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+    const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+
+    let carrierUrl = order.trackingUrl || '';
+    if (!isSelf && newTracking.trim()) {
+      const lowerCourier = courierInput.toLowerCase();
+      carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${newTracking.trim()}` :
+        lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${newTracking.trim()}` :
+        lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${newTracking.trim()}` :
+        lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${newTracking.trim()}` :
+        `https://track.shiprocket.in/tracking/${newTracking.trim()}`;
     }
+
+    const payload = {
+      deliveryMode: deliveryModeInput,
+      deliveryType: deliveryModeInput,
+      courierName: !isSelf ? courierInput : '',
+      trackingNumber: !isSelf ? newTracking.trim() : tokenVal,
+      trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
+      selfDeliveryDetails: isSelf ? {
+        ...(order.selfDeliveryDetails || {}),
+        deliveryPersonName: driverNameInput.trim(),
+        deliveryPersonPhone: driverPhoneInput.trim(),
+        vehicleNumber: vehicleNumberInput.trim(),
+        deliveryPartnerToken: tokenVal,
+        trackingUrl: selfTrackingLink
+      } : undefined
+    };
+
+    if (onUpdateTracking) {
+      onUpdateTracking(order.id, payload.trackingNumber, payload);
+    }
+    if (onUpdateStatus) {
+      onUpdateStatus(order.id, selectedStatus, payload);
+    }
+    alert(`✅ Delivery partner & tracking details saved for Order #${order.id}!`);
+  };
+
+  const handleSaveTracking = () => {
+    handleSaveDeliveryDetails();
   };
 
   const handleStatusChange = (status) => {
@@ -150,6 +209,7 @@ export default function OrderDetailModal({
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                   order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
                   order.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                  (order.status === 'Out for Delivery' || order.status === 'out_for_delivery') ? 'bg-purple-100 text-purple-900 border border-purple-200' :
                   order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
                   'bg-amber-100 text-amber-800'
                 }`}>
@@ -488,6 +548,7 @@ export default function OrderDetailModal({
                   <option value="Pending">Pending</option>
                   <option value="Confirmed">Confirmed</option>
                   <option value="Shipped">Shipped</option>
+                  <option value="Out for Delivery">Out for Delivery</option>
                   <option value="Delivered">Delivered</option>
                   <option value="Cancelled">Cancelled</option>
                   <option value="refund_approved">Refund Approved</option>
@@ -730,79 +791,140 @@ export default function OrderDetailModal({
               </div>
             </div>
 
-            {/* Shipping & Tracking */}
+            {/* Shipping & Tracking Information */}
             <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50/60 space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
                 <MapPin size={14} className="text-teal-700" /> Shipping Destination
               </div>
               <div className="text-xs text-gray-700 leading-relaxed">{formattedShippingAddress}</div>
               
+              {/* Tracking ID Gate Display */}
               <div className="pt-2 border-t border-gray-200">
-                <label className="block text-[10px] font-bold text-gray-500 mb-1">
-                  Logistics Tracking ID:
-                </label>
-                {readOnly ? (
-                  <div className="text-xs font-mono font-bold text-gray-800 bg-white px-2.5 py-1.5 rounded-lg border border-gray-200">
-                    {order.trackingNumber || 'Not assigned yet'}
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newTracking}
-                      onChange={e => setNewTracking(e.target.value)}
-                      placeholder="e.g. DELHIVERY-7782910"
-                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg outline-hidden"
-                    />
-                    <button
-                      onClick={handleSaveTracking}
-                      className="px-3 py-1 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Save
-                    </button>
-                  </div>
-                )}
+                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Logistics Tracking Status:
+                </div>
+                {(() => {
+                  const normStatus = String(selectedStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+                  const isOut = normStatus === 'out for delivery' || normStatus === 'delivered';
+                  const isSelf = deliveryModeInput === 'self_delivery';
+                  const isPartnerDecided = isSelf
+                    ? Boolean(driverNameInput.trim() || driverPhoneInput.trim() || order.selfDeliveryDetails?.deliveryPartnerToken)
+                    : Boolean(courierInput.trim() && newTracking.trim());
+                  const canSeeTracking = isOut && isPartnerDecided;
+                  const trackingNoToDisplay = isSelf ? (order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${order.id}`) : newTracking.trim();
+
+                  if (!canSeeTracking) {
+                    return (
+                      <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5 text-[11px] text-amber-800">
+                          <Lock size={12} className="text-amber-600" />
+                          <span>Tracking Restricted to "Out for Delivery"</span>
+                        </div>
+                        <p className="text-[10px] text-amber-700 leading-normal">
+                          Tracking ID is only seen once order is <strong>Out for Delivery</strong> and delivery partner (3rd-Party or Self Delivery) is decided.
+                        </p>
+                        <div className="text-[10px] space-y-0.5 pt-0.5">
+                          <div>• Status: {isOut ? <span className="text-emerald-700 font-bold">✓ Ready ({selectedStatus})</span> : <span className="text-rose-600 font-bold">✗ {selectedStatus} (Requires "Out for Delivery")</span>}</div>
+                          <div>• Delivery Partner: {isPartnerDecided ? <span className="text-emerald-700 font-bold">✓ Decided</span> : <span className="text-rose-600 font-bold">✗ Not Decided</span>}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-950 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[11px] text-emerald-900 flex items-center gap-1">
+                          <CheckCircle size={12} className="text-emerald-600" /> Active Tracking ID (Live on Invoice)
+                        </span>
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-700 text-white uppercase">
+                          Out for Delivery
+                        </span>
+                      </div>
+                      <div className="font-mono font-bold text-gray-900 text-xs bg-white p-1.5 rounded border border-emerald-100 flex items-center justify-between">
+                        <span>{trackingNoToDisplay}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(trackingNoToDisplay);
+                            setCopiedAwb(true);
+                            setTimeout(() => setCopiedAwb(false), 2000);
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-sans font-bold bg-gray-100 hover:bg-gray-200 rounded cursor-pointer"
+                        >
+                          {copiedAwb ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
           </div>
 
-          {/* Fulfillment Channel & Seller Details */}
+          {/* Fulfillment Channel & Delivery Partner Assignment */}
           {(() => {
-            const isSelf = order.deliveryMode === 'self_delivery' ||
-              order.deliveryType === 'self_delivery' ||
-              order.deliveryType === 'self' ||
-              Boolean(order.selfDeliveryDetails?.deliveryPartnerToken);
+            const isSelf = deliveryModeInput === 'self_delivery';
+            const normStatus = String(selectedStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+            const isOut = normStatus === 'out for delivery' || normStatus === 'delivered';
+            const isPartnerDecided = isSelf
+              ? Boolean(driverNameInput.trim() || driverPhoneInput.trim() || order.selfDeliveryDetails?.deliveryPartnerToken)
+              : Boolean(courierInput.trim() && newTracking.trim());
+            const canSeeTracking = isOut && isPartnerDecided;
 
-            const selfDetails = order.selfDeliveryDetails || order.items?.[0]?.selfDeliveryDetails;
+            const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
+            const clientAppUrl = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+            const selfDeliveryUrl = `${clientAppUrl}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+
             const sellerDetails = order.sellerDetails || order.items?.[0]?.sellerDetails || (order.items?.[0]?.sellerId && typeof order.items[0].sellerId === 'object' ? order.items[0].sellerId : null);
-
             const storeName = sellerDetails?.storeName || sellerDetails?.name || order.items?.[0]?.storeName || order.items?.[0]?.sellerName || 'Partner Merchant';
             const sellerContactPhone = sellerDetails?.phone || order.items?.[0]?.sellerPhone || '';
-            const sellerAddressStr = sellerDetails?.address || sellerDetails?.city || '';
-
-            const tokenVal = selfDetails?.deliveryPartnerToken || order.trackingNumber || `DLV-${order.id}`;
-            const clientAppUrl = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
-            const selfDeliveryUrl = selfDetails?.trackingUrl || `${clientAppUrl}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
-
-            const courierName = order.courierName || order.items?.[0]?.thirdPartyDetails?.courierName || 'Third-Party Logistics';
-            const awbNumber = order.trackingNumber || order.items?.[0]?.thirdPartyDetails?.trackingNumber || '';
 
             return (
               <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-teal-950">
                     <Truck size={15} className="text-teal-700" />
-                    <span>Fulfillment Method & Seller Details</span>
+                    <span>Fulfillment & Delivery Partner Assignment</span>
                   </div>
-                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${isSelf ? 'bg-teal-700 text-white' : 'bg-blue-700 text-white'}`}>
-                    {isSelf ? '🛵 Direct Self-Delivery (Store Fleet)' : `🚚 3rd-Party Carrier (${courierName})`}
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full w-fit ${isSelf ? 'bg-teal-700 text-white' : 'bg-blue-700 text-white'}`}>
+                    {isSelf ? '🛵 Direct Self-Delivery (Store Fleet)' : `🚚 3rd-Party Carrier (${courierInput})`}
                   </span>
                 </div>
 
+                {/* Delivery Mode Toggle Tabs */}
+                {!readOnly && (
+                  <div className="grid grid-cols-2 gap-2 bg-teal-100/60 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryModeInput('third_party')}
+                      className={`py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                        deliveryModeInput === 'third_party'
+                          ? 'bg-white text-teal-900 shadow-xs'
+                          : 'text-teal-800 hover:text-teal-950'
+                      }`}
+                    >
+                      🚚 3rd-Party Courier (Delhivery / BlueDart)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryModeInput('self_delivery')}
+                      className={`py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                        deliveryModeInput === 'self_delivery'
+                          ? 'bg-white text-teal-900 shadow-xs'
+                          : 'text-teal-800 hover:text-teal-950'
+                      }`}
+                    >
+                      🛵 Direct Self-Delivery (Store Rider)
+                    </button>
+                  </div>
+                )}
+
+                {/* Delivery Partner Configuration Form */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   
-                  {/* Seller Card */}
+                  {/* Seller / Store Summary Card */}
                   <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1">
                     <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
                       <Store size={11} className="text-teal-700" /> Assigned Seller / Store
@@ -813,76 +935,128 @@ export default function OrderDetailModal({
                         <Phone size={11} className="text-gray-400" /> {sellerContactPhone}
                       </div>
                     )}
-                    {sellerAddressStr && (
-                      <div className="text-[10px] text-gray-500">{sellerAddressStr}</div>
-                    )}
+                    <div className="text-[10px] text-gray-400 pt-0.5">
+                      Fulfillment Mode: <strong className="text-gray-700">{isSelf ? 'Store Fleet Direct' : 'Logistics Partner'}</strong>
+                    </div>
                   </div>
 
-                  {/* Delivery Mode Details */}
-                  {isSelf ? (
-                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5">
+                  {/* Mode Specific Inputs */}
+                  {deliveryModeInput === 'third_party' ? (
+                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-2">
                       <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-                        <User size={11} className="text-teal-700" /> Driver / Rider Details
+                        <Truck size={11} className="text-teal-700" /> 3rd-Party Logistics Carrier
                       </span>
-                      <div className="text-xs">
-                        <strong className="text-gray-900">{selfDetails?.deliveryPersonName || 'Store Assigned Rider'}</strong>
-                        {selfDetails?.deliveryPersonPhone && (
-                          <span className="text-gray-600 ml-1.5 font-mono">({selfDetails.deliveryPersonPhone})</span>
-                        )}
-                      </div>
-                      {selfDetails?.vehicleNumber && (
-                        <div className="text-[10px] text-gray-500 font-mono">
-                          Vehicle: <span className="font-bold text-gray-800">{selfDetails.vehicleNumber}</span>
+                      {readOnly ? (
+                        <div className="text-xs">
+                          <div className="font-bold text-gray-900">{courierInput}</div>
+                          <div className="font-mono text-gray-600 text-[11px]">AWB: {canSeeTracking ? (newTracking || 'Awaiting assignment') : 'Hidden (Awaiting Out for Delivery)'}</div>
                         </div>
-                      )}
-                      {selfDetails?.deliveryOtp && (
-                        <div className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
-                          Delivery Verification OTP: {selfDetails.deliveryOtp}
+                      ) : (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Select Courier Partner:</label>
+                            <select
+                              value={courierInput}
+                              onChange={e => setCourierInput(e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white outline-hidden cursor-pointer"
+                            >
+                              <option value="Delhivery">Delhivery Express</option>
+                              <option value="BlueDart">BlueDart Air</option>
+                              <option value="DTDC">DTDC Courier</option>
+                              <option value="Ekart">Ekart Logistics</option>
+                              <option value="IndiaPost">SpeedPost / India Post</option>
+                              <option value="Shiprocket">Shiprocket Automated</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Tracking AWB Number:</label>
+                            <input
+                              type="text"
+                              value={newTracking}
+                              onChange={e => setNewTracking(e.target.value)}
+                              placeholder="e.g. DLH-98765432"
+                              className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded-lg outline-hidden"
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5">
+                    /* Self Delivery Form */
+                    <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-2">
                       <span className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-                        <Truck size={11} className="text-teal-700" /> Courier Logistics
+                        <User size={11} className="text-teal-700" /> Self-Delivery Driver / Rider Details
                       </span>
-                      <div className="text-xs font-bold text-gray-900">{courierName}</div>
-                      <div className="text-[11px] font-mono text-gray-600">
-                        AWB: {awbNumber || 'Awaiting assignment'}
-                      </div>
-                      {order.trackingUrl && (
-                        <a
-                          href={order.trackingUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:underline pt-0.5"
-                        >
-                          <span>Direct Carrier Tracking</span>
-                          <ExternalLink size={11} />
-                        </a>
+                      {readOnly ? (
+                        <div className="text-xs space-y-1">
+                          <div><strong>Driver:</strong> {driverNameInput || 'Store Fleet'}</div>
+                          {driverPhoneInput && <div><strong>Phone:</strong> {driverPhoneInput}</div>}
+                          {vehicleNumberInput && <div><strong>Vehicle:</strong> {vehicleNumberInput}</div>}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={driverNameInput}
+                            onChange={e => setDriverNameInput(e.target.value)}
+                            placeholder="Driver Name (e.g. Ramesh Kumar)"
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden"
+                          />
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <input
+                              type="text"
+                              value={driverPhoneInput}
+                              onChange={e => setDriverPhoneInput(e.target.value)}
+                              placeholder="Phone (+91...)"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden"
+                            />
+                            <input
+                              type="text"
+                              value={vehicleNumberInput}
+                              onChange={e => setVehicleNumberInput(e.target.value)}
+                              placeholder="Vehicle (e.g. UP32...)"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden font-mono"
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
 
                 </div>
 
-                {/* Self-Delivery Link with Copy & Open */}
-                {isSelf && (
+                {/* Save Button for Admin */}
+                {!readOnly && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveDeliveryDetails}
+                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check size={14} />
+                      <span>Save Delivery Partner & Tracking Details</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Active Tracking URL banner when Out for Delivery */}
+                {canSeeTracking && (
                   <div className="p-2.5 bg-white rounded-xl border border-teal-100 space-y-1">
                     <span className="text-[10px] font-bold text-gray-600 flex items-center gap-1">
-                      <ExternalLink size={11} className="text-teal-700" /> Self-Delivery Tracking & Verification URL:
+                      <ExternalLink size={11} className="text-teal-700" /> Active Tracking & Customer Verification Link:
                     </span>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
                         readOnly
-                        value={selfDeliveryUrl}
+                        value={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`)}
                         className="flex-1 px-2.5 py-1 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-lg text-gray-700 truncate select-all"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText(selfDeliveryUrl);
+                          const url = isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`);
+                          navigator.clipboard.writeText(url);
                           setCopiedLink(true);
                           setTimeout(() => setCopiedLink(false), 2000);
                         }}
@@ -891,7 +1065,7 @@ export default function OrderDetailModal({
                         {copiedLink ? 'Copied!' : 'Copy Link'}
                       </button>
                       <a
-                        href={selfDeliveryUrl}
+                        href={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`)}
                         target="_blank"
                         rel="noreferrer"
                         className="px-2.5 py-1 text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1"
@@ -910,10 +1084,45 @@ export default function OrderDetailModal({
 
       </div>
 
+      {/* Tax Invoice Modal with latest merged order state */}
       <TaxInvoiceModal
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
-        order={order}
+        order={(() => {
+          const isSelf = deliveryModeInput === 'self_delivery';
+          const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
+          const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+          const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+          
+          let carrierUrl = order.trackingUrl || '';
+          if (!isSelf && newTracking.trim()) {
+            const lowerCourier = courierInput.toLowerCase();
+            carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${newTracking.trim()}` :
+              lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${newTracking.trim()}` :
+              lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${newTracking.trim()}` :
+              lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${newTracking.trim()}` :
+              `https://track.shiprocket.in/tracking/${newTracking.trim()}`;
+          }
+
+          return {
+            ...order,
+            status: selectedStatus || order.status,
+            overallStatus: selectedStatus || order.status,
+            deliveryMode: deliveryModeInput,
+            deliveryType: deliveryModeInput,
+            courierName: !isSelf ? courierInput : '',
+            trackingNumber: !isSelf ? newTracking.trim() : tokenVal,
+            trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
+            selfDeliveryDetails: isSelf ? {
+              ...(order.selfDeliveryDetails || {}),
+              deliveryPersonName: driverNameInput.trim(),
+              deliveryPersonPhone: driverPhoneInput.trim(),
+              vehicleNumber: vehicleNumberInput.trim(),
+              deliveryPartnerToken: tokenVal,
+              trackingUrl: selfTrackingLink
+            } : order.selfDeliveryDetails
+          };
+        })()}
       />
     </div>
   );

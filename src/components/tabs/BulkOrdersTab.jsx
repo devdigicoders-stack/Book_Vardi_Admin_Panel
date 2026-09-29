@@ -21,19 +21,22 @@ import {
   MapPin,
   Sparkles,
   Eye,
-  Package
+  Package,
+  Percent
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import BulkOrderPreviewModal from './BulkOrderPreviewModal';
+import PartialAdvanceReceiptModal from '../modals/PartialAdvanceReceiptModal';
 
 export default function BulkOrdersTab() {
-  const { schoolOrders, sellers, distributeSchoolBulkOrder, approveSellerQuotation } = useAdminData();
+  const { schoolOrders, sellers, distributeSchoolBulkOrder, approveSellerQuotation, updateSchoolOrderStatusAndTracking } = useAdminData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
   // Preview Expanded Detail Modal State
   const [previewOrder, setPreviewOrder] = useState(null);
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
 
   // Distribution Modal State
   const [distributeModalOrder, setDistributeModalOrder] = useState(null);
@@ -256,6 +259,29 @@ export default function BulkOrdersTab() {
                       <span className="flex items-center gap-1 text-teal-700 font-medium">
                         <MapPin size={13} /> {order.city}, {order.state}
                       </span>
+                      {order.expectedQuotationDate && (() => {
+                        const target = new Date(order.expectedQuotationDate);
+                        if (isNaN(target.getTime())) return null;
+                        const now = new Date();
+                        const targetMid = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+                        const nowMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                        const diffDays = Math.round((targetMid - nowMid) / (1000 * 60 * 60 * 24));
+                        const isExpired = diffDays < 0;
+                        const isUrgent = diffDays >= 0 && diffDays <= 2;
+                        const text = diffDays > 1 ? `${diffDays}d left` : diffDays === 1 ? '1d left' : diffDays === 0 ? 'Today' : `Expired (${Math.abs(diffDays)}d ago)`;
+
+                        return (
+                          <span className={`flex items-center gap-1 font-bold px-2 py-0.5 rounded-md text-[11px] border ${
+                            isExpired
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : isUrgent
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-blue-50 text-blue-800 border-blue-200'
+                          }`}>
+                            <Clock size={12} /> Quotation Deadline: {target.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} ({text})
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -333,6 +359,41 @@ export default function BulkOrdersTab() {
                     >
                       <span>Review Quotations</span>
                       <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Advance Payment Indicator Strip */}
+                {(order.buyerAdvancePercentage || order.buyerAdvanceAmount || order.sellerAdvancePercentage || order.sellerAdvanceAmount || order.advancePaymentStatus === 'paid_partially') && (
+                  <div className="bg-emerald-50/70 border border-emerald-200/80 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <DollarSign size={14} className="text-emerald-700 shrink-0" />
+                      <span className="font-extrabold text-emerald-950">
+                        {order.advancePaymentStatus === 'paid_partially' ? (
+                          <span className="text-emerald-800">✅ Advance Paid: ₹{Number(order.advancePaidAmount || order.buyerAdvanceAmount || 0).toLocaleString()}</span>
+                        ) : order.buyerAdvancePercentage ? (
+                          <span>Buyer Offered Advance: <strong className="text-emerald-900">{order.buyerAdvancePercentage}%</strong>{order.buyerAdvanceAmount ? ` (₹${Number(order.buyerAdvanceAmount).toLocaleString()})` : ''}</span>
+                        ) : (
+                          <span>Advance Terms Registered</span>
+                        )}
+                      </span>
+                      {order.sellerAdvancePercentage && (
+                        <span className="text-purple-900 font-bold bg-purple-100/70 px-2 py-0.5 rounded text-[10px]">
+                          Seller Demanded: {order.sellerAdvancePercentage}% {order.sellerAdvanceAmount ? `(₹${Number(order.sellerAdvanceAmount).toLocaleString()})` : ''}
+                        </span>
+                      )}
+                      {order.buyerAdvanceNote && (
+                        <span className="text-gray-500 text-[11px] hidden sm:inline">"{order.buyerAdvanceNote}"</span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReceiptOrder(order)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100/60 text-emerald-900 font-extrabold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <FileText size={12} className="text-emerald-700" />
+                      <span>Partial Receipt</span>
                     </button>
                   </div>
                 )}
@@ -688,6 +749,28 @@ export default function BulkOrdersTab() {
                         </div>
                       )}
 
+                      {/* Demanded Advance Payment Banner */}
+                      {(quote.sellerAdvancePercentage || quote.sellerAdvanceAmount || quote.sellerAdvanceTerms) && (
+                        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-start gap-2 text-xs text-emerald-950">
+                          <DollarSign size={15} className="text-emerald-700 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-[10px] uppercase tracking-wider text-emerald-900">
+                                Demanded Mobilization Advance: {quote.sellerAdvancePercentage ? `${quote.sellerAdvancePercentage}%` : ''} {quote.sellerAdvanceAmount ? `(₹${Number(quote.sellerAdvanceAmount).toLocaleString()})` : ''}
+                              </span>
+                              <span className="text-[10px] text-emerald-700 font-bold">
+                                Balance: ₹{Math.max(0, Number(quote.quoteAmount || 0) - Number(quote.sellerAdvanceAmount || 0)).toLocaleString()}
+                              </span>
+                            </div>
+                            {quote.sellerAdvanceTerms && (
+                              <p className="text-[11px] text-emerald-800">
+                                <span className="font-semibold text-emerald-950">Terms:</span> {quote.sellerAdvanceTerms}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-2 text-[11px] bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                         <div>
                           <span className="text-gray-400 font-medium">Estimated Delivery:</span>
@@ -716,15 +799,9 @@ export default function BulkOrdersTab() {
                         )}
 
                         {!isApproved && (
-                          <button
-                            onClick={() => {
-                              approveSellerQuotation(viewQuotesOrder.id || viewQuotesOrder._id, qId);
-                              setViewQuotesOrder(null);
-                            }}
-                            className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-                          >
-                            Approve Quote & Assign
-                          </button>
+                          <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
+                            Awaiting Buyer Decision
+                          </span>
                         )}
                       </div>
                     </div>
@@ -758,11 +835,20 @@ export default function BulkOrdersTab() {
           distributeSchoolBulkOrder(orderId, payload);
           setPreviewOrder(null);
         }}
-        onApproveQuote={(orderId, quoteId) => {
-          approveSellerQuotation(orderId, quoteId);
-          setPreviewOrder(null);
+        onUpdateLogistics={(orderId, payload) => {
+          if (updateSchoolOrderStatusAndTracking) updateSchoolOrderStatusAndTracking(orderId, payload);
+          setPreviewOrder(prev => (prev && (prev.id === orderId || prev._id === orderId) ? { ...prev, ...payload } : prev));
         }}
       />
+
+      {/* Partial Advance Payment Receipt Modal */}
+      {selectedReceiptOrder && (
+        <PartialAdvanceReceiptModal
+          isOpen={Boolean(selectedReceiptOrder)}
+          onClose={() => setSelectedReceiptOrder(null)}
+          order={selectedReceiptOrder}
+        />
+      )}
 
     </div>
   );

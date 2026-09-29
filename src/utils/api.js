@@ -1,5 +1,5 @@
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-const API_BASE_URL = `${SERVER_URL}/admin`;
+export const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = `${SERVER_URL}/admin`;
 
 export function resolveImageUrl(url) {
   if (!url) return '';
@@ -279,6 +279,75 @@ export const deleteAdminProductApi = async (id) => {
 };
 
 // ==========================================
+// 3.5. Kit & Bundle Management APIs
+// ==========================================
+export const fetchAdminKitsApi = async (params = {}) => {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE_URL}/kits${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) return { success: false, kits: [] };
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error('fetchAdminKitsApi error:', error);
+    return { success: false, kits: [] };
+  }
+};
+
+export const updateKitApprovalStatusApi = async (id, approvalStatus, comment = '', rejectionReason = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}/approval`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ approvalStatus, approvalComment: comment, rejectionReason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const createAdminKitApi = async (kitData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(kitData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminKitApi = async (id, kitData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(kitData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminKitApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
 // 4. Inventory & Stock Management APIs (RESTful)
 // ==========================================
 export const fetchAdminInventoryApi = async (params = {}) => {
@@ -421,12 +490,12 @@ export const fetchAdminOrdersApi = async () => {
   }
 };
 
-export const updateOrderStatusApi = async (id, status) => {
+export const updateOrderStatusApi = async (id, status, extraPayload = {}) => {
   try {
     const res = await fetch(`${SERVER_URL}/orders/${id}/status`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, ...extraPayload })
     });
     return await res.json();
   } catch (error) {
@@ -864,12 +933,17 @@ export const distributeSchoolBulkOrderApi = async (id, payload) => {
   }
 };
 
-export const approveSellerQuotationApi = async (id, quoteId) => {
+export const approveSellerQuotationApi = async (id, quoteId, updateData = {}) => {
   try {
     const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/approve-quote`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ quoteId })
+      body: JSON.stringify({
+        quoteId,
+        updatedRequirements: updateData?.updatedRequirements,
+        totalQuantity: updateData?.totalQuantity,
+        quoteAmount: updateData?.quoteAmount
+      })
     });
     return await res.json();
   } catch (error) {

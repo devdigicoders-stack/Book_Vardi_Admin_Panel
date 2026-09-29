@@ -19,7 +19,8 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
-  Layers
+  Layers,
+  Boxes
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { CATEGORIES } from '../../constants/categories';
@@ -152,12 +153,23 @@ export default function ProductsTab() {
           )}
 
           {canEdit && (
-            <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus size={16} /> Add Catalog Product
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('adminOpenKitsTab'))}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                title="Go to Kit & Bundle creator"
+              >
+                <Boxes size={16} /> Kit Bundles
+              </button>
+
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus size={16} /> Add Catalog Product
+              </button>
+            </div>
           )}
         </div>
       </div>

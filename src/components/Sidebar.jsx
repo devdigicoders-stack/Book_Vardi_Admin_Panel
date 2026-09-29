@@ -19,7 +19,8 @@ import {
   ArrowLeft,
   Shield,
   Truck,
-  Layers
+  Layers,
+  Boxes
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
@@ -36,6 +37,7 @@ export const ADMIN_TABS = [
     title: 'Catalog & Stock',
     items: [
       { id: 'products', label: 'Products', icon: <Package size={17} />, badgeKey: 'pendingProducts' },
+      { id: 'kits', label: 'Kits & Bundles', icon: <Boxes size={17} />, badgeKey: 'pendingKits' },
       { id: 'categories', label: 'Categories', icon: <Layers size={17} /> },
       { id: 'inventory', label: 'Inventory', icon: <Box size={17} />, badgeKey: 'lowStock' }
     ]
@@ -76,7 +78,7 @@ export const ADMIN_TABS = [
 ];
 
 export default function Sidebar({ activeTab, onSelectTab }) {
-  const { products, orders, sellers, reviews, supportTickets, notifications, adminUser, canViewTab } = useAdminData();
+  const { products, kits = [], orders, sellers, reviews, supportTickets, notifications, adminUser, canViewTab } = useAdminData();
 
   const getBadge = (key) => {
     switch (key) {
@@ -86,6 +88,10 @@ export default function Sidebar({ activeTab, onSelectTab }) {
       }
       case 'pendingProducts': {
         const count = products.filter(p => p.approvalStatus === 'Pending').length;
+        return count > 0 ? count : null;
+      }
+      case 'pendingKits': {
+        const count = (kits || []).filter(k => k.approvalStatus === 'Pending').length;
         return count > 0 ? count : null;
       }
       case 'lowStock': {

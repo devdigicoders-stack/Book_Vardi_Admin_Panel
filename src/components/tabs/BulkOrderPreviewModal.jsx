@@ -21,8 +21,17 @@ import {
   Camera,
   Check,
   Store,
-  AlertCircle
+  AlertCircle,
+  Truck,
+  ExternalLink,
+  Lock,
+  Printer,
+  Percent,
+  Plus,
+  Minus
 } from 'lucide-react';
+import TaxInvoiceModal from '../modals/TaxInvoiceModal';
+import PartialAdvanceReceiptModal from '../modals/PartialAdvanceReceiptModal';
 
 export default function BulkOrderPreviewModal({
   order,
@@ -34,6 +43,7 @@ export default function BulkOrderPreviewModal({
   onApproveQuote, // (orderId, quoteId) => void
   onSubmitQuote, // (orderId, { quoteAmount, unitPrice, itemPrices, volumeDiscountNote, estimatedDeliveryDays, notes }) => void
   onAcceptDirect, // (orderId) => void
+  onUpdateLogistics, // (orderId, payload) => void
   sellerUser = null // Current seller info when userRole === 'seller'
 }) {
   if (!order) return null;
@@ -64,6 +74,53 @@ export default function BulkOrderPreviewModal({
     ? order.quotations.find(q => String(q.sellerId) === String(currentSellerId))
     : null;
 
+  // Negotiation History Collapsible state
+  const [expandedHistoryQuotes, setExpandedHistoryQuotes] = useState({});
+  const toggleHistory = (qId) => {
+    setExpandedHistoryQuotes(prev => ({ ...prev, [qId]: !prev[qId] }));
+  };
+
+  // Active Acceptance & Size Adjustment Modal State
+  const [acceptQuoteModalData, setAcceptQuoteModalData] = useState(null);
+
+  const handleOpenAcceptQuoteModal = (quote) => {
+    const reqs = (order.requirements || []).map((req, idx) => {
+      const qItemPrice = quote.itemPrices?.find(p => String(p.itemId) === String(req.itemId || req._id || idx))?.price ||
+                         (Number(quote.quoteAmount) / Math.max(1, (order.requirements || []).reduce((s, r) => s + (Number(r.quantity) || 1), 0)));
+      return {
+        itemId: req.itemId || req._id || `item-${idx}`,
+        itemName: req.itemName,
+        category: req.category || 'General Requirement',
+        originalQuantity: Number(req.quantity) || 1,
+        quantity: Number(req.quantity) || 1,
+        pricePerUnit: Math.round(Number(qItemPrice) || 0),
+        totalPrice: Math.round((Number(req.quantity) || 1) * (Number(qItemPrice) || 0))
+      };
+    });
+
+    setAcceptQuoteModalData({
+      quote,
+      items: reqs
+    });
+  };
+
+  const handleAdjustItemQty = (index, deltaOrVal, isDirectVal = false) => {
+    if (!acceptQuoteModalData) return;
+    setAcceptQuoteModalData(prev => {
+      const nextItems = [...prev.items];
+      const target = { ...nextItems[index] };
+      let newQty = isDirectVal ? Number(deltaOrVal) : (target.quantity + deltaOrVal);
+      if (isNaN(newQty) || newQty < 1) newQty = 1;
+      target.quantity = newQty;
+      target.totalPrice = Math.round(newQty * target.pricePerUnit);
+      nextItems[index] = target;
+      return {
+        ...prev,
+        items: nextItems
+      };
+    });
+  };
+
   const targetBudgetNum = Number(order.targetBudgetPerKit || order.estimatedBudget || 0);
   const totalQtyNum = Number(
     order.totalQuantity ||
@@ -84,6 +141,33 @@ export default function BulkOrderPreviewModal({
   );
   const [quoteNotes, setQuoteNotes] = useState(existingSellerQuote ? (existingSellerQuote.notes || '') : '');
 
+  // Logistics & Delivery Tracking State
+  const [deliveryMode, setDeliveryMode] = useState(order.deliveryMode || 'third_party');
+  const [courierName, setCourierName] = useState(order.courierName || 'Delhivery');
+  const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
+  const [trackingUrl, setTrackingUrl] = useState(order.trackingUrl || '');
+  const [deliveryStatus, setDeliveryStatus] = useState(order.deliveryStatus || order.status || 'quote_accepted');
+  const [deliveryPersonName, setDeliveryPersonName] = useState(order.selfDeliveryDetails?.deliveryPersonName || '');
+  const [deliveryPersonPhone, setDeliveryPersonPhone] = useState(order.selfDeliveryDetails?.deliveryPersonPhone || '');
+  const [vehicleNumber, setVehicleNumber] = useState(order.selfDeliveryDetails?.vehicleNumber || '');
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [logisticsSavedMessage, setLogisticsSavedMessage] = useState('');
+
+  // Advance Payment Counter-Demand State
+  const [sellerAdvanceType, setSellerAdvanceType] = useState(
+    existingSellerQuote?.sellerAdvanceType || order.sellerAdvanceType || order.buyerAdvanceType || 'percentage'
+  );
+  const [sellerAdvancePercentage, setSellerAdvancePercentage] = useState(
+    existingSellerQuote?.sellerAdvancePercentage || order.sellerAdvancePercentage || order.buyerAdvancePercentage || 30
+  );
+  const [sellerAdvanceAmount, setSellerAdvanceAmount] = useState(
+    existingSellerQuote?.sellerAdvanceAmount ? String(existingSellerQuote.sellerAdvanceAmount) : (order.sellerAdvanceAmount ? String(order.sellerAdvanceAmount) : '')
+  );
+  const [sellerAdvanceTerms, setSellerAdvanceTerms] = useState(
+    existingSellerQuote?.sellerAdvanceTerms || order.sellerAdvanceTerms || ''
+  );
+
   // Keep state updated when order changes
   useEffect(() => {
     if (order) {
@@ -95,6 +179,26 @@ export default function BulkOrderPreviewModal({
       setSelectedMultipleSellers(
         (order.invitedSellerIds || []).map(s => (typeof s === 'object' ? (s._id || s.id) : s))
       );
+      setDeliveryMode(order.deliveryMode || 'third_party');
+      setCourierName(order.courierName || 'Delhivery');
+      setTrackingNumber(order.trackingNumber || '');
+
+      if (existingSellerQuote) {
+        setSellerAdvanceType(existingSellerQuote.sellerAdvanceType || 'percentage');
+        setSellerAdvancePercentage(existingSellerQuote.sellerAdvancePercentage || 30);
+        setSellerAdvanceAmount(existingSellerQuote.sellerAdvanceAmount ? String(existingSellerQuote.sellerAdvanceAmount) : '');
+        setSellerAdvanceTerms(existingSellerQuote.sellerAdvanceTerms || '');
+      } else {
+        setSellerAdvanceType(order.buyerAdvanceType || 'percentage');
+        setSellerAdvancePercentage(order.buyerAdvancePercentage || 30);
+        setSellerAdvanceAmount(order.buyerAdvanceAmount ? String(order.buyerAdvanceAmount) : '');
+        setSellerAdvanceTerms(order.buyerAdvanceNote ? `Agreed to buyer advance: ${order.buyerAdvanceNote}` : '30% advance on sample approval before bulk procurement, 70% upon delivery.');
+      }
+      setTrackingUrl(order.trackingUrl || '');
+      setDeliveryStatus(order.deliveryStatus || order.status || 'quote_accepted');
+      setDeliveryPersonName(order.selfDeliveryDetails?.deliveryPersonName || '');
+      setDeliveryPersonPhone(order.selfDeliveryDetails?.deliveryPersonPhone || '');
+      setVehicleNumber(order.selfDeliveryDetails?.vehicleNumber || '');
     }
   }, [order, initialTab]);
 
@@ -202,6 +306,120 @@ export default function BulkOrderPreviewModal({
   const winningQuote = Array.isArray(order.quotations)
     ? order.quotations.find(q => q.status === 'approved' || String(q._id) === String(order.acceptedQuoteId))
     : null;
+
+  // Logistics tracking gating: strictly visible when Out for Delivery & partner decided
+  const normStatus = String(order.deliveryStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+  const isOut = normStatus === 'out for delivery' || normStatus === 'delivered';
+  const isSelf = String(order.deliveryMode || '').toLowerCase().includes('self') || Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
+  const isThirdParty = String(order.deliveryMode || '').toLowerCase().includes('third') || Boolean(order.courierName && order.courierName !== 'N/A');
+  const hasPartner = isSelf || isThirdParty || Boolean((order.courierName && order.courierName !== 'N/A') || order.selfDeliveryDetails?.deliveryPersonName);
+  const canViewTracking = isOut && hasPartner && Boolean(order.trackingNumber || order.selfDeliveryDetails?.deliveryPartnerToken);
+
+  const deliveryPartnerDisplay = isSelf 
+    ? (order.selfDeliveryDetails?.deliveryPersonName ? `Direct Self-Delivery (Rider: ${order.selfDeliveryDetails.deliveryPersonName})` : 'Direct Self-Delivery (Store Fleet)')
+    : (order.courierName || 'N/A');
+
+  const trackingNumberDisplay = order.trackingNumber || (isSelf ? order.selfDeliveryDetails?.deliveryPartnerToken : '') || '';
+  const trackingLinkDisplay = order.trackingUrl || order.selfDeliveryDetails?.trackingUrl || '';
+
+  // Transform bulk order into TaxInvoice-compatible object
+  const taxInvoiceOrder = useMemo(() => {
+    if (!order) return null;
+    const totalQty = Number(order.totalQuantity || order.quantity || (Array.isArray(order.requirements) ? order.requirements.reduce((s, r) => s + Number(r.quantity || 0), 0) : 100));
+    const quoteVal = Number(winningQuote?.quoteAmount || order.targetBudgetPerKit || order.estimatedBudget || order.overallBudget || 0);
+    const avgPrice = totalQty > 0 ? Math.round(quoteVal / totalQty) : 0;
+
+    const reqItems = Array.isArray(order.requirements) && order.requirements.length > 0
+      ? order.requirements.map((r, idx) => ({
+          id: r._id || idx + 1,
+          name: r.itemName || 'School Supply Item',
+          category: r.category || 'School Uniform',
+          quantity: Number(r.quantity || 1),
+          price: Number(r.sellerPricePerUnit || (winningQuote?.itemPrices?.find(ip => String(ip.itemId || ip.itemName) === String(r._id || r.itemName))?.pricePerUnit) || avgPrice || 100),
+          sellerName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'Verified Institutional Seller',
+          sellerStoreName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'Verified Institutional Seller'
+        }))
+      : [{
+          id: 1,
+          name: order.requirementSummary || 'Institutional Bulk Supply Order',
+          category: 'School Uniform',
+          quantity: totalQty,
+          price: avgPrice,
+          sellerName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'Verified Institutional Seller',
+          sellerStoreName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'Verified Institutional Seller'
+        }];
+
+    return {
+      id: order.referenceId || order.id || order._id || 'BULK-PO',
+      orderId: order.referenceId || order.id || order._id || 'BULK-PO',
+      date: new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB'),
+      customerName: order.institutionName || order.contactName || 'School Administrator',
+      customerPhone: order.contactPhone || 'N/A',
+      address: `${order.address || ''}, ${order.city || ''}, ${order.state || ''} ${order.pincode ? '- ' + order.pincode : ''}`.trim() || 'Campus Delivery Address',
+      shippingAddress: {
+        street: order.address || 'Campus Delivery Address',
+        city: order.city || 'Lucknow',
+        state: order.state || 'Uttar Pradesh',
+        pincode: order.pincode || '226001'
+      },
+      school: order.institutionName || 'Institutional Order',
+      paymentMethod: 'School PO / Bank Transfer',
+      paymentStatus: 'paid',
+      status: order.deliveryStatus || order.status || 'confirmed',
+      overallStatus: order.deliveryStatus || order.status || 'confirmed',
+      deliveryMode: order.deliveryMode || '',
+      courierName: order.courierName || '',
+      trackingNumber: order.trackingNumber || '',
+      trackingUrl: order.trackingUrl || '',
+      selfDeliveryDetails: order.selfDeliveryDetails || null,
+      sellerName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'BookVardi Verified Seller',
+      sellerStoreName: winningQuote?.sellerStoreName || winningQuote?.sellerName || 'BookVardi Verified Seller',
+      sellerPhone: winningQuote?.sellerPhone || 'Helpline',
+      items: reqItems,
+      total: quoteVal
+    };
+  }, [order, winningQuote]);
+
+  const handleSaveLogistics = (e) => {
+    e.preventDefault();
+    if (!onUpdateLogistics) return;
+
+    let finalTrackingUrl = trackingUrl;
+    let selfDetails = null;
+
+    if (deliveryMode === 'self_delivery') {
+      const riderToken = order.selfDeliveryDetails?.deliveryPartnerToken || `SELF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const riderUrl = `${window.location.origin}/#delivery-partner?token=${riderToken}`;
+      selfDetails = {
+        deliveryPersonName,
+        deliveryPersonPhone,
+        vehicleNumber,
+        deliveryPartnerToken: riderToken,
+        trackingUrl: riderUrl
+      };
+      finalTrackingUrl = riderUrl;
+    } else {
+      if (!finalTrackingUrl && trackingNumber) {
+        if (courierName === 'Delhivery') finalTrackingUrl = `https://www.delhivery.com/track/package/${trackingNumber}`;
+        else if (courierName === 'BlueDart') finalTrackingUrl = `https://www.bluedart.com/tracking?trackNumber=${trackingNumber}`;
+        else if (courierName === 'DTDC') finalTrackingUrl = `https://www.dtdc.in/tracking/tracking_results.asp?trkType=awb&strCnno=${trackingNumber}`;
+        else finalTrackingUrl = `https://track.shipment.com/${trackingNumber}`;
+      }
+    }
+
+    onUpdateLogistics(order.id || order._id, {
+      status: deliveryStatus,
+      deliveryStatus,
+      deliveryMode,
+      courierName: deliveryMode === 'third_party' ? courierName : '',
+      trackingNumber: deliveryMode === 'third_party' ? trackingNumber : '',
+      trackingUrl: finalTrackingUrl,
+      selfDeliveryDetails: selfDetails
+    });
+
+    setLogisticsSavedMessage('Logistics & Tracking updated successfully!');
+    setTimeout(() => setLogisticsSavedMessage(''), 3000);
+  };
 
   // Filtered sellers for Admin Distribution
   const verifiedSellers = useMemo(() => {
@@ -485,6 +703,189 @@ export default function BulkOrderPreviewModal({
                           </div>
                         )}
                       </div>
+
+                      {/* Action Row: View Tax Invoice Button & Tracking Status */}
+                      <div className="pt-2 border-t border-emerald-200/80 flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsInvoiceOpen(true)}
+                          className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <FileText size={14} />
+                          <span>View Official Tax Invoice & PO Certificate</span>
+                        </button>
+
+                        {canViewTracking ? (
+                          <div className="flex items-center gap-2 bg-emerald-100/90 text-emerald-950 px-3 py-1.5 rounded-xl border border-emerald-300 text-xs">
+                            <Truck size={14} className="text-emerald-700" />
+                            <span>{isSelf ? '🛵 Self-Delivery' : `🚚 ${order.courierName || 'Courier'}`}:</span>
+                            <span className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">{trackingNumberDisplay}</span>
+                            {trackingLinkDisplay && (
+                              <a
+                                href={trackingLinkDisplay}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-0.5 ml-1"
+                              >
+                                Track <ExternalLink size={11} />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-500 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200 flex items-center gap-1.5">
+                            <Lock size={12} className="text-gray-400" />
+                            <span>
+                              {isOut ? 'Out for Delivery (Delivery partner pending)' : 'Tracking available once Out for Delivery & partner decided'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Admin Logistics Management Section */}
+                      {userRole === 'admin' && (
+                        <div className="mt-3 p-3.5 bg-white rounded-xl border border-emerald-200 text-xs space-y-3">
+                          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                            <span className="font-extrabold text-gray-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                              <Truck size={14} className="text-emerald-700" /> Logistics & Dispatch Management
+                            </span>
+                            {logisticsSavedMessage && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                ✓ {logisticsSavedMessage}
+                              </span>
+                            )}
+                          </div>
+
+                          <form onSubmit={handleSaveLogistics} className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">
+                                  Delivery / Order Status
+                                </label>
+                                <select
+                                  value={deliveryStatus}
+                                  onChange={(e) => setDeliveryStatus(e.target.value)}
+                                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2 text-xs font-bold text-gray-800 focus:outline-none focus:border-emerald-600"
+                                >
+                                  <option value="quote_accepted">Quote Accepted / In Preparation</option>
+                                  <option value="in_production">In Production / Processing</option>
+                                  <option value="out for delivery">Out for Delivery</option>
+                                  <option value="delivered">Delivered</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">
+                                  Delivery Mode / Partner
+                                </label>
+                                <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-lg">
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeliveryMode('third_party')}
+                                    className={`py-1 px-2 rounded-md font-bold text-xs transition-colors cursor-pointer ${
+                                      deliveryMode === 'third_party' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                  >
+                                    🚚 3rd-Party
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeliveryMode('self_delivery')}
+                                    className={`py-1 px-2 rounded-md font-bold text-xs transition-colors cursor-pointer ${
+                                      deliveryMode === 'self_delivery' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                  >
+                                    🛵 Self-Delivery
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3rd-Party Carrier Fields */}
+                            {deliveryMode === 'third_party' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Courier Partner</label>
+                                  <select
+                                    value={courierName}
+                                    onChange={(e) => setCourierName(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                  >
+                                    <option value="Delhivery">Delhivery</option>
+                                    <option value="BlueDart">BlueDart</option>
+                                    <option value="DTDC">DTDC</option>
+                                    <option value="Ekart Logistics">Ekart Logistics</option>
+                                    <option value="India Post">India Post</option>
+                                    <option value="Custom Courier">Custom Courier</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">AWB / Tracking Number</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. DEL12345678"
+                                    value={trackingNumber}
+                                    onChange={(e) => setTrackingNumber(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs font-mono text-gray-800"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Tracking URL (Optional)</label>
+                                  <input
+                                    type="url"
+                                    placeholder="https://..."
+                                    value={trackingUrl}
+                                    onChange={(e) => setTrackingUrl(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              /* Self-Delivery Rider Details */
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-200">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider / Delivery Boy Name</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Ramesh Kumar"
+                                    value={deliveryPersonName}
+                                    onChange={(e) => setDeliveryPersonName(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider Mobile Number</label>
+                                  <input
+                                    type="tel"
+                                    placeholder="e.g. 9876543210"
+                                    value={deliveryPersonPhone}
+                                    onChange={(e) => setDeliveryPersonPhone(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Vehicle Number</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. UP 32 AB 1234"
+                                    value={vehicleNumber}
+                                    onChange={(e) => setVehicleNumber(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs font-mono text-gray-800"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="submit"
+                                className="px-4 py-1.5 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-xs"
+                              >
+                                Save Logistics & Update Tracking
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -613,7 +1014,7 @@ export default function BulkOrderPreviewModal({
               </div>
 
               {/* Customization & Budget Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-200">
                 <div>
                   <span className="text-gray-400 font-semibold text-[11px] uppercase block">Logo Embroidery / Monogram</span>
                   <div className="font-bold text-gray-900 mt-0.5">
@@ -629,6 +1030,32 @@ export default function BulkOrderPreviewModal({
                 </div>
 
                 <div>
+                  <span className="text-gray-400 font-semibold text-[11px] uppercase block">Quotations Expected By</span>
+                  <div className="font-bold text-gray-900 mt-0.5 flex flex-col gap-0.5">
+                    <span>{order.expectedQuotationDate ? new Date(order.expectedQuotationDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Flexible'}</span>
+                    {order.expectedQuotationDate && (() => {
+                      const target = new Date(order.expectedQuotationDate);
+                      if (isNaN(target.getTime())) return null;
+                      const now = new Date();
+                      const targetMid = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+                      const nowMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                      const diffDays = Math.round((targetMid - nowMid) / (1000 * 60 * 60 * 24));
+                      const isExpired = diffDays < 0;
+                      const isUrgent = diffDays >= 0 && diffDays <= 2;
+                      const text = diffDays > 1 ? `${diffDays} days left` : diffDays === 1 ? '1 day left' : diffDays === 0 ? 'Ends today' : `Ended (${Math.abs(diffDays)}d ago)`;
+
+                      return (
+                        <span className={`w-fit text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                          isExpired ? 'bg-red-100 text-red-700 border-red-200' : isUrgent ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        }`}>
+                          {text}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div>
                   <span className="text-gray-400 font-semibold text-[11px] uppercase block">Overall Calculated Budget</span>
                   <div className="font-extrabold text-emerald-800 text-sm mt-0.5 font-mono">
                     {order.overallBudget > 0 ? `₹${Number(order.overallBudget).toLocaleString()}` : (targetBudgetNum > 0 ? `₹${targetBudgetNum.toLocaleString()}` : 'Not Specified')}
@@ -636,11 +1063,75 @@ export default function BulkOrderPreviewModal({
                 </div>
 
                 {order.additionalNotes && (
-                  <div className="sm:col-span-3 pt-2 border-t border-gray-200">
+                  <div className="sm:col-span-2 lg:col-span-4 pt-2 border-t border-gray-200">
                     <span className="text-gray-400 font-semibold text-[11px] uppercase block mb-1">Additional Tender Notes</span>
                     <p className="text-gray-800 bg-white p-3 rounded-xl border border-gray-200 leading-relaxed">{order.additionalNotes}</p>
                   </div>
                 )}
+              </div>
+
+              {/* Mobilization Advance Payment & Financial Guarantee Card */}
+              <div className="bg-linear-to-r from-emerald-50 via-teal-50/60 to-cyan-50/40 border border-emerald-200 p-4 sm:p-5 rounded-2xl space-y-3.5 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-bold">
+                      <DollarSign size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-xs text-emerald-950 uppercase tracking-wider">
+                        Prepayment & Financial Mobilization Terms (Admin Escrow)
+                      </h4>
+                      <p className="text-[11px] text-emerald-800">
+                        Seller quotation specifies upfront advance percentage to mobilize procurement before delivery.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      order.advancePaymentStatus === 'paid_partially'
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                    }`}>
+                      {order.advancePaymentStatus === 'paid_partially'
+                        ? `Paid: ₹${Number(order.advancePaidAmount || 0).toLocaleString()}`
+                        : 'Advance Status: Awaiting Payment'}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsReceiptModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+                    >
+                      <FileText size={13} />
+                      <span>Advance Receipt</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+
+                  {/* Seller Counter Demand */}
+                  <div className="bg-white/80 p-3 rounded-xl border border-emerald-100 space-y-1">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Seller Demanded Advance</span>
+                    <div className="font-extrabold text-sm text-emerald-800">
+                      {order.sellerAdvancePercentage ? `${order.sellerAdvancePercentage}%` : (existingSellerQuote?.sellerAdvancePercentage ? `${existingSellerQuote.sellerAdvancePercentage}%` : 'Same as Buyer')}
+                      {(order.sellerAdvanceAmount || existingSellerQuote?.sellerAdvanceAmount) ? ` (₹${Number(order.sellerAdvanceAmount || existingSellerQuote?.sellerAdvanceAmount).toLocaleString()})` : ''}
+                    </div>
+                    {(order.sellerAdvanceTerms || existingSellerQuote?.sellerAdvanceTerms) && (
+                      <p className="text-[11px] text-emerald-900 font-medium line-clamp-2 mt-0.5">"{order.sellerAdvanceTerms || existingSellerQuote?.sellerAdvanceTerms}"</p>
+                    )}
+                  </div>
+
+                  {/* Balance on Delivery */}
+                  <div className="bg-white/80 p-3 rounded-xl border border-emerald-100 space-y-1">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Est. Balance on Delivery</span>
+                    <div className="font-extrabold text-sm text-gray-900">
+                      ₹{Math.max(0, (order.overallBudget || targetBudgetNum || 0) - (Number(order.advancePaidAmount || order.sellerAdvanceAmount || order.buyerAdvanceAmount || 0))).toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Payable upon school delivery & gate verification</p>
+                  </div>
+                </div>
               </div>
 
               {/* Current Distribution Mode Info Banner */}
@@ -875,6 +1366,28 @@ export default function BulkOrderPreviewModal({
                               {quote.sellerCity && <span>City: <strong className="text-gray-700">{quote.sellerCity}</strong></span>}
                               <span>Lead Time: <strong className="text-gray-700">{quote.estimatedDeliveryDays || 7} Days</strong></span>
                             </div>
+
+                            {/* Negotiation Version & Stage Pill */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full">
+                                Version {quote.currentVersion || 1}
+                              </span>
+                              {quote.negotiationStage === 'buyer_countered' && (
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Clock size={10} /> 2nd Version Counter-Demand Sent
+                                </span>
+                              )}
+                              {quote.negotiationStage === 'seller_accepted_counter' && (
+                                <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <CheckCircle2 size={10} /> Vendor Accepted Counter-Demand
+                                </span>
+                              )}
+                              {quote.negotiationStage === 'revised_by_seller' && (
+                                <span className="bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Sparkles size={10} /> Revised Quotation Pitch
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="sm:text-right bg-teal-50 sm:bg-transparent p-2 sm:p-0 rounded-xl">
@@ -887,6 +1400,68 @@ export default function BulkOrderPreviewModal({
                             </div>
                           </div>
                         </div>
+
+                        {/* Active Buyer Counter-Demand Info Card */}
+                        {quote.latestBuyerCounter && (Number(quote.latestBuyerCounter.targetBudget) > 0 || quote.latestBuyerCounter.notes) && (
+                          <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3 text-xs space-y-1">
+                            <div className="flex items-center justify-between text-[11px] font-extrabold text-purple-900">
+                              <span className="flex items-center gap-1.5">
+                                <Sparkles size={13} className="text-purple-600" /> Buyer's Counter-Demand Terms
+                              </span>
+                              {quote.latestBuyerCounter.counteredAt && (
+                                <span className="text-[10px] text-purple-600 font-medium">
+                                  Received {new Date(quote.latestBuyerCounter.counteredAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                              {Number(quote.latestBuyerCounter.targetBudget) > 0 && (
+                                <div>
+                                  <span className="text-gray-400 block text-[10px]">Target Budget:</span>
+                                  <strong className="text-purple-900">₹{Number(quote.latestBuyerCounter.targetBudget).toLocaleString()}</strong>
+                                </div>
+                              )}
+                              {Number(quote.latestBuyerCounter.requestedDeliveryDays) > 0 && (
+                                <div>
+                                  <span className="text-gray-400 block text-[10px]">Requested Lead Time:</span>
+                                  <strong className="text-purple-900">{quote.latestBuyerCounter.requestedDeliveryDays} Days</strong>
+                                </div>
+                              )}
+                              {Number(quote.latestBuyerCounter.proposedAdvancePercentage) > 0 && (
+                                <div>
+                                  <span className="text-gray-400 block text-[10px]">Proposed Advance:</span>
+                                  <strong className="text-purple-900">{quote.latestBuyerCounter.proposedAdvancePercentage}% Advance</strong>
+                                </div>
+                              )}
+                            </div>
+                            {quote.latestBuyerCounter.notes && (
+                              <p className="text-[11px] text-purple-950 italic pt-1 border-t border-purple-100">
+                                "{quote.latestBuyerCounter.notes}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Raised Prepayment & Extended Lead Time Warning Chips */}
+                        {(() => {
+                          const latestRound = Array.isArray(quote.negotiationHistory) && quote.negotiationHistory.length > 0 ? quote.negotiationHistory[quote.negotiationHistory.length - 1] : null;
+                          if (!latestRound || (!latestRound.prepaymentRaised && !latestRound.deliveryDaysRaised)) return null;
+
+                          return (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {latestRound.prepaymentRaised && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 text-[11px] font-bold">
+                                  ⚠️ Prepayment Raised by Vendor in Version {quote.currentVersion || 1}
+                                </span>
+                              )}
+                              {latestRound.deliveryDaysRaised && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-300 text-[11px] font-bold">
+                                  ⏳ Delivery Lead Time Extended by Vendor ({quote.estimatedDeliveryDays} Days)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Descriptive Item Breakdown Table */}
                         {hasItemPrices ? (
@@ -964,6 +1539,28 @@ export default function BulkOrderPreviewModal({
                           </div>
                         )}
 
+                        {/* Demanded Advance Payment Banner */}
+                        {(quote.sellerAdvancePercentage || quote.sellerAdvanceAmount || quote.sellerAdvanceTerms) && (
+                          <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex items-start gap-2 text-xs text-emerald-950">
+                            <DollarSign size={16} className="text-emerald-700 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5 flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-extrabold text-[11px] uppercase tracking-wider text-emerald-900">
+                                  Demanded Mobilization Advance: {quote.sellerAdvancePercentage ? `${quote.sellerAdvancePercentage}%` : ''} {quote.sellerAdvanceAmount ? `(₹${Number(quote.sellerAdvanceAmount).toLocaleString()})` : ''}
+                                </span>
+                                <span className="text-[10px] text-emerald-700 font-bold">
+                                  Balance: ₹{Math.max(0, Number(quote.quoteAmount || 0) - Number(quote.sellerAdvanceAmount || 0)).toLocaleString()}
+                                </span>
+                              </div>
+                              {quote.sellerAdvanceTerms && (
+                                <p className="text-[11px] text-emerald-800">
+                                  <span className="font-semibold text-emerald-950">Terms:</span> {quote.sellerAdvanceTerms}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Notes & Delivery Details */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100">
                           <div>
@@ -983,25 +1580,140 @@ export default function BulkOrderPreviewModal({
                           )}
                         </div>
 
+                        {/* Prepayment / Upfront Advance Demanded by Seller */}
+                        {(() => {
+                          const advPct = Number(quote.prepaymentPercentage ?? quote.sellerAdvancePercentage ?? 0);
+                          const advAmt = Number(quote.prepaymentAmount ?? quote.sellerAdvanceAmount ?? 0) || (advPct > 0 ? Math.round((Number(quote.quoteAmount) * advPct) / 100) : 0);
+                          const advTerms = quote.prepaymentTerms || quote.sellerAdvanceTerms || '';
+                          const remainingBal = Math.max(0, Number(quote.quoteAmount) - advAmt);
+
+                          if (advPct <= 0 && advAmt <= 0 && !advTerms) return null;
+
+                          return (
+                            <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider flex items-center gap-1">
+                                  <DollarSign size={13} className="text-emerald-700" /> Prepayment Required by Seller
+                                </span>
+                                <div className="text-emerald-950 font-bold">
+                                  Upfront Prepayment: <strong className="font-extrabold text-emerald-900 font-mono text-sm">₹{advAmt.toLocaleString()}</strong>
+                                  {advPct > 0 ? ` (${advPct}% prepayment)` : ''}
+                                </div>
+                                {advTerms && (
+                                  <p className="text-[11px] text-emerald-800 italic">
+                                    Terms: "{advTerms}"
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="sm:text-right bg-white px-3 py-1.5 rounded-lg border border-emerald-100 shadow-2xs">
+                                <span className="text-[10px] text-gray-500 uppercase font-semibold block">Balance on Delivery</span>
+                                <span className="font-mono font-bold text-gray-800">₹{remainingBal.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Collapsible Negotiation Timeline */}
+                        {Array.isArray(quote.negotiationHistory) && quote.negotiationHistory.length > 0 && (
+                          <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50/50">
+                            <button
+                              type="button"
+                              onClick={() => toggleHistory(qId)}
+                              className="w-full px-3.5 py-2 flex items-center justify-between text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <Clock size={13} className="text-teal-700" />
+                                Negotiation Rounds ({quote.negotiationHistory.length} Rounds)
+                              </span>
+                              <span className="text-[11px] text-teal-700 font-extrabold">
+                                {expandedHistoryQuotes[qId] ? 'Hide Timeline ▲' : 'View Timeline ▼'}
+                              </span>
+                            </button>
+                            {expandedHistoryQuotes[qId] && (
+                              <div className="p-3 space-y-2 border-t border-gray-200 bg-white">
+                                {quote.negotiationHistory.map((roundItem, rIdx) => {
+                                  const isBuyer = roundItem.senderRole === 'buyer';
+                                  return (
+                                    <div
+                                      key={rIdx}
+                                      className={`p-2.5 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                                        isBuyer ? 'bg-purple-50/50 border-purple-200' : 'bg-teal-50/50 border-teal-200'
+                                      }`}
+                                    >
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                            isBuyer ? 'bg-purple-600 text-white' : 'bg-teal-700 text-white'
+                                          }`}>
+                                            Round {roundItem.round || (rIdx + 1)} • {isBuyer ? 'School / Buyer' : 'Vendor'}
+                                          </span>
+                                          <span className="text-[11px] text-gray-500 font-medium">
+                                            {new Date(roundItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        {roundItem.notes && (
+                                          <p className="text-[11px] text-gray-700 italic">"{roundItem.notes}"</p>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1.5 sm:text-right font-mono text-[11px]">
+                                        {Number(roundItem.quoteAmount) > 0 && (
+                                          <span className="font-extrabold text-gray-900 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                            ₹{Number(roundItem.quoteAmount).toLocaleString()}
+                                          </span>
+                                        )}
+                                        {Number(roundItem.prepaymentPercentage) > 0 && (
+                                          <span className={`px-2 py-0.5 rounded border ${
+                                            roundItem.prepaymentRaised ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold' : 'bg-white text-gray-700 border-gray-200'
+                                          }`}>
+                                            {roundItem.prepaymentPercentage}% Adv {roundItem.prepaymentRaised ? '⚠️ Raised' : ''}
+                                          </span>
+                                        )}
+                                        {Number(roundItem.estimatedDeliveryDays) > 0 && (
+                                          <span className={`px-2 py-0.5 rounded border ${
+                                            roundItem.deliveryDaysRaised ? 'bg-blue-100 text-blue-900 border-blue-300 font-bold' : 'bg-white text-gray-700 border-gray-200'
+                                          }`}>
+                                            {roundItem.estimatedDeliveryDays} Days {roundItem.deliveryDaysRaised ? '⏳ Extended' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Footer Status & Acceptance Button */}
-                        <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center justify-between pt-1 border-t border-gray-100">
                           {isApproved ? (
                             <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1 border border-emerald-200">
                               <CheckCircle2 size={14} /> Approved & Winning Seller Quote
                             </span>
                           ) : (
-                            <span className="text-[11px] text-gray-400">Status: {quote.status}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-gray-500 font-semibold">
+                                Stage: <strong className="text-gray-800 capitalize">{(quote.negotiationStage || quote.status || 'Active').replace(/_/g, ' ')}</strong>
+                              </span>
+                            </div>
                           )}
 
-                          {(userRole === 'admin' || userRole === 'consumer') && !isApproved && onApproveQuote && (
+                          {userRole === 'consumer' && !isApproved && onApproveQuote && (
                             <button
                               type="button"
-                              onClick={() => onApproveQuote(order.id || order._id, qId)}
+                              onClick={() => handleOpenAcceptQuoteModal(quote)}
                               className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 font-display"
                             >
                               <CheckCircle2 size={15} />
-                              <span>Accept Quotation & Place Order</span>
+                              <span>Accept Quotation & Adjust Order Size</span>
                             </button>
+                          )}
+
+                          {userRole === 'admin' && !isApproved && (
+                            <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
+                              Awaiting Buyer Decision / Review Only
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1303,6 +2015,16 @@ export default function BulkOrderPreviewModal({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* View Partial Advance Receipt Button */}
+            <button
+              type="button"
+              onClick={() => setIsReceiptModalOpen(true)}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 font-extrabold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <FileText size={14} className="text-emerald-700" />
+              <span>Partial Receipt Voucher</span>
+            </button>
+
             {userRole === 'seller' && onSubmitQuote && order.status !== 'quote_accepted' && (
               <button
                 onClick={() => setModalSubTab('submit_quote')}
@@ -1512,6 +2234,252 @@ export default function BulkOrderPreviewModal({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================== */}
+      {/* QUOTATION ACCEPTANCE & ORDER SIZE ADJUSTMENT MODAL */}
+      {/* ========================================== */}
+      {acceptQuoteModalData && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 text-xs space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-800">
+                  <CheckCircle2 size={22} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-gray-900 text-base">
+                    Accept Quotation & Finalize Order Size
+                  </h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Vendor: <strong className="text-emerald-950 font-bold">{acceptQuoteModalData.quote.sellerStoreName || acceptQuoteModalData.quote.sellerName}</strong> ({acceptQuoteModalData.quote.sellerPhone || 'Verified Partner'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAcceptQuoteModalData(null)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-teal-50 border border-teal-200 rounded-2xl text-[11px] text-teal-950 flex items-start gap-2 shrink-0">
+              <Sparkles size={16} className="text-teal-700 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-teal-900 font-extrabold mb-0.5">
+                  Update Item Counts / Order Size to Existing Count
+                </strong>
+                <span>
+                  You can increase or decrease the quantities below to match school/institutional headcount before accepting. Line totals and the final order budget will recalculate automatically based on vendor unit rates.
+                </span>
+              </div>
+            </div>
+
+            {/* Editable Item Quantities Table */}
+            <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-2xs flex-1 overflow-y-auto min-h-48">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-[10px] uppercase font-bold text-gray-600 border-b border-gray-200 sticky top-0">
+                    <th className="py-2.5 px-3">Item / Requirement</th>
+                    <th className="py-2.5 px-2 text-right">Quoted Rate</th>
+                    <th className="py-2.5 px-3 text-center">Order Count (Units)</th>
+                    <th className="py-2.5 px-3 text-right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {acceptQuoteModalData.items.map((item, itIdx) => {
+                    return (
+                      <tr key={itIdx} className="hover:bg-gray-50/50">
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-gray-900">{item.itemName}</div>
+                          <div className="text-[10px] text-gray-400">{item.category}</div>
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-mono font-bold text-emerald-900">
+                          ₹{item.pricePerUnit > 0 ? item.pricePerUnit.toLocaleString() : '0'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="inline-flex items-center border border-gray-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newQty = Math.max(1, item.quantity - 5);
+                                setAcceptQuoteModalData(prev => {
+                                  const updatedItems = [...prev.items];
+                                  updatedItems[itIdx] = {
+                                    ...updatedItems[itIdx],
+                                    quantity: newQty,
+                                    totalPrice: newQty * updatedItems[itIdx].pricePerUnit
+                                  };
+                                  return { ...prev, items: updatedItems };
+                                });
+                              }}
+                              className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer text-xs"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = Math.max(1, Number(e.target.value) || 1);
+                                setAcceptQuoteModalData(prev => {
+                                  const updatedItems = [...prev.items];
+                                  updatedItems[itIdx] = {
+                                    ...updatedItems[itIdx],
+                                    quantity: val,
+                                    totalPrice: val * updatedItems[itIdx].pricePerUnit
+                                  };
+                                  return { ...prev, items: updatedItems };
+                                });
+                              }}
+                              className="w-16 text-center font-bold text-gray-900 py-1 focus:outline-none text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newQty = item.quantity + 5;
+                                setAcceptQuoteModalData(prev => {
+                                  const updatedItems = [...prev.items];
+                                  updatedItems[itIdx] = {
+                                    ...updatedItems[itIdx],
+                                    quantity: newQty,
+                                    totalPrice: newQty * updatedItems[itIdx].pricePerUnit
+                                  };
+                                  return { ...prev, items: updatedItems };
+                                });
+                              }}
+                              className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-extrabold text-gray-900">
+                          ₹{item.totalPrice.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Calculations & Live Summary Bar */}
+            {(() => {
+              const totalAdjustedQty = acceptQuoteModalData.items.reduce((s, it) => s + Number(it.quantity || 0), 0);
+              const totalAdjustedAmount = acceptQuoteModalData.items.reduce((s, it) => s + Number(it.totalPrice || 0), 0) || Number(acceptQuoteModalData.quote.quoteAmount);
+
+              const advPct = Number(acceptQuoteModalData.quote.prepaymentPercentage ?? acceptQuoteModalData.quote.sellerAdvancePercentage ?? 0);
+              const advAmt = advPct > 0 
+                ? Math.round((totalAdjustedAmount * advPct) / 100) 
+                : Number(acceptQuoteModalData.quote.prepaymentAmount ?? acceptQuoteModalData.quote.sellerAdvanceAmount ?? 0);
+              const remainingBal = Math.max(0, totalAdjustedAmount - advAmt);
+
+              return (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3 text-xs shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] text-emerald-800 font-bold uppercase tracking-wider block">
+                        Updated Headcount & Items
+                      </span>
+                      <div className="font-extrabold text-gray-900 text-sm mt-0.5">
+                        {totalAdjustedQty} Total Demanded Units ({acceptQuoteModalData.items.length} Products)
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wider block">
+                        Final Accepted Order Total
+                      </span>
+                      <div className="font-mono font-black text-xl text-emerald-950">
+                        ₹{totalAdjustedAmount.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(advPct > 0 || advAmt > 0) && (
+                    <div className="pt-2 border-t border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-emerald-900">
+                      <div>
+                        Seller Demanded Prepayment ({advPct > 0 ? `${advPct}%` : 'Fixed'}): <strong className="font-mono text-emerald-950 text-xs">₹{advAmt.toLocaleString()}</strong>
+                        {acceptQuoteModalData.quote.prepaymentTerms || acceptQuoteModalData.quote.sellerAdvanceTerms ? (
+                          <span className="italic block text-[10px] text-emerald-700">"{acceptQuoteModalData.quote.prepaymentTerms || acceptQuoteModalData.quote.sellerAdvanceTerms}"</span>
+                        ) : null}
+                      </div>
+                      <div className="sm:text-right">
+                        Balance upon Delivery: <strong className="font-mono text-gray-900 text-xs">₹{remainingBal.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Modal Actions */}
+            <div className="flex items-center gap-3 pt-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAcceptQuoteModalData(null)}
+                className="flex-1 py-2.5 font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const totalAdjustedQty = acceptQuoteModalData.items.reduce((s, it) => s + Number(it.quantity || 0), 0);
+                  const totalAdjustedAmount = acceptQuoteModalData.items.reduce((s, it) => s + Number(it.totalPrice || 0), 0) || Number(acceptQuoteModalData.quote.quoteAmount);
+
+                  const advPct = Number(acceptQuoteModalData.quote.prepaymentPercentage ?? acceptQuoteModalData.quote.sellerAdvancePercentage ?? 0);
+                  const advAmt = advPct > 0 
+                    ? Math.round((totalAdjustedAmount * advPct) / 100) 
+                    : Number(acceptQuoteModalData.quote.prepaymentAmount ?? acceptQuoteModalData.quote.sellerAdvanceAmount ?? 0);
+
+                  onApproveQuote(order.id || order._id, acceptQuoteModalData.quote._id, {
+                    updatedRequirements: acceptQuoteModalData.items.map(it => ({
+                      itemId: it.itemId,
+                      itemName: it.itemName,
+                      quantity: it.quantity,
+                      sellerPricePerUnit: it.pricePerUnit
+                    })),
+                    totalQuantity: totalAdjustedQty,
+                    quoteAmount: totalAdjustedAmount,
+                    prepaymentPercentage: advPct,
+                    prepaymentAmount: advAmt,
+                    sellerAdvancePercentage: advPct,
+                    sellerAdvanceAmount: advAmt
+                  });
+
+                  setAcceptQuoteModalData(null);
+                }}
+                className="flex-1 py-2.5 font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1.5 font-display"
+              >
+                <CheckCircle2 size={16} />
+                <span>Confirm & Accept Quotation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tax Invoice & Certificate Modal */}
+      {isInvoiceOpen && taxInvoiceOrder && (
+        <TaxInvoiceModal
+          isOpen={isInvoiceOpen}
+          onClose={() => setIsInvoiceOpen(false)}
+          order={taxInvoiceOrder}
+        />
+      )}
+
+      {/* Partial Advance Payment Receipt Modal */}
+      {isReceiptModalOpen && (
+        <PartialAdvanceReceiptModal
+          isOpen={isReceiptModalOpen}
+          onClose={() => setIsReceiptModalOpen(false)}
+          order={order}
+        />
       )}
 
     </div>

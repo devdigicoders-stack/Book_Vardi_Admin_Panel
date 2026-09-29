@@ -47,7 +47,12 @@ import {
   deleteAnnouncementApi,
   fetchAdminSchoolBulkOrdersApi,
   distributeSchoolBulkOrderApi,
-  approveSellerQuotationApi
+  approveSellerQuotationApi,
+  fetchAdminKitsApi,
+  updateKitApprovalStatusApi,
+  createAdminKitApi,
+  updateAdminKitApi,
+  deleteAdminKitApi
 } from '../utils/api';
 
 const AdminDataContext = createContext();
@@ -129,10 +134,40 @@ export const AdminDataProvider = ({ children }) => {
     }
   });
 
+  // 1.5. Kits & Bundles
+  const [kits, setKits] = useState(() => {
+    try {
+      const saved = localStorage.getItem('admin_kits');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isLoadingKits, setIsLoadingKits] = useState(false);
+
   // 2. Orders
   const [orders, setOrders] = useState(() => {
-    const saved = localStorage.getItem('admin_orders');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('admin_orders');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.map(o => {
+          const rawAddr = (typeof o.shippingAddress === 'object' && o.shippingAddress !== null)
+            ? o.shippingAddress
+            : (typeof o.rawShippingAddress === 'object' && o.rawShippingAddress !== null ? o.rawShippingAddress : {});
+          const realName = rawAddr.name || rawAddr.fullName || (o.customerName !== 'Student' ? o.customerName : '') || (o.customer?.name !== 'Student' ? o.customer?.name : '') || 'Verified Consumer';
+          return {
+            ...o,
+            customerName: realName,
+            customer: { ...(o.customer || {}), name: realName }
+          };
+        });
+      }
+      return [];
+    } catch {
+      return [];
+    }
   });
 
   // 3. School Bulk Orders
@@ -311,6 +346,7 @@ export const AdminDataProvider = ({ children }) => {
 
   // Persist state to localStorage safely
   useEffect(() => { safeSetLocalStorage('admin_products', products); }, [products]);
+  useEffect(() => { safeSetLocalStorage('admin_kits', kits); }, [kits]);
   useEffect(() => { safeSetLocalStorage('admin_inventory', inventory); }, [inventory]);
   useEffect(() => { safeSetLocalStorage('admin_orders', orders); }, [orders]);
   useEffect(() => { safeSetLocalStorage('admin_school_orders', schoolOrders); }, [schoolOrders]);
@@ -368,7 +404,7 @@ export const AdminDataProvider = ({ children }) => {
           storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
           ownerName: s.ownerName || s.name || 'Vendor',
           status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
           payoutBalance: s.walletBalance || s.payoutBalance || 0,
           ...s
         })));
@@ -412,20 +448,83 @@ export const AdminDataProvider = ({ children }) => {
       }
     }).catch(() => {});
 
+    setIsLoadingKits(true);
+    fetchAdminKitsApi().then(data => {
+      const list = Array.isArray(data) ? data : (data?.kits || []);
+      if (list.length > 0) {
+        setKits(list.map(k => ({
+          ...k,
+          id: k._id || k.id,
+          _id: k._id || k.id,
+          title: k.title || k.name || 'Kit Bundle',
+          name: k.name || k.title || 'Kit Bundle',
+          bundlePrice: Number(k.bundlePrice || k.price || 0),
+          price: Number(k.bundlePrice || k.price || 0),
+          totalMrp: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+          mrp: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+          originalPrice: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+          items: Array.isArray(k.items) ? k.items : [],
+          approvalStatus: k.approvalStatus || 'Pending',
+          status: k.status || 'Active',
+          stockQuantity: k.stockQuantity ?? k.stock ?? 50,
+          stock: k.stockQuantity ?? k.stock ?? 50,
+          image: Array.isArray(k.images) && k.images.length > 0 ? k.images[0] : (k.image || ''),
+          images: Array.isArray(k.images) && k.images.length > 0 ? k.images : (k.image ? [k.image] : [])
+        })));
+      }
+    }).catch(() => {}).finally(() => setIsLoadingKits(false));
+
     fetchAdminOrdersApi().then(data => {
       if (Array.isArray(data) && data.length > 0) {
         setOrders(data.map(o => {
-          const custName = typeof o.customer === 'object' && o.customer !== null
-            ? (o.customer.name || o.customer.fullName || 'Customer')
-            : (typeof o.customerName === 'string' ? o.customerName : (o.userName || 'Customer'));
+          const isGenericCust = (str) => {
+            if (!str || typeof str !== 'string') return true;
+            const s = str.trim().toLowerCase();
+            return (
+              s === '' ||
+              s === 'student' ||
+              s === 'student customer' ||
+              s === 'test student' ||
+              s === 'avatar upload tester' ||
+              s === 'customer' ||
+              s === 'valued customer' ||
+              s === 'verified customer' ||
+              s === 'user' ||
+              s === 'null' ||
+              s === 'undefined' ||
+              s === 'n/a'
+            );
+          };
 
-          const custEmail = typeof o.customer === 'object' && o.customer !== null
-            ? (o.customer.email || '')
-            : (typeof o.customerEmail === 'string' ? o.customerEmail : '');
+          const rawAddr = (typeof o.shippingAddress === 'object' && o.shippingAddress !== null)
+            ? o.shippingAddress
+            : (typeof o.rawShippingAddress === 'object' && o.rawShippingAddress !== null ? o.rawShippingAddress : {});
 
-          const custPhone = typeof o.customer === 'object' && o.customer !== null
-            ? (o.customer.phone || '')
-            : (typeof o.customerPhone === 'string' ? o.customerPhone : '');
+          const candNames = [
+            rawAddr.name,
+            rawAddr.fullName,
+            rawAddr.recipientName,
+            typeof o.customer === 'object' ? o.customer?.name : null,
+            typeof o.customerName === 'string' ? o.customerName : null,
+            o.userName,
+            typeof o.user === 'object' ? o.user?.name : null,
+            typeof o.userId === 'object' ? o.userId?.name : null
+          ].filter(n => n && !isGenericCust(n));
+
+          const custName = candNames[0] || (rawAddr.phone ? `Verified Consumer (${rawAddr.phone.slice(-4)})` : 'Verified Consumer');
+
+          const custEmail = (typeof o.customer === 'object' && o.customer !== null ? o.customer.email : '') ||
+            (typeof o.customerEmail === 'string' ? o.customerEmail : '') ||
+            rawAddr.email ||
+            (typeof o.userId === 'object' ? o.userId?.email : '') ||
+            o.email || '';
+
+          const custPhone = rawAddr.phone ||
+            rawAddr.mobile ||
+            (typeof o.customer === 'object' && o.customer !== null ? o.customer.phone : '') ||
+            (typeof o.customerPhone === 'string' ? o.customerPhone : '') ||
+            (typeof o.userId === 'object' ? o.userId?.phone : '') ||
+            o.phone || '';
 
           const formattedAddress = typeof o.shippingAddress === 'object' && o.shippingAddress !== null
             ? [
@@ -437,7 +536,7 @@ export const AdminDataProvider = ({ children }) => {
                 o.shippingAddress.pincode ? `- ${o.shippingAddress.pincode}` : null,
                 o.shippingAddress.phone ? `(Phone: ${o.shippingAddress.phone})` : null
               ].filter(Boolean).join(', ')
-            : (typeof o.shippingAddress === 'string' ? o.shippingAddress : 'Customer Address');
+            : (typeof o.shippingAddress === 'string' && !o.shippingAddress.toLowerCase().includes('customer') ? o.shippingAddress : (o.address || 'Delivery Address on File'));
 
           return {
             ...o,
@@ -446,11 +545,17 @@ export const AdminDataProvider = ({ children }) => {
             customerName: custName,
             customerEmail: custEmail,
             customerPhone: custPhone,
+            customer: {
+              ...(typeof o.customer === 'object' ? o.customer : {}),
+              name: custName,
+              email: custEmail,
+              phone: custPhone
+            },
             totalAmount: o.totalAmount || o.total || 0,
             status: o.overallStatus || o.status || 'Pending',
             paymentStatus: o.paymentStatus || 'Paid',
             shippingAddress: formattedAddress,
-            rawShippingAddress: o.shippingAddress
+            rawShippingAddress: rawAddr
           };
         }));
       }
@@ -804,19 +909,158 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Delete Product', `Deleted catalog item #${id}`);
   };
 
+  // ==================== KIT / BUNDLE ACTIONS ====================
+  const refreshKits = async () => {
+    setIsLoadingKits(true);
+    try {
+      const res = await fetchAdminKitsApi();
+      const list = Array.isArray(res) ? res : (res?.kits || []);
+      setKits(list.map(k => ({
+        ...k,
+        id: k._id || k.id,
+        _id: k._id || k.id,
+        title: k.title || k.name || 'Kit Bundle',
+        name: k.name || k.title || 'Kit Bundle',
+        bundlePrice: Number(k.bundlePrice || k.price || 0),
+        price: Number(k.bundlePrice || k.price || 0),
+        totalMrp: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+        mrp: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+        originalPrice: Number(k.totalMrp || k.mrp || k.originalPrice || 0),
+        items: Array.isArray(k.items) ? k.items : [],
+        approvalStatus: k.approvalStatus || 'Pending',
+        status: k.status || 'Active',
+        stockQuantity: k.stockQuantity ?? k.stock ?? 50,
+        stock: k.stockQuantity ?? k.stock ?? 50,
+        image: Array.isArray(k.images) && k.images.length > 0 ? k.images[0] : (k.image || ''),
+        images: Array.isArray(k.images) && k.images.length > 0 ? k.images : (k.image ? [k.image] : [])
+      })));
+    } catch (e) {
+      console.warn('Failed to refresh admin kits:', e);
+    } finally {
+      setIsLoadingKits(false);
+    }
+  };
+
+  const addKit = async (kitData) => {
+    const tempId = `temp_kit_${Date.now()}`;
+    const item = {
+      ...kitData,
+      id: tempId,
+      _id: tempId,
+      createdAt: new Date().toISOString()
+    };
+    setKits(prev => [item, ...prev]);
+    logAudit('Add Kit', `Added kit bundle: ${item.title || item.name}`);
+
+    try {
+      const res = await createAdminKitApi(kitData);
+      if (res?.success && res?.kit) {
+        const saved = res.kit;
+        const normalizedSaved = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          title: saved.title || saved.name,
+          name: saved.name || saved.title,
+          bundlePrice: Number(saved.bundlePrice || saved.price || 0),
+          price: Number(saved.bundlePrice || saved.price || 0),
+          totalMrp: Number(saved.totalMrp || saved.mrp || saved.originalPrice || 0),
+          mrp: Number(saved.totalMrp || saved.mrp || saved.originalPrice || 0),
+          items: Array.isArray(saved.items) ? saved.items : [],
+          approvalStatus: saved.approvalStatus || 'Approved',
+          stockQuantity: saved.stockQuantity ?? saved.stock ?? 0,
+          stock: saved.stockQuantity ?? saved.stock ?? 0
+        };
+        setKits(prev => prev.map(k => (k.id === tempId || k._id === tempId ? normalizedSaved : k)));
+        return normalizedSaved;
+      }
+    } catch (err) {
+      console.warn('Backend kit create fallback to local state:', err);
+    }
+    return item;
+  };
+
+  const updateKit = async (id, updates) => {
+    setKits(prev => prev.map(k => (k.id === id || k._id === id ? { ...k, ...updates } : k)));
+    logAudit('Update Kit', `Updated kit bundle ID #${id}`);
+
+    try {
+      const res = await updateAdminKitApi(id, updates);
+      if (res?.success && res?.kit) {
+        const saved = res.kit;
+        const normalizedSaved = {
+          ...saved,
+          id: saved._id || saved.id,
+          _id: saved._id || saved.id,
+          title: saved.title || saved.name,
+          name: saved.name || saved.title,
+          bundlePrice: Number(saved.bundlePrice || saved.price || 0),
+          price: Number(saved.bundlePrice || saved.price || 0),
+          totalMrp: Number(saved.totalMrp || saved.mrp || saved.originalPrice || 0),
+          mrp: Number(saved.totalMrp || saved.mrp || saved.originalPrice || 0),
+          items: Array.isArray(saved.items) ? saved.items : [],
+          approvalStatus: saved.approvalStatus || 'Approved',
+          stockQuantity: saved.stockQuantity ?? saved.stock ?? 0,
+          stock: saved.stockQuantity ?? saved.stock ?? 0
+        };
+        setKits(prev => prev.map(k => (k.id === id || k._id === id ? normalizedSaved : k)));
+      }
+    } catch (err) {
+      console.warn('Backend kit update fallback to local state:', err);
+    }
+  };
+
+  const updateKitApprovalStatus = async (id, status, remark = '') => {
+    const validStatus = ['Approved', 'Pending', 'Rejected'].includes(status) ? status : 'Pending';
+    const trimmedRemark = remark?.trim?.() || '';
+    const matchFn = (k) => k.id === id || k._id === id || String(k.id) === String(id) || String(k._id) === String(id);
+
+    setKits(prev => prev.map(k => {
+      if (!matchFn(k)) return k;
+      return {
+        ...k,
+        approvalStatus: validStatus,
+        approvalComment: validStatus === 'Rejected' ? (trimmedRemark || k.approvalComment || '') : (trimmedRemark || k.approvalComment || ''),
+        rejectionReason: validStatus === 'Rejected' ? (trimmedRemark || k.rejectionReason || 'Requirements not met') : null,
+        reviewedAt: new Date().toISOString()
+      };
+    }));
+
+    try {
+      const res = await updateKitApprovalStatusApi(id, validStatus, trimmedRemark);
+      if (res?.success && res?.kit) {
+        const saved = res.kit;
+        setKits(prev => prev.map(k => matchFn(k) ? { ...k, ...saved, id: saved._id || saved.id } : k));
+      }
+    } catch (err) {
+      console.warn('Backend kit approval status update error:', err);
+    }
+
+    logAudit('Kit Status Updated', `Kit #${id} marked as ${validStatus}${trimmedRemark ? ` (${trimmedRemark})` : ''}`);
+  };
+
+  const approveKit = (id, comment = '') => updateKitApprovalStatus(id, 'Approved', comment);
+  const rejectKit = (id, reason = 'Quality standards not met') => updateKitApprovalStatus(id, 'Rejected', reason);
+
+  const deleteKit = async (id) => {
+    setKits(prev => prev.filter(k => k.id !== id && k._id !== id));
+    deleteAdminKitApi(id).catch(() => {});
+    logAudit('Delete Kit', `Deleted kit bundle #${id}`);
+  };
+
   // ==================== ORDER ACTIONS ====================
-  const updateOrderStatus = (orderId, newStatus) => {
+  const updateOrderStatus = (orderId, newStatus, extraDetails = {}) => {
     setOrders(prev => {
-      const updated = prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: newStatus, ...extraDetails } : o);
       return updated;
     });
-    updateOrderStatusApi(orderId, newStatus).catch(() => {});
+    updateOrderStatusApi(orderId, newStatus, extraDetails).catch(() => {});
     logAudit('Order Status Updated', `Order ${orderId} marked as ${newStatus}`);
   };
 
   const cancelOrder = (orderId, reason = 'Administrative cancellation') => {
     setOrders(prev => {
-      const updated = prev.map(o => o.id === orderId ? { ...o, status: 'Cancelled', cancellationReason: reason } : o);
+      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'Cancelled', cancellationReason: reason } : o);
       return updated;
     });
     updateOrderStatusApi(orderId, 'Cancelled').catch(() => {});
@@ -825,15 +1069,19 @@ export const AdminDataProvider = ({ children }) => {
 
   const refundOrder = (orderId, refundAmount) => {
     setOrders(prev => {
-      const updated = prev.map(o => o.id === orderId ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled' } : o);
+      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled' } : o);
       return updated;
     });
     logAudit('Refund Issued', `Refunded ₹${refundAmount} for order ${orderId}`);
   };
 
-  const updateOrderTracking = (orderId, trackingNumber) => {
+  const updateOrderTracking = (orderId, trackingNumber, extraDetails = {}) => {
     setOrders(prev => {
-      const updated = prev.map(o => o.id === orderId ? { ...o, trackingNumber, status: 'Shipped' } : o);
+      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? {
+        ...o,
+        trackingNumber,
+        ...extraDetails
+      } : o);
       return updated;
     });
     logAudit('Tracking Assigned', `Assigned tracking ${trackingNumber} to ${orderId}`);
@@ -931,7 +1179,7 @@ export const AdminDataProvider = ({ children }) => {
             storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
             ownerName: s.ownerName || s.name || 'Vendor',
             status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
             payoutBalance: s.walletBalance || s.payoutBalance || 0,
             ...s
           })));
@@ -1009,7 +1257,7 @@ export const AdminDataProvider = ({ children }) => {
           storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
           ownerName: s.ownerName || s.name || 'Vendor',
           status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
           payoutBalance: s.walletBalance || s.payoutBalance || 0,
           ...s
         })));
@@ -1087,7 +1335,7 @@ export const AdminDataProvider = ({ children }) => {
           storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
           ownerName: s.ownerName || s.name || 'Vendor',
           status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
           payoutBalance: s.walletBalance || s.payoutBalance || 0,
           ...s
         })));
@@ -1119,7 +1367,7 @@ export const AdminDataProvider = ({ children }) => {
             storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
             ownerName: s.ownerName || s.name || 'Vendor',
             status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
             payoutBalance: s.walletBalance || s.payoutBalance || 0,
             ...s
           })));
@@ -1291,36 +1539,88 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Bulk Order Distributed', `Distributed bulk order #${orderId} via ${assignmentMode} mode`);
   };
 
-  const approveSellerQuotation = async (orderId, quoteId) => {
+  const approveSellerQuotation = async (orderId, quoteId, updateData = {}) => {
     setSchoolOrders(prev => prev.map(o => {
       if (o.id === orderId || o._id === orderId) {
         const updatedQuotes = (o.quotations || []).map(q => ({
           ...q,
-          status: (q._id === quoteId || q.id === quoteId) ? 'approved' : 'rejected'
+          status: (q._id === quoteId || q.id === quoteId) ? 'approved' : 'rejected',
+          ...((q._id === quoteId || q.id === quoteId) && updateData?.quoteAmount ? { quoteAmount: updateData.quoteAmount } : {})
         }));
         const winning = updatedQuotes.find(q => q._id === quoteId || q.id === quoteId);
         return {
           ...o,
           quotations: updatedQuotes,
           acceptedQuoteId: quoteId,
+          winningQuoteId: quoteId,
           sellerId: winning?.sellerId || o.sellerId,
-          status: 'quote_accepted'
+          status: 'accepted',
+          deliveryMode: 'self_delivery',
+          ...(updateData?.updatedRequirements ? { requirements: updateData.updatedRequirements } : {}),
+          ...(updateData?.totalQuantity ? { totalQuantity: updateData.totalQuantity } : {}),
+          ...(updateData?.quoteAmount ? { quoteAmount: updateData.quoteAmount, targetBudgetPerKit: updateData.quoteAmount } : {}),
+          ...(updateData?.prepaymentAmount !== undefined ? { prepaymentAmount: updateData.prepaymentAmount, sellerAdvanceAmount: updateData.prepaymentAmount } : {}),
+          ...(updateData?.prepaymentPercentage !== undefined ? { prepaymentPercentage: updateData.prepaymentPercentage, sellerAdvancePercentage: updateData.prepaymentPercentage } : {})
         };
       }
       return o;
     }));
 
     try {
-      const res = await approveSellerQuotationApi(orderId, quoteId);
+      const res = await approveSellerQuotationApi(orderId, quoteId, updateData);
       if (res?.success && res.order) {
         setSchoolOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId ? { ...o, ...res.order } : o)));
       }
     } catch (e) {
       console.warn('Backend quote approval fallback:', e);
     }
+
+    try {
+      ['bv_sync_school_orders', 'bv_customer_bulk_orders', 'admin_school_orders'].forEach(key => {
+        const list = JSON.parse(localStorage.getItem(key) || '[]');
+        const idx = list.findIndex(o => o.id === orderId || o._id === orderId);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            status: 'accepted',
+            acceptedQuoteId: quoteId,
+            winningQuoteId: quoteId,
+            deliveryMode: 'self_delivery',
+            ...(updateData?.updatedRequirements ? { requirements: updateData.updatedRequirements } : {}),
+            ...(updateData?.totalQuantity ? { totalQuantity: updateData.totalQuantity } : {}),
+            ...(updateData?.quoteAmount ? { quoteAmount: updateData.quoteAmount, targetBudgetPerKit: updateData.quoteAmount } : {}),
+            ...(updateData?.prepaymentAmount !== undefined ? { prepaymentAmount: updateData.prepaymentAmount, sellerAdvanceAmount: updateData.prepaymentAmount } : {}),
+            ...(updateData?.prepaymentPercentage !== undefined ? { prepaymentPercentage: updateData.prepaymentPercentage, sellerAdvancePercentage: updateData.prepaymentPercentage } : {})
+          };
+          localStorage.setItem(key, JSON.stringify(list));
+        }
+      });
+      window.dispatchEvent(new CustomEvent('bv_school_orders_updated'));
+      window.dispatchEvent(new Event('storage'));
+    } catch {}
+
     logAudit('Quotation Approved', `Approved quotation #${quoteId} for bulk order #${orderId}`);
   };
 
+  const updateSchoolOrderStatusAndTracking = (orderId, payload = {}) => {
+    const { status, deliveryMode, courierName, trackingNumber, trackingUrl, selfDeliveryDetails } = payload;
+    setSchoolOrders(prev => prev.map(o => {
+      if (o.id === orderId || o._id === orderId) {
+        return {
+          ...o,
+          status: status || o.status,
+          deliveryStatus: status || o.deliveryStatus || o.status,
+          deliveryMode: deliveryMode !== undefined ? deliveryMode : o.deliveryMode,
+          courierName: courierName !== undefined ? courierName : o.courierName,
+          trackingNumber: trackingNumber !== undefined ? trackingNumber : o.trackingNumber,
+          trackingUrl: trackingUrl !== undefined ? trackingUrl : o.trackingUrl,
+          selfDeliveryDetails: selfDeliveryDetails !== undefined ? selfDeliveryDetails : o.selfDeliveryDetails
+        };
+      }
+      return o;
+    }));
+    logAudit('Bulk Order Status Updated', `Updated bulk order #${orderId} logistics / status to ${status || 'updated'}`);
+  };
 
   // ==================== USER ACTIONS ====================
   const toggleUserStatus = (userId) => {
@@ -1672,6 +1972,15 @@ export const AdminDataProvider = ({ children }) => {
     updateProductApprovalStatus,
     rejectProduct,
     deleteProduct,
+    kits,
+    isLoadingKits,
+    addKit,
+    updateKit,
+    updateKitApprovalStatus,
+    approveKit,
+    rejectKit,
+    deleteKit,
+    refreshKits,
     inventory,
     inventoryMetrics,
     updateInventoryStock,
@@ -1685,6 +1994,7 @@ export const AdminDataProvider = ({ children }) => {
     schoolOrders,
     distributeSchoolBulkOrder,
     approveSellerQuotation,
+    updateSchoolOrderStatusAndTracking,
     sellers,
     approveSeller,
     rejectSeller,
