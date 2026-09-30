@@ -1021,6 +1021,19 @@ export const approveSellerQuotationApi = async (id, quoteId, updateData = {}) =>
   }
 };
 
+export const updateAdminSchoolOrderStatusApi = async (id, payload = {}) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 // ==========================================
 // 14. Categories CRUD APIs
 // ==========================================

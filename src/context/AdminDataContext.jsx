@@ -48,6 +48,7 @@ import {
   fetchAdminSchoolBulkOrdersApi,
   distributeSchoolBulkOrderApi,
   approveSellerQuotationApi,
+  updateAdminSchoolOrderStatusApi,
   fetchAdminKitsApi,
   updateKitApprovalStatusApi,
   createAdminKitApi,
@@ -560,6 +561,29 @@ export const AdminDataProvider = ({ children }) => {
               ].filter(Boolean).join(', ')
             : (typeof o.shippingAddress === 'string' && !o.shippingAddress.toLowerCase().includes('customer') ? o.shippingAddress : (o.address || 'Delivery Address on File'));
 
+          const rawStatus = o.overallStatus || o.status || 'Pending';
+          const s = String(rawStatus).toLowerCase().trim().replace(/[\s-]+/g, '_');
+          const cleanStatus =
+            s === 'delivered' || s === 'completed' ? 'Delivered' :
+            s === 'out_for_delivery' ? 'Out for Delivery' :
+            s === 'shipped' || s === 'in_transit' ? 'Shipped' :
+            s === 'packed' ? 'Packed' :
+            s === 'confirmed' ? 'Confirmed' :
+            s === 'processing' ? 'Processing' :
+            s === 'cancelled' || s === 'canceled' ? 'Cancelled' :
+            s === 'return_requested' ? 'Return Requested' :
+            s === 'return_approved' ? 'Return Approved' :
+            s === 'product_return_received' || s === 'product_received' ? 'Product Return Received' :
+            s === 'refund_requested' ? 'Refund Requested' :
+            s === 'refund_approved' ? 'Refund Approved' :
+            s === 'refund_initiated' ? 'Refund Initiated' :
+            s === 'refund_completed' || s === 'refunded' ? 'Refund Completed' :
+            s === 'exchange_requested' ? 'Exchange Requested' :
+            s === 'exchange_approved' ? 'Exchange Approved' :
+            s === 'exchange_dispatched' ? 'Exchange Dispatched' :
+            s === 'exchanged' ? 'Exchanged' :
+            rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+
           return {
             ...o,
             id: o.orderId || o._id || o.id,
@@ -574,7 +598,8 @@ export const AdminDataProvider = ({ children }) => {
               phone: custPhone
             },
             totalAmount: o.totalAmount || o.total || 0,
-            status: o.overallStatus || o.status || 'Pending',
+            status: cleanStatus,
+            overallStatus: cleanStatus,
             paymentStatus: o.paymentStatus || 'Paid',
             shippingAddress: formattedAddress,
             rawShippingAddress: rawAddr
@@ -682,6 +707,106 @@ export const AdminDataProvider = ({ children }) => {
         setInventory(data);
       }
     }).catch(() => {});
+  }, []);
+
+  // Real-time synchronization of orders across Admin, Seller, and Website
+  useEffect(() => {
+    const handleOrderSync = () => {
+      fetchAdminOrdersApi().then(data => {
+        const list = Array.isArray(data) ? data : (data?.orders || []);
+        if (list.length > 0) {
+          setOrders(list.map(o => {
+            const rawAddr = o.shippingAddress && typeof o.shippingAddress === 'object' ? o.shippingAddress : {};
+            const custName = o.customerName ||
+              (typeof o.customer === 'object' && o.customer !== null ? o.customer.name : '') ||
+              rawAddr.name || rawAddr.fullName ||
+              (typeof o.userId === 'object' ? o.userId?.name : '') ||
+              o.userName || 'Customer';
+
+            const custEmail = (typeof o.customer === 'object' && o.customer !== null ? o.customer.email : '') ||
+              (typeof o.customerEmail === 'string' ? o.customerEmail : '') ||
+              rawAddr.email ||
+              (typeof o.userId === 'object' ? o.userId?.email : '') ||
+              o.email || '';
+
+            const custPhone = rawAddr.phone ||
+              rawAddr.mobile ||
+              (typeof o.customer === 'object' && o.customer !== null ? o.customer.phone : '') ||
+              (typeof o.customerPhone === 'string' ? o.customerPhone : '') ||
+              (typeof o.userId === 'object' ? o.userId?.phone : '') ||
+              o.phone || '';
+
+            const formattedAddress = typeof o.shippingAddress === 'object' && o.shippingAddress !== null
+              ? [
+                  o.shippingAddress.name || o.shippingAddress.fullName,
+                  o.shippingAddress.addressLine || o.shippingAddress.street || o.shippingAddress.address || o.shippingAddress.addressLine1,
+                  o.shippingAddress.colony || o.shippingAddress.landmark,
+                  o.shippingAddress.city,
+                  o.shippingAddress.state,
+                  o.shippingAddress.pincode ? `- ${o.shippingAddress.pincode}` : null,
+                  o.shippingAddress.phone ? `(Phone: ${o.shippingAddress.phone})` : null
+                ].filter(Boolean).join(', ')
+              : (typeof o.shippingAddress === 'string' && !o.shippingAddress.toLowerCase().includes('customer') ? o.shippingAddress : (o.address || 'Delivery Address on File'));
+
+            const rawStatus = o.overallStatus || o.status || 'Pending';
+            const s = String(rawStatus).toLowerCase().trim().replace(/[\s-]+/g, '_');
+            const cleanStatus =
+              s === 'delivered' || s === 'completed' ? 'Delivered' :
+              s === 'out_for_delivery' ? 'Out for Delivery' :
+              s === 'shipped' || s === 'in_transit' ? 'Shipped' :
+              s === 'packed' ? 'Packed' :
+              s === 'confirmed' ? 'Confirmed' :
+              s === 'processing' ? 'Processing' :
+              s === 'cancelled' || s === 'canceled' ? 'Cancelled' :
+              s === 'return_requested' ? 'Return Requested' :
+              s === 'return_approved' ? 'Return Approved' :
+              s === 'product_return_received' || s === 'product_received' ? 'Product Return Received' :
+              s === 'refund_requested' ? 'Refund Requested' :
+              s === 'refund_approved' ? 'Refund Approved' :
+              s === 'refund_initiated' ? 'Refund Initiated' :
+              s === 'refund_completed' || s === 'refunded' ? 'Refund Completed' :
+              s === 'exchange_requested' ? 'Exchange Requested' :
+              s === 'exchange_approved' ? 'Exchange Approved' :
+              s === 'exchange_dispatched' ? 'Exchange Dispatched' :
+              s === 'exchanged' ? 'Exchanged' :
+              rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+
+            return {
+              ...o,
+              id: o.orderId || o._id || o.id,
+              _id: o._id || o.id,
+              customerName: custName,
+              customerEmail: custEmail,
+              customerPhone: custPhone,
+              customer: {
+                ...(typeof o.customer === 'object' ? o.customer : {}),
+                name: custName,
+                email: custEmail,
+                phone: custPhone
+              },
+              totalAmount: o.totalAmount || o.total || 0,
+              status: cleanStatus,
+              overallStatus: cleanStatus,
+              paymentStatus: o.paymentStatus || 'Paid',
+              shippingAddress: formattedAddress,
+              rawShippingAddress: rawAddr
+            };
+          }));
+        }
+      }).catch(() => {});
+    };
+
+    window.addEventListener('bv_orders_updated', handleOrderSync);
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'bv_order_sync_timestamp' || e.key === 'admin_orders') {
+        handleOrderSync();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('bv_orders_updated', handleOrderSync);
+      window.removeEventListener('storage', handleOrderSync);
+    };
   }, []);
 
   // Fetch admin data on mount or when authenticated
@@ -1086,42 +1211,91 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   // ==================== ORDER ACTIONS ====================
-  const updateOrderStatus = (orderId, newStatus, extraDetails = {}) => {
+  const updateOrderStatus = async (orderId, newStatus, extraDetails = {}) => {
+    const targetId = orderId;
     setOrders(prev => {
-      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: newStatus, ...extraDetails } : o);
+      const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, status: newStatus, overallStatus: newStatus, ...extraDetails } : o);
+      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
-    updateOrderStatusApi(orderId, newStatus, extraDetails).catch(() => {});
-    logAudit('Order Status Updated', `Order ${orderId} marked as ${newStatus}`);
+
+    try {
+      await updateOrderStatusApi(targetId, newStatus, extraDetails);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId: targetId, status: newStatus, ...extraDetails } }));
+        localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
+      }
+    } catch (err) {
+      console.error('Failed to update order status on server:', err);
+    }
+    logAudit('Order Status Updated', `Order ${targetId} marked as ${newStatus}`);
   };
 
-  const cancelOrder = (orderId, reason = 'Administrative cancellation') => {
+  const cancelOrder = async (orderId, reason = 'Administrative cancellation') => {
+    const targetId = orderId;
     setOrders(prev => {
-      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: 'Cancelled', cancellationReason: reason } : o);
+      const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, status: 'Cancelled', overallStatus: 'Cancelled', cancellationReason: reason } : o);
+      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
-    updateOrderStatusApi(orderId, 'Cancelled').catch(() => {});
-    logAudit('Order Cancelled', `Cancelled order ${orderId} (${reason})`);
+
+    try {
+      await updateOrderStatusApi(targetId, 'Cancelled', { cancellationReason: reason });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId: targetId, status: 'Cancelled' } }));
+        localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
+      }
+    } catch (err) {
+      console.error('Failed to cancel order on server:', err);
+    }
+    logAudit('Order Cancelled', `Cancelled order ${targetId} (${reason})`);
   };
 
-  const refundOrder = (orderId, refundAmount) => {
+  const refundOrder = async (orderId, refundAmount) => {
+    const targetId = orderId;
     setOrders(prev => {
-      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled' } : o);
+      const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled', overallStatus: 'Cancelled' } : o);
+      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
-    logAudit('Refund Issued', `Refunded ₹${refundAmount} for order ${orderId}`);
+
+    try {
+      await updateOrderStatusApi(targetId, 'Cancelled', { paymentStatus: 'refunded', refundStatus: 'Refund Completed' });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId: targetId, status: 'Cancelled' } }));
+        localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
+      }
+    } catch (err) {
+      console.error('Failed to issue refund on server:', err);
+    }
+    logAudit('Refund Issued', `Refunded ₹${refundAmount} for order ${targetId}`);
   };
 
-  const updateOrderTracking = (orderId, trackingNumber, extraDetails = {}) => {
+  const updateOrderTracking = async (orderId, trackingNumber, extraDetails = {}) => {
+    const targetId = orderId;
     setOrders(prev => {
-      const updated = prev.map(o => (o.id === orderId || o._id === orderId) ? {
+      const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? {
         ...o,
         trackingNumber,
         ...extraDetails
       } : o);
+      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
-    logAudit('Tracking Assigned', `Assigned tracking ${trackingNumber} to ${orderId}`);
+
+    try {
+      await updateOrderStatusApi(targetId, extraDetails.status || undefined, {
+        trackingNumber,
+        ...extraDetails
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId: targetId, trackingNumber, ...extraDetails } }));
+        localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
+      }
+    } catch (err) {
+      console.error('Failed to update tracking on server:', err);
+    }
+    logAudit('Tracking Assigned', `Assigned tracking ${trackingNumber} to ${targetId}`);
   };
 
   const updateReturnExchangeStatus = async (orderId, payload) => {
@@ -1639,24 +1813,37 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Quotation Approved', `Approved quotation #${quoteId} for bulk order #${orderId}`);
   };
 
-  const updateSchoolOrderStatusAndTracking = (orderId, payload = {}) => {
-    const { status, deliveryMode, courierName, trackingNumber, trackingUrl, selfDeliveryDetails } = payload;
+  const updateSchoolOrderStatusAndTracking = async (orderId, payload = {}) => {
+    const { status, deliveryMode, courierName, trackingNumber, trackingUrl, deliveryDetails, selfDeliveryDetails } = payload;
+    const finalDetails = deliveryDetails || selfDeliveryDetails;
+
     setSchoolOrders(prev => prev.map(o => {
       if (o.id === orderId || o._id === orderId) {
         return {
           ...o,
           status: status || o.status,
           deliveryStatus: status || o.deliveryStatus || o.status,
-          deliveryMode: deliveryMode !== undefined ? deliveryMode : o.deliveryMode,
-          courierName: courierName !== undefined ? courierName : o.courierName,
+          deliveryMode: 'self_delivery',
+          courierName: '',
           trackingNumber: trackingNumber !== undefined ? trackingNumber : o.trackingNumber,
           trackingUrl: trackingUrl !== undefined ? trackingUrl : o.trackingUrl,
-          selfDeliveryDetails: selfDeliveryDetails !== undefined ? selfDeliveryDetails : o.selfDeliveryDetails
+          deliveryDetails: finalDetails !== undefined ? finalDetails : o.deliveryDetails,
+          selfDeliveryDetails: finalDetails !== undefined ? finalDetails : o.selfDeliveryDetails
         };
       }
       return o;
     }));
     logAudit('Bulk Order Status Updated', `Updated bulk order #${orderId} logistics / status to ${status || 'updated'}`);
+
+    try {
+      await updateAdminSchoolOrderStatusApi(orderId, {
+        status,
+        deliveryMode: 'self_delivery',
+        deliveryDetails: finalDetails
+      });
+    } catch (err) {
+      console.warn("Failed to persist bulk order logistics to backend:", err.message);
+    }
   };
 
   // ==================== USER ACTIONS ====================

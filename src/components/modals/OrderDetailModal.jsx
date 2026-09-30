@@ -61,8 +61,9 @@ export default function OrderDetailModal({
   });
 
   const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}) => {
-    if (onUpdateReturnExchangeStatus && order?.id) {
-      await onUpdateReturnExchangeStatus(order.id, {
+    const orderIdentifier = order?._id || order?.id || order?.orderId;
+    if (onUpdateReturnExchangeStatus && orderIdentifier) {
+      await onUpdateReturnExchangeStatus(orderIdentifier, {
         status: newStatus,
         ...extraPayload
       });
@@ -116,31 +117,53 @@ export default function OrderDetailModal({
     return String(order.shippingAddress);
   }, [order?.shippingAddress]);
 
+// Helper to generate dynamic tracking ID based on courier name
+export const generateDynamicTrackingId = (courierName) => {
+  const prefix = String(courierName || 'BLUEDART')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 10) || 'COURIER';
+  const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+  return `${prefix}-${randomNum}`;
+};
+
   if (!isOpen || !order) return null;
 
   const handleSaveDeliveryDetails = () => {
     const isSelf = deliveryModeInput === 'self_delivery';
-    const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
-    const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
-    const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+    let assignedTrackingNumber = '';
+    let tokenVal = '';
+    let selfTrackingLink = '';
+    let carrierUrl = '';
 
-    let carrierUrl = order.trackingUrl || '';
-    if (!isSelf && newTracking.trim()) {
-      const lowerCourier = courierInput.toLowerCase();
-      carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${newTracking.trim()}` :
-        lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${newTracking.trim()}` :
-        lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${newTracking.trim()}` :
-        lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${newTracking.trim()}` :
-        `https://track.shiprocket.in/tracking/${newTracking.trim()}`;
+    if (isSelf) {
+      const hasDriver = Boolean(driverNameInput.trim() || driverPhoneInput.trim());
+      if (hasDriver) {
+        tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${Math.floor(100000 + Math.random() * 900000)}`).trim();
+        const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+        selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+        assignedTrackingNumber = tokenVal;
+      }
+    } else {
+      if (courierInput.trim()) {
+        assignedTrackingNumber = newTracking.trim() || generateDynamicTrackingId(courierInput);
+        setNewTracking(assignedTrackingNumber);
+        const lowerCourier = courierInput.toLowerCase();
+        carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${assignedTrackingNumber}` :
+          lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${assignedTrackingNumber}` :
+          lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${assignedTrackingNumber}` :
+          lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${assignedTrackingNumber}` :
+          `https://track.shiprocket.in/tracking/${assignedTrackingNumber}`;
+      }
     }
 
     const payload = {
       deliveryMode: deliveryModeInput,
       deliveryType: deliveryModeInput,
       courierName: !isSelf ? courierInput : '',
-      trackingNumber: !isSelf ? newTracking.trim() : tokenVal,
+      trackingNumber: assignedTrackingNumber,
       trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
-      selfDeliveryDetails: isSelf ? {
+      selfDeliveryDetails: isSelf && tokenVal ? {
         ...(order.selfDeliveryDetails || {}),
         deliveryPersonName: driverNameInput.trim(),
         deliveryPersonPhone: driverPhoneInput.trim(),
@@ -150,13 +173,14 @@ export default function OrderDetailModal({
       } : undefined
     };
 
+    const orderIdentifier = order._id || order.id || order.orderId;
     if (onUpdateTracking) {
-      onUpdateTracking(order.id, payload.trackingNumber, payload);
+      onUpdateTracking(orderIdentifier, payload.trackingNumber, payload);
     }
     if (onUpdateStatus) {
-      onUpdateStatus(order.id, selectedStatus, payload);
+      onUpdateStatus(orderIdentifier, selectedStatus, payload);
     }
-    alert(`✅ Delivery partner & tracking details saved for Order #${order.id}!`);
+    alert(`✅ Delivery partner & tracking details saved for Order #${order.id || order.orderId}!`);
   };
 
   const handleSaveTracking = () => {
@@ -164,19 +188,22 @@ export default function OrderDetailModal({
   };
 
   const handleStatusChange = (status) => {
+    const orderIdentifier = order._id || order.id || order.orderId;
     setSelectedStatus(status);
-    onUpdateStatus(order.id, status);
+    onUpdateStatus(orderIdentifier, status);
   };
 
   const handleProcessRefund = () => {
-    onRefundOrder(order.id, order.total);
+    const orderIdentifier = order._id || order.id || order.orderId;
+    onRefundOrder(orderIdentifier, order.total);
     setShowRefundPrompt(false);
     onClose();
   };
 
   const handleCancel = () => {
-    if (window.confirm(`Are you sure you want to cancel Order ${order.id}?`)) {
-      onCancelOrder(order.id, 'Cancelled by Admin');
+    const orderIdentifier = order._id || order.id || order.orderId;
+    if (window.confirm(`Are you sure you want to cancel Order ${order.id || order.orderId}?`)) {
+      onCancelOrder(orderIdentifier, 'Cancelled by Admin');
       onClose();
     }
   };
@@ -211,6 +238,8 @@ export default function OrderDetailModal({
                   order.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
                   (order.status === 'Out for Delivery' || order.status === 'out_for_delivery') ? 'bg-purple-100 text-purple-900 border border-purple-200' :
                   order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                  (order.status === 'Packed' || order.status === 'Confirmed') ? 'bg-indigo-100 text-indigo-800' :
+                  order.status === 'Processing' ? 'bg-sky-100 text-sky-800' :
                   'bg-amber-100 text-amber-800'
                 }`}>
                   {order.status}
@@ -547,6 +576,8 @@ export default function OrderDetailModal({
                 >
                   <option value="Pending">Pending</option>
                   <option value="Confirmed">Confirmed</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Packed">Packed</option>
                   <option value="Shipped">Shipped</option>
                   <option value="Out for Delivery">Out for Delivery</option>
                   <option value="Delivered">Delivered</option>
@@ -809,23 +840,29 @@ export default function OrderDetailModal({
                   const isSelf = deliveryModeInput === 'self_delivery';
                   const isPartnerDecided = isSelf
                     ? Boolean(driverNameInput.trim() || driverPhoneInput.trim() || order.selfDeliveryDetails?.deliveryPartnerToken)
-                    : Boolean(courierInput.trim() && newTracking.trim());
-                  const canSeeTracking = isOut && isPartnerDecided;
-                  const trackingNoToDisplay = isSelf ? (order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${order.id}`) : newTracking.trim();
+                    : Boolean(courierInput.trim() && (newTracking.trim() || order.trackingNumber));
+                  const effectiveTracking = isSelf 
+                    ? (order.selfDeliveryDetails?.deliveryPartnerToken || (driverNameInput.trim() ? newTracking.trim() : '')) 
+                    : (newTracking.trim() || order.trackingNumber || '');
 
-                  if (!canSeeTracking) {
+                  if (!isPartnerDecided || !effectiveTracking) {
                     return (
-                      <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5 text-[11px] text-amber-800">
-                          <Lock size={12} className="text-amber-600" />
-                          <span>Tracking Restricted to "Out for Delivery"</span>
+                      <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold flex items-center gap-1.5 text-[11px] text-amber-800">
+                            <Truck size={13} className="text-amber-600" />
+                            <span>Logistics Tracking ID:</span>
+                          </div>
+                          <span className="font-mono font-bold text-[11px] bg-white px-2 py-0.5 rounded border border-amber-300 text-amber-800">
+                            Not Assigned
+                          </span>
                         </div>
                         <p className="text-[10px] text-amber-700 leading-normal">
-                          Tracking ID is only seen once order is <strong>Out for Delivery</strong> and delivery partner (3rd-Party or Self Delivery) is decided.
+                          Dynamic Tracking ID will be automatically generated once a delivery partner (3rd-Party Courier or Direct Rider) is assigned.
                         </p>
-                        <div className="text-[10px] space-y-0.5 pt-0.5">
-                          <div>• Status: {isOut ? <span className="text-emerald-700 font-bold">✓ Ready ({selectedStatus})</span> : <span className="text-rose-600 font-bold">✗ {selectedStatus} (Requires "Out for Delivery")</span>}</div>
-                          <div>• Delivery Partner: {isPartnerDecided ? <span className="text-emerald-700 font-bold">✓ Decided</span> : <span className="text-rose-600 font-bold">✗ Not Decided</span>}</div>
+                        <div className="text-[10px] space-y-0.5 pt-0.5 border-t border-amber-200/60">
+                          <div>• Delivery Partner: <span className="text-rose-600 font-bold">✗ Not Assigned</span></div>
+                          <div>• Logistics Tracking: <span className="text-amber-800 font-bold">Not Assigned</span></div>
                         </div>
                       </div>
                     );
@@ -835,18 +872,18 @@ export default function OrderDetailModal({
                     <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-950 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-[11px] text-emerald-900 flex items-center gap-1">
-                          <CheckCircle size={12} className="text-emerald-600" /> Active Tracking ID (Live on Invoice)
+                          <CheckCircle size={12} className="text-emerald-600" /> Logistics Tracking ID
                         </span>
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-700 text-white uppercase">
-                          Out for Delivery
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-700 text-white uppercase">
+                          {isOut ? 'Out for Delivery' : 'Partner Assigned'}
                         </span>
                       </div>
                       <div className="font-mono font-bold text-gray-900 text-xs bg-white p-1.5 rounded border border-emerald-100 flex items-center justify-between">
-                        <span>{trackingNoToDisplay}</span>
+                        <span>{effectiveTracking}</span>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(trackingNoToDisplay);
+                            navigator.clipboard.writeText(effectiveTracking);
                             setCopiedAwb(true);
                             setTimeout(() => setCopiedAwb(false), 2000);
                           }}
@@ -949,7 +986,9 @@ export default function OrderDetailModal({
                       {readOnly ? (
                         <div className="text-xs">
                           <div className="font-bold text-gray-900">{courierInput}</div>
-                          <div className="font-mono text-gray-600 text-[11px]">AWB: {canSeeTracking ? (newTracking || 'Awaiting assignment') : 'Hidden (Awaiting Out for Delivery)'}</div>
+                          <div className="font-mono text-gray-600 text-[11px]">
+                            AWB: {newTracking ? newTracking : <span className="text-amber-800 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">Not Assigned</span>}
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -957,7 +996,13 @@ export default function OrderDetailModal({
                             <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Select Courier Partner:</label>
                             <select
                               value={courierInput}
-                              onChange={e => setCourierInput(e.target.value)}
+                              onChange={e => {
+                                const selected = e.target.value;
+                                setCourierInput(selected);
+                                if (!newTracking.trim()) {
+                                  setNewTracking(generateDynamicTrackingId(selected));
+                                }
+                              }}
                               className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white outline-hidden cursor-pointer"
                             >
                               <option value="Delhivery">Delhivery Express</option>
@@ -969,12 +1014,21 @@ export default function OrderDetailModal({
                             </select>
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Tracking AWB Number:</label>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <label className="block text-[10px] font-bold text-gray-600">Tracking AWB Number:</label>
+                              <button
+                                type="button"
+                                onClick={() => setNewTracking(generateDynamicTrackingId(courierInput))}
+                                className="text-[10px] text-teal-700 hover:text-teal-900 font-bold underline cursor-pointer"
+                              >
+                                ⚡ Generate Dynamic AWB
+                              </button>
+                            </div>
                             <input
                               type="text"
                               value={newTracking}
                               onChange={e => setNewTracking(e.target.value)}
-                              placeholder="e.g. DLH-98765432"
+                              placeholder="Not Assigned (Click Generate or type AWB)"
                               className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded-lg outline-hidden"
                             />
                           </div>

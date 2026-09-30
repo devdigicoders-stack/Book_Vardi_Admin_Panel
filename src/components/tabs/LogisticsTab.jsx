@@ -216,7 +216,13 @@ export default function LogisticsTab() {
                         <td className="py-3 px-3 font-bold text-gray-800">{ord.customerName || ord.name || 'Customer'}</td>
                         <td className="py-3 px-3 font-medium text-teal-800">{ord.courierName || 'Shiprocket Air'}</td>
                         <td className="py-3 px-3 font-mono font-bold text-amber-900">
-                          {ord.trackingNumber || 'AWB-882194'}
+                          {ord.trackingNumber ? (
+                            ord.trackingNumber
+                          ) : (
+                            <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
+                              Not Assigned
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className="inline-block text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">

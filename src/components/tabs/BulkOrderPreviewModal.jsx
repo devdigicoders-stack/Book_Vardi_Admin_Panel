@@ -409,41 +409,34 @@ export default function BulkOrderPreviewModal({
     e.preventDefault();
     if (!onUpdateLogistics) return;
 
-    let finalTrackingUrl = trackingUrl;
-    let selfDetails = null;
+    const riderToken = order.deliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPartnerToken || `BV-SLF-${order.referenceId || order.id || Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const websiteOrigin = window.location.origin.replace(':5175', ':5173');
+    const riderUrl = `${websiteOrigin}/#delivery-partner?token=${riderToken}`;
 
-    if (deliveryMode === 'self_delivery') {
-      const riderToken = order.selfDeliveryDetails?.deliveryPartnerToken || `SELF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-      const riderUrl = `${window.location.origin}/#delivery-partner?token=${riderToken}`;
-      selfDetails = {
-        deliveryPersonName,
-        deliveryPersonPhone,
-        vehicleNumber,
-        deliveryPartnerToken: riderToken,
-        trackingUrl: riderUrl
-      };
-      finalTrackingUrl = riderUrl;
-    } else {
-      if (!finalTrackingUrl && trackingNumber) {
-        if (courierName === 'Delhivery') finalTrackingUrl = `https://www.delhivery.com/track/package/${trackingNumber}`;
-        else if (courierName === 'BlueDart') finalTrackingUrl = `https://www.bluedart.com/tracking?trackNumber=${trackingNumber}`;
-        else if (courierName === 'DTDC') finalTrackingUrl = `https://www.dtdc.in/tracking/tracking_results.asp?trkType=awb&strCnno=${trackingNumber}`;
-        else finalTrackingUrl = `https://track.shipment.com/${trackingNumber}`;
-      }
-    }
+    const selfDetails = {
+      deliveryBoyName: deliveryPersonName,
+      deliveryBoyPhone: deliveryPersonPhone,
+      deliveryPersonName,
+      deliveryPersonPhone,
+      vehicleNumber,
+      deliveryPartnerToken: riderToken,
+      trackingId: riderToken,
+      trackingUrl: riderUrl
+    };
 
     onUpdateLogistics(order.id || order._id, {
       status: deliveryStatus,
       deliveryStatus,
-      deliveryMode,
-      courierName: deliveryMode === 'third_party' ? courierName : '',
-      trackingNumber: deliveryMode === 'third_party' ? trackingNumber : '',
-      trackingUrl: finalTrackingUrl,
+      deliveryMode: 'self_delivery',
+      courierName: '',
+      trackingNumber: riderToken,
+      trackingUrl: riderUrl,
+      deliveryDetails: selfDetails,
       selfDeliveryDetails: selfDetails
     });
 
-    setLogisticsSavedMessage('Logistics & Tracking updated successfully!');
-    setTimeout(() => setLogisticsSavedMessage(''), 3000);
+    setLogisticsSavedMessage('Logistics & Tracking updated successfully with Self-Delivery verification link!');
+    setTimeout(() => setLogisticsSavedMessage(''), 4000);
   };
 
   // Filtered sellers for Admin Distribution
@@ -802,105 +795,92 @@ export default function BulkOrderPreviewModal({
 
                               <div>
                                 <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">
-                                  Delivery Mode / Partner
+                                  Delivery Partner Mode
                                 </label>
-                                <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-lg">
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeliveryMode('third_party')}
-                                    className={`py-1 px-2 rounded-md font-bold text-xs transition-colors cursor-pointer ${
-                                      deliveryMode === 'third_party' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
-                                    }`}
-                                  >
-                                    🚚 3rd-Party
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeliveryMode('self_delivery')}
-                                    className={`py-1 px-2 rounded-md font-bold text-xs transition-colors cursor-pointer ${
-                                      deliveryMode === 'self_delivery' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
-                                    }`}
-                                  >
-                                    🛵 Self-Delivery
-                                  </button>
+                                <div className="bg-teal-50 border border-teal-200 rounded-lg p-2 text-xs font-bold text-teal-900 flex items-center gap-1.5">
+                                  <Truck size={14} className="text-teal-700" />
+                                  <span>Exclusive Store Self-Delivery Fleet (Bulk Institutional Orders)</span>
                                 </div>
                               </div>
                             </div>
 
-                            {/* 3rd-Party Carrier Fields */}
-                            {deliveryMode === 'third_party' ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Courier Partner</label>
-                                  <select
-                                    value={courierName}
-                                    onChange={(e) => setCourierName(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
-                                  >
-                                    <option value="Delhivery">Delhivery</option>
-                                    <option value="BlueDart">BlueDart</option>
-                                    <option value="DTDC">DTDC</option>
-                                    <option value="Ekart Logistics">Ekart Logistics</option>
-                                    <option value="India Post">India Post</option>
-                                    <option value="Custom Courier">Custom Courier</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">AWB / Tracking Number</label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. DEL12345678"
-                                    value={trackingNumber}
-                                    onChange={(e) => setTrackingNumber(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs font-mono text-gray-800"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Tracking URL (Optional)</label>
-                                  <input
-                                    type="url"
-                                    placeholder="https://..."
-                                    value={trackingUrl}
-                                    onChange={(e) => setTrackingUrl(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
-                                  />
-                                </div>
+                            {/* Self-Delivery Rider Details */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-200">
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider / Delivery Boy Name</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Ramesh Kumar"
+                                  value={deliveryPersonName}
+                                  onChange={(e) => setDeliveryPersonName(e.target.value)}
+                                  className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                />
                               </div>
-                            ) : (
-                              /* Self-Delivery Rider Details */
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-200">
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider / Delivery Boy Name</label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Ramesh Kumar"
-                                    value={deliveryPersonName}
-                                    onChange={(e) => setDeliveryPersonName(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider Mobile Number</label>
-                                  <input
-                                    type="tel"
-                                    placeholder="e.g. 9876543210"
-                                    value={deliveryPersonPhone}
-                                    onChange={(e) => setDeliveryPersonPhone(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Vehicle Number</label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. UP 32 AB 1234"
-                                    value={vehicleNumber}
-                                    onChange={(e) => setVehicleNumber(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs font-mono text-gray-800"
-                                  />
-                                </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Rider Mobile Number</label>
+                                <input
+                                  type="tel"
+                                  placeholder="e.g. 9876543210"
+                                  value={deliveryPersonPhone}
+                                  onChange={(e) => setDeliveryPersonPhone(e.target.value)}
+                                  className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs text-gray-800"
+                                />
                               </div>
-                            )}
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Vehicle Number</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. UP 32 AB 1234"
+                                  value={vehicleNumber}
+                                  onChange={(e) => setVehicleNumber(e.target.value)}
+                                  className="w-full bg-white border border-gray-300 rounded-md p-1.5 text-xs font-mono text-gray-800"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Live Delivery Tracker Verification Link Card */}
+                            {(() => {
+                              const tokenVal = order.deliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPartnerToken || `BV-SLF-${order.referenceId || order.id}`;
+                              const trackerUrl = `${window.location.origin.replace(':5175', ':5173')}/#delivery-partner?token=${tokenVal}`;
+                              return (
+                                <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-xl space-y-1.5 text-xs">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-extrabold text-[11px] text-teal-950 uppercase tracking-wider flex items-center gap-1">
+                                      <ExternalLink size={12} className="text-teal-700" /> Live Delivery Tracker Verification Link:
+                                    </span>
+                                    <span className="font-mono text-[10px] font-bold bg-white text-teal-900 px-2 py-0.5 rounded border border-teal-200">
+                                      {tokenVal}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      value={trackerUrl}
+                                      className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-700 truncate select-all"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(trackerUrl);
+                                        alert('📋 Delivery Tracker Verification Link copied to clipboard!');
+                                      }}
+                                      className="px-3 py-1.5 bg-white hover:bg-teal-100 text-teal-900 border border-teal-300 font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                                    >
+                                      Copy Link
+                                    </button>
+                                    <a
+                                      href={trackerUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+                                    >
+                                      Open Tracker
+                                    </a>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             <div className="flex justify-end pt-1">
                               <button
