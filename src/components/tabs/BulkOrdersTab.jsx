@@ -286,20 +286,30 @@ export default function BulkOrdersTab() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                      order.status === 'quote_accepted'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : order.status === 'quoted' || hasQuotes
-                        ? 'bg-purple-50 text-purple-800 border-purple-200'
-                        : order.status === 'published' || order.status === 'assigned'
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                    }`}>
-                      {order.status === 'quote_accepted' ? 'Quote Accepted & Assigned' :
-                       order.status === 'quoted' || hasQuotes ? `${quoteCount} Quotation(s) Received` :
-                       order.status === 'published' ? 'Published for Bidding' :
-                       order.status === 'assigned' ? 'Assigned to Seller' : 'Pending Distribution'}
-                    </span>
+                    {order.advancePaymentStatus === 'paid' ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold border bg-emerald-50 text-emerald-800 border-emerald-300 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Prepayment Paid (₹{Number(order.advancePaidAmount || order.sellerAdvanceAmount || 0).toLocaleString()})
+                      </span>
+                    ) : (order.status === 'quote_accepted' || order.status === 'accepted') && order.sellerAdvanceAmount > 0 ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-900 border-amber-300 flex items-center gap-1">
+                        <AlertCircle size={12} /> Awaiting Prepayment (₹{Number(order.sellerAdvanceAmount).toLocaleString()})
+                      </span>
+                    ) : (
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                        order.status === 'quote_accepted' || order.status === 'accepted'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : order.status === 'quoted' || hasQuotes
+                          ? 'bg-purple-50 text-purple-800 border-purple-200'
+                          : order.status === 'published' || order.status === 'assigned'
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        {order.status === 'quote_accepted' || order.status === 'accepted' ? 'Quote Accepted & Assigned' :
+                         order.status === 'quoted' || hasQuotes ? `${quoteCount} Quotation(s) Received` :
+                         order.status === 'published' ? 'Published for Bidding' :
+                         order.status === 'assigned' ? 'Assigned to Seller' : 'Pending Distribution'}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -364,39 +374,66 @@ export default function BulkOrdersTab() {
                 )}
 
                 {/* Advance Payment Indicator Strip */}
-                {(order.buyerAdvancePercentage || order.buyerAdvanceAmount || order.sellerAdvancePercentage || order.sellerAdvanceAmount || order.advancePaymentStatus === 'paid_partially') && (
-                  <div className="bg-emerald-50/70 border border-emerald-200/80 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <DollarSign size={14} className="text-emerald-700 shrink-0" />
-                      <span className="font-extrabold text-emerald-950">
-                        {order.advancePaymentStatus === 'paid_partially' ? (
-                          <span className="text-emerald-800">✅ Advance Paid: ₹{Number(order.advancePaidAmount || order.buyerAdvanceAmount || 0).toLocaleString()}</span>
-                        ) : order.buyerAdvancePercentage ? (
-                          <span>Buyer Offered Advance: <strong className="text-emerald-900">{order.buyerAdvancePercentage}%</strong>{order.buyerAdvanceAmount ? ` (₹${Number(order.buyerAdvanceAmount).toLocaleString()})` : ''}</span>
-                        ) : (
-                          <span>Advance Terms Registered</span>
-                        )}
-                      </span>
-                      {order.sellerAdvancePercentage && (
-                        <span className="text-purple-900 font-bold bg-purple-100/70 px-2 py-0.5 rounded text-[10px]">
-                          Seller Demanded: {order.sellerAdvancePercentage}% {order.sellerAdvanceAmount ? `(₹${Number(order.sellerAdvanceAmount).toLocaleString()})` : ''}
-                        </span>
-                      )}
-                      {order.buyerAdvanceNote && (
-                        <span className="text-gray-500 text-[11px] hidden sm:inline">"{order.buyerAdvanceNote}"</span>
-                      )}
-                    </div>
+                {(() => {
+                  const isAdvPaid = order.advancePaymentStatus === 'paid' || order.advancePaymentStatus === 'paid_partially';
+                  const isAdvPending = (Number(order.sellerAdvanceAmount || 0) > 0 || Number(order.sellerAdvancePercentage || 0) > 0) && !isAdvPaid;
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReceiptOrder(order)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100/60 text-emerald-900 font-extrabold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer"
-                    >
-                      <FileText size={12} className="text-emerald-700" />
-                      <span>Partial Receipt</span>
-                    </button>
-                  </div>
-                )}
+                  if (isAdvPending) {
+                    return (
+                      <div className="bg-amber-50 border-2 border-amber-300 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle size={14} className="text-amber-700 shrink-0" />
+                          <span className="font-extrabold text-amber-950">
+                            Awaiting Buyer Online Prepayment: ₹{Number(order.sellerAdvanceAmount || 0).toLocaleString()} ({order.sellerAdvancePercentage || 0}%)
+                          </span>
+                          <span className="text-amber-800 text-[11px] hidden sm:inline">
+                            Seller accepted counter. Buyer has been prompted to pay online.
+                          </span>
+                        </div>
+                        <span className="bg-amber-200 text-amber-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                          Prepayment Pending
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (isAdvPaid || order.buyerAdvancePercentage || order.buyerAdvanceAmount || order.sellerAdvancePercentage || order.sellerAdvanceAmount) {
+                    return (
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <DollarSign size={14} className="text-emerald-700 shrink-0" />
+                          <div>
+                            <span className="font-extrabold text-emerald-950 block">
+                              {isAdvPaid ? (
+                                <span className="text-emerald-800">✅ Online Prepayment Confirmed: ₹{Number(order.advancePaidAmount || order.sellerAdvanceAmount || 0).toLocaleString()}</span>
+                              ) : order.buyerAdvancePercentage ? (
+                                <span>Buyer Offered Advance: <strong className="text-emerald-900">{order.buyerAdvancePercentage}%</strong>{order.buyerAdvanceAmount ? ` (₹${Number(order.buyerAdvanceAmount).toLocaleString()})` : ''}</span>
+                              ) : (
+                                <span>Advance Terms Registered</span>
+                              )}
+                            </span>
+                            {order.advanceTransactionId && (
+                              <span className="text-emerald-800 font-mono text-[10px]">
+                                TXN: <strong>{order.advanceTransactionId}</strong>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReceiptOrder(order)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 font-extrabold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <FileText size={12} className="text-emerald-700" />
+                          <span>Advance Receipt</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 {/* Footer Action Buttons */}
                 <div className="flex items-center justify-between pt-1">
@@ -826,20 +863,22 @@ export default function BulkOrdersTab() {
       {/* ========================================== */}
       {/* MODAL 3: EXPANDED BULK ORDER PREVIEW MODAL */}
       {/* ========================================== */}
-      <BulkOrderPreviewModal
-        order={previewOrder}
-        onClose={() => setPreviewOrder(null)}
-        userRole="admin"
-        sellers={sellers}
-        onDistribute={(orderId, payload) => {
-          distributeSchoolBulkOrder(orderId, payload);
-          setPreviewOrder(null);
-        }}
-        onUpdateLogistics={(orderId, payload) => {
-          if (updateSchoolOrderStatusAndTracking) updateSchoolOrderStatusAndTracking(orderId, payload);
-          setPreviewOrder(prev => (prev && (prev.id === orderId || prev._id === orderId) ? { ...prev, ...payload } : prev));
-        }}
-      />
+      {previewOrder && (
+        <BulkOrderPreviewModal
+          order={previewOrder}
+          onClose={() => setPreviewOrder(null)}
+          userRole="admin"
+          sellers={sellers}
+          onDistribute={(orderId, payload) => {
+            distributeSchoolBulkOrder(orderId, payload);
+            setPreviewOrder(null);
+          }}
+          onUpdateLogistics={(orderId, payload) => {
+            if (updateSchoolOrderStatusAndTracking) updateSchoolOrderStatusAndTracking(orderId, payload);
+            setPreviewOrder(prev => (prev && (prev.id === orderId || prev._id === orderId) ? { ...prev, ...payload } : prev));
+          }}
+        />
+      )}
 
       {/* Partial Advance Payment Receipt Modal */}
       {selectedReceiptOrder && (

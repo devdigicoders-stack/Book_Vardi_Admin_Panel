@@ -49,8 +49,6 @@ export default function BulkOrderPreviewModal({
   onUpdateLogistics, // (orderId, payload) => void
   sellerUser = null // Current seller info when userRole === 'seller'
 }) {
-  if (!order) return null;
-
   // Active Lightbox / Image Preview
   const [zoomImage, setZoomImage] = useState(null);
 
@@ -62,18 +60,18 @@ export default function BulkOrderPreviewModal({
   const [modalSubTab, setModalSubTab] = useState(initialTab || 'specs'); // 'specs', 'distribution', 'quotes', 'submit_quote'
 
   // Admin Distribution State
-  const [distributeMode, setDistributeMode] = useState(order.assignmentMode || 'direct');
+  const [distributeMode, setDistributeMode] = useState(order?.assignmentMode || 'direct');
   const [selectedSingleSeller, setSelectedSingleSeller] = useState(
-    order.sellerId ? (typeof order.sellerId === 'object' ? (order.sellerId._id || order.sellerId.id) : order.sellerId) : ''
+    order?.sellerId ? (typeof order.sellerId === 'object' ? (order.sellerId._id || order.sellerId.id) : order.sellerId) : ''
   );
   const [selectedMultipleSellers, setSelectedMultipleSellers] = useState(
-    (order.invitedSellerIds || []).map(s => (typeof s === 'object' ? (s._id || s.id) : s))
+    (order?.invitedSellerIds || []).map(s => (typeof s === 'object' ? (s._id || s.id) : s))
   );
   const [sellerSearchQuery, setSellerSearchQuery] = useState('');
 
   // Seller Quotation State
   const currentSellerId = sellerUser?.id || sellerUser?._id || '';
-  const existingSellerQuote = Array.isArray(order.quotations)
+  const existingSellerQuote = Array.isArray(order?.quotations)
     ? order.quotations.find(q => String(q.sellerId) === String(currentSellerId))
     : null;
 
@@ -147,11 +145,11 @@ export default function BulkOrderPreviewModal({
     });
   };
 
-  const targetBudgetNum = Number(order.targetBudgetPerKit || order.estimatedBudget || 0);
+  const targetBudgetNum = Number(order?.targetBudgetPerKit || order?.estimatedBudget || 0);
   const totalQtyNum = Number(
-    order.totalQuantity ||
-    order.quantity ||
-    (Array.isArray(order.requirements) ? order.requirements.reduce((s, r) => s + Number(r.quantity || 0), 0) : 100)
+    order?.totalQuantity ||
+    order?.quantity ||
+    (Array.isArray(order?.requirements) ? order.requirements.reduce((s, r) => s + Number(r.quantity || 0), 0) : 100)
   );
 
   const [quoteAmount, setQuoteAmount] = useState(
@@ -168,30 +166,30 @@ export default function BulkOrderPreviewModal({
   const [quoteNotes, setQuoteNotes] = useState(existingSellerQuote ? (existingSellerQuote.notes || '') : '');
 
   // Logistics & Delivery Tracking State
-  const [deliveryMode, setDeliveryMode] = useState(order.deliveryMode || 'third_party');
-  const [courierName, setCourierName] = useState(order.courierName || 'Delhivery');
-  const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
-  const [trackingUrl, setTrackingUrl] = useState(order.trackingUrl || '');
-  const [deliveryStatus, setDeliveryStatus] = useState(order.deliveryStatus || order.status || 'quote_accepted');
-  const [deliveryPersonName, setDeliveryPersonName] = useState(order.selfDeliveryDetails?.deliveryPersonName || '');
-  const [deliveryPersonPhone, setDeliveryPersonPhone] = useState(order.selfDeliveryDetails?.deliveryPersonPhone || '');
-  const [vehicleNumber, setVehicleNumber] = useState(order.selfDeliveryDetails?.vehicleNumber || '');
+  const [deliveryMode, setDeliveryMode] = useState(order?.deliveryMode || 'third_party');
+  const [courierName, setCourierName] = useState(order?.courierName || 'Delhivery');
+  const [trackingNumber, setTrackingNumber] = useState(order?.trackingNumber || '');
+  const [trackingUrl, setTrackingUrl] = useState(order?.trackingUrl || '');
+  const [deliveryStatus, setDeliveryStatus] = useState(order?.deliveryStatus || order?.status || 'quote_accepted');
+  const [deliveryPersonName, setDeliveryPersonName] = useState(order?.selfDeliveryDetails?.deliveryPersonName || '');
+  const [deliveryPersonPhone, setDeliveryPersonPhone] = useState(order?.selfDeliveryDetails?.deliveryPersonPhone || '');
+  const [vehicleNumber, setVehicleNumber] = useState(order?.selfDeliveryDetails?.vehicleNumber || '');
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [logisticsSavedMessage, setLogisticsSavedMessage] = useState('');
 
   // Advance Payment Counter-Demand State
   const [sellerAdvanceType, setSellerAdvanceType] = useState(
-    existingSellerQuote?.sellerAdvanceType || order.sellerAdvanceType || order.buyerAdvanceType || 'percentage'
+    existingSellerQuote?.sellerAdvanceType || order?.sellerAdvanceType || order?.buyerAdvanceType || 'percentage'
   );
   const [sellerAdvancePercentage, setSellerAdvancePercentage] = useState(
-    existingSellerQuote?.sellerAdvancePercentage || order.sellerAdvancePercentage || order.buyerAdvancePercentage || 30
+    existingSellerQuote?.sellerAdvancePercentage || order?.sellerAdvancePercentage || order?.buyerAdvancePercentage || 30
   );
   const [sellerAdvanceAmount, setSellerAdvanceAmount] = useState(
-    existingSellerQuote?.sellerAdvanceAmount ? String(existingSellerQuote.sellerAdvanceAmount) : (order.sellerAdvanceAmount ? String(order.sellerAdvanceAmount) : '')
+    existingSellerQuote?.sellerAdvanceAmount ? String(existingSellerQuote.sellerAdvanceAmount) : (order?.sellerAdvanceAmount ? String(order.sellerAdvanceAmount) : '')
   );
   const [sellerAdvanceTerms, setSellerAdvanceTerms] = useState(
-    existingSellerQuote?.sellerAdvanceTerms || order.sellerAdvanceTerms || ''
+    existingSellerQuote?.sellerAdvanceTerms || order?.sellerAdvanceTerms || ''
   );
 
   // Keep state updated when order changes
@@ -229,33 +227,34 @@ export default function BulkOrderPreviewModal({
   }, [order, initialTab]);
 
   // Normalization Helpers
-  const refId = order.referenceId || order.id || `SCH-${order._id}`;
-  const instName = order.institutionName || order.schoolName || 'School / College';
-  const instType = order.institutionType || 'Educational Institution';
-  const schId = order.schoolId || '';
+  const refId = order?.referenceId || order?.id || (order?._id ? `SCH-${order._id}` : 'SCH-BULK');
+  const instName = order?.institutionName || order?.schoolName || 'School / College';
+  const instType = order?.institutionType || 'Educational Institution';
+  const schId = order?.schoolId || '';
 
-  const contactName = order.contactName || order.contactPerson || 'Purchaser Contact';
-  const contactPhone = order.contactPhone || 'N/A';
-  const contactEmail = order.contactEmail || 'N/A';
-  const designation = order.designation || 'Administrator';
+  const contactName = order?.contactName || order?.contactPerson || 'Purchaser Contact';
+  const contactPhone = order?.contactPhone || 'N/A';
+  const contactEmail = order?.contactEmail || 'N/A';
+  const designation = order?.designation || 'Administrator';
 
-  const address = order.address || order.addressLine || 'N/A';
-  const city = order.city || 'Delhi';
-  const state = order.state || 'Delhi';
-  const pincode = order.pincode || '';
+  const address = order?.address || order?.addressLine || 'N/A';
+  const city = order?.city || 'Delhi';
+  const state = order?.state || 'Delhi';
+  const pincode = order?.pincode || '';
 
   const requirementsList = useMemo(() => {
+    if (!order) return [];
     return Array.isArray(order.requirements) && order.requirements.length > 0
       ? order.requirements
       : [
           {
             category: 'Bulk Procurement',
-            itemName: order.requirementSummary || order.additionalNotes || 'Bulk School Uniform & Stationery',
+            itemName: order?.requirementSummary || order?.additionalNotes || 'Bulk School Uniform & Stationery',
             quantity: totalQtyNum,
             budgetPerUnit: targetBudgetNum && totalQtyNum ? Math.round(targetBudgetNum / totalQtyNum) : 0,
             sellerPricePerUnit: 0,
             sampleImage: '',
-            notes: order.additionalNotes || ''
+            notes: order?.additionalNotes || ''
           }
         ];
   }, [order, totalQtyNum, targetBudgetNum]);
@@ -513,6 +512,8 @@ export default function BulkOrderPreviewModal({
 
     setModalSubTab('specs');
   };
+
+  if (!order) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in">

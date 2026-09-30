@@ -748,6 +748,61 @@ export default function AdminKitFormPage({
                 </div>
               </div>
 
+              {/* Universal / Open for All Schools Quick Toggle */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200 gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <School size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <span>Open for All Schools (Universal Kit)</span>
+                      {(formData.schoolName?.toLowerCase().includes('all school') || formData.schoolCode === 'ALL') && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Enable this if this kit bundle is general and applicable for students of any school.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isAll = formData.schoolName?.toLowerCase().includes('all school') || formData.schoolCode === 'ALL';
+                    if (isAll) {
+                      setFormData(prev => ({
+                        ...prev,
+                        schoolName: '',
+                        schoolCode: ''
+                      }));
+                    } else {
+                      setFormData(prev => ({
+                        ...prev,
+                        schoolName: 'All Schools (Open for All Schools)',
+                        schoolCode: 'ALL'
+                      }));
+                    }
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                    (formData.schoolName?.toLowerCase().includes('all school') || formData.schoolCode === 'ALL')
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/50'
+                  }`}
+                >
+                  {(formData.schoolName?.toLowerCase().includes('all school') || formData.schoolCode === 'ALL') ? (
+                    <>
+                      <Check size={13} />
+                      <span>All Schools Enabled</span>
+                    </>
+                  ) : (
+                    <span>Make Open for All Schools</span>
+                  )}
+                </button>
+              </div>
+
               {/* Searchable School Selector with Custom Option */}
               <div className="pt-2 border-t border-gray-100">
                 <SchoolSelectorWithCustom
@@ -767,9 +822,30 @@ export default function AdminKitFormPage({
 
               {/* Target Grades / Classes */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">
-                  Target Class / Grades (Select all that apply)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">
+                    Target Class / Grades (Select all that apply)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedGrades(GRADE_OPTIONS);
+                      }}
+                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
+                      Select All Classes
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGrades([])}
+                      className="text-[11px] font-bold text-gray-400 hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {GRADE_OPTIONS.map(grade => {
                     const isSelected = selectedGrades.includes(grade);
