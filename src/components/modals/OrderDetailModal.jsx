@@ -22,6 +22,16 @@ import {
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
 
+// Helper to generate dynamic tracking ID based on courier name
+export const generateDynamicTrackingId = (courierName) => {
+  const prefix = String(courierName || 'BLUEDART')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 10) || 'COURIER';
+  const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+  return `${prefix}-${randomNum}`;
+};
+
 export default function OrderDetailModal({ 
   isOpen, 
   onClose, 
@@ -116,16 +126,6 @@ export default function OrderDetailModal({
     }
     return String(order.shippingAddress);
   }, [order?.shippingAddress]);
-
-// Helper to generate dynamic tracking ID based on courier name
-export const generateDynamicTrackingId = (courierName) => {
-  const prefix = String(courierName || 'BLUEDART')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 10) || 'COURIER';
-  const randomNum = Math.floor(10000000 + Math.random() * 90000000);
-  return `${prefix}-${randomNum}`;
-};
 
   if (!isOpen || !order) return null;
 
