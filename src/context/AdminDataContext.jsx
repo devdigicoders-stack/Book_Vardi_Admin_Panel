@@ -52,7 +52,8 @@ import {
   updateKitApprovalStatusApi,
   createAdminKitApi,
   updateAdminKitApi,
-  deleteAdminKitApi
+  deleteAdminKitApi,
+  isTokenValid
 } from '../utils/api';
 
 const AdminDataContext = createContext();
@@ -77,7 +78,12 @@ export const AdminDataProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
       const token = localStorage.getItem('bv_admin_jwt_token');
-      return Boolean(token);
+      if (!isTokenValid(token)) {
+        localStorage.removeItem('bv_admin_jwt_token');
+        localStorage.removeItem('admin_is_authenticated');
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
@@ -363,8 +369,24 @@ export const AdminDataProvider = ({ children }) => {
   useEffect(() => { safeSetLocalStorage('admin_profile', adminUser); }, [adminUser]);
   useEffect(() => { safeSetLocalStorage('admin_is_authenticated', isAuthenticated); }, [isAuthenticated]);
 
-  // Phase 0: Hydrate initial state from backend API endpoints
+  // Listen for session expiration events dispatched on 401/403 responses
   useEffect(() => {
+    const handleSessionExpired = () => {
+      try {
+        localStorage.removeItem('bv_admin_jwt_token');
+        localStorage.removeItem('admin_is_authenticated');
+      } catch {}
+      setIsAuthenticated(false);
+    };
+    window.addEventListener('bv:admin:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('bv:admin:session-expired', handleSessionExpired);
+  }, []);
+
+  // Phase 0: Hydrate initial state from backend API endpoints
+  const loadAllAdminData = useCallback(() => {
+    const token = localStorage.getItem('bv_admin_jwt_token');
+    if (!token || !isTokenValid(token)) return;
+
     fetchAnnouncementsApi().then(data => {
       const list = Array.isArray(data) ? data : (data?.announcements || []);
       if (list.length > 0) {
@@ -660,32 +682,47 @@ export const AdminDataProvider = ({ children }) => {
         setInventory(data);
       }
     }).catch(() => {});
+  }, []);
 
-    // Auto-poll products every 10 seconds for real-time seller submission updates
+  // Fetch admin data on mount or when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAllAdminData();
+    }
+  }, [isAuthenticated, loadAllAdminData]);
+
+  // Real-time synchronization and polling while authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Auto-poll products every 15 seconds for real-time seller submission updates
     const pollInterval = setInterval(() => {
-      fetchAdminProductsApi().then(data => {
-        const list = Array.isArray(data) ? data : (data?.products || []);
-        if (list.length > 0) {
-          setProducts(list.map(p => ({
-            id: p._id || p.id,
-            _id: p._id || p.id,
-            name: p.name || p.title || 'Product',
-            price: Number(p.price || 0),
-            originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
-            mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
-            category: p.category || 'uniforms',
-            approvalStatus: p.approvalStatus || 'Approved',
-            stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
-            stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
-            image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
-            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
-            sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
-            sizes: Array.isArray(p.sizes) ? p.sizes : [],
-            ...p
-          })));
-        }
-      }).catch(() => {});
-    }, 10000);
+      const token = localStorage.getItem('bv_admin_jwt_token');
+      if (token && isTokenValid(token)) {
+        fetchAdminProductsApi().then(data => {
+          const list = Array.isArray(data) ? data : (data?.products || []);
+          if (list.length > 0) {
+            setProducts(list.map(p => ({
+              id: p._id || p.id,
+              _id: p._id || p.id,
+              name: p.name || p.title || 'Product',
+              price: Number(p.price || 0),
+              originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+              mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+              category: p.category || 'uniforms',
+              approvalStatus: p.approvalStatus || 'Approved',
+              stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+              stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+              image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
+              images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
+              sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
+              sizes: Array.isArray(p.sizes) ? p.sizes : [],
+              ...p
+            })));
+          }
+        }).catch(() => {});
+      }
+    }, 15000);
 
     // Sync product approval notifications & product submissions in real-time
     const syncFromStorage = () => {
@@ -719,7 +756,7 @@ export const AdminDataProvider = ({ children }) => {
       window.removeEventListener('adminNotificationReceived', handleNotifEvent);
       window.removeEventListener('adminProductsUpdated', handleProdsEvent);
     };
-  }, []);
+  }, [isAuthenticated]);
 
 
 
@@ -1868,6 +1905,9 @@ export const AdminDataProvider = ({ children }) => {
     setAdminUser(updated);
     setIsAuthenticated(true);
     logAudit('Admin Signed In', `Authenticated via JWT as role: ${updated.role}`);
+    setTimeout(() => {
+      loadAllAdminData();
+    }, 50);
     return { success: true };
   };
 

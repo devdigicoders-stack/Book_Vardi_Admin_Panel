@@ -19,15 +19,32 @@ export default function SchoolsTab() {
   const canEdit = isEditor ? isEditor('schools') : true;
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'pending'
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState(null);
   const [tempRadius, setTempRadius] = useState(schoolRadiusKm || 25);
   const [radiusSavedFeedback, setRadiusSavedFeedback] = useState(false);
+  const [customSchoolsList, setCustomSchoolsList] = useState([]);
 
   // Sync tempRadius if external update
   React.useEffect(() => {
     if (schoolRadiusKm) setTempRadius(schoolRadiusKm);
   }, [schoolRadiusKm]);
+
+  // Load custom schools created from Kit creation workflows
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('bookvardi_custom_schools');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setCustomSchoolsList(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse custom schools from storage:', e);
+    }
+  }, []);
 
   const handleApplyRadius = (newRadius) => {
     if (!canEdit) return;
@@ -38,11 +55,47 @@ export default function SchoolsTab() {
     setTimeout(() => setRadiusSavedFeedback(false), 2500);
   };
 
-  const filteredSchools = schools.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.board.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Merge context schools and locally registered custom schools
+  const allMergedSchools = React.useMemo(() => {
+    const existingNames = new Set((schools || []).map(s => (s.name || '').trim().toLowerCase()));
+    const customItems = (customSchoolsList || [])
+      .filter(cs => !existingNames.has((cs.name || '').trim().toLowerCase()))
+      .map(cs => ({
+        id: cs.schoolId || `custom-${cs.name}`,
+        _id: cs.schoolId || `custom-${cs.name}`,
+        name: cs.name,
+        board: cs.board || 'CBSE',
+        city: cs.city || 'Custom Added',
+        status: cs.status || 'pending',
+        studentCount: cs.studentCount || '500+',
+        classes: cs.classes || 'All Grades',
+        commissionShare: cs.commissionShare || '5%',
+        contactPerson: cs.contactPerson || 'Submitting Seller',
+        email: cs.email || 'seller@marketplace.in',
+        phone: cs.phone || '9876543210',
+        isCustom: true
+      }));
+    return [...(schools || []), ...customItems];
+  }, [schools, customSchoolsList]);
+
+  const filteredSchools = React.useMemo(() => {
+    return allMergedSchools.filter(s => {
+      const nameMatch = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const cityMatch = (s.city || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const boardMatch = (s.board || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = !searchTerm || nameMatch || cityMatch || boardMatch;
+
+      const sStatus = (s.status || 'Partner Active').toLowerCase();
+      const isPending = sStatus.includes('pending');
+      const matchesStatus = statusFilter === 'all'
+        ? true
+        : statusFilter === 'pending'
+        ? isPending
+        : !isPending;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [allMergedSchools, searchTerm, statusFilter]);
 
   const handleOpenAdd = () => {
     if (!canEdit) return;
@@ -59,16 +112,53 @@ export default function SchoolsTab() {
   const handleSaveSchool = (formData) => {
     if (!canEdit) return;
     if (editingSchool) {
-      updateSchool(editingSchool.id, formData);
+      updateSchool(editingSchool.id || editingSchool._id, formData);
     } else {
       addSchool(formData);
     }
+  };
+
+  const handleQuickApproveSchool = (school) => {
+    if (!canEdit) return;
+    updateSchool(school.id || school._id, { status: 'Partner Active' });
+    try {
+      const stored = localStorage.getItem('bookvardi_custom_schools');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const updated = parsed.map(cs => cs.name.toLowerCase() === school.name.toLowerCase() ? { ...cs, status: 'Partner Active' } : cs);
+        localStorage.setItem('bookvardi_custom_schools', JSON.stringify(updated));
+        setCustomSchoolsList(updated);
+      }
+    } catch {}
+  };
+
+  const handleQuickPendingSchool = (school) => {
+    if (!canEdit) return;
+    updateSchool(school.id || school._id, { status: 'pending' });
+    try {
+      const stored = localStorage.getItem('bookvardi_custom_schools');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const updated = parsed.map(cs => cs.name.toLowerCase() === school.name.toLowerCase() ? { ...cs, status: 'pending' } : cs);
+        localStorage.setItem('bookvardi_custom_schools', JSON.stringify(updated));
+        setCustomSchoolsList(updated);
+      }
+    } catch {}
   };
 
   const handleDelete = (id, name) => {
     if (!canEdit) return;
     if (window.confirm(`Are you sure you want to remove ${name} from partner schools?`)) {
       deleteSchool(id);
+      try {
+        const stored = localStorage.getItem('bookvardi_custom_schools');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const updated = parsed.filter(cs => cs.name.toLowerCase() !== name.toLowerCase());
+          localStorage.setItem('bookvardi_custom_schools', JSON.stringify(updated));
+          setCustomSchoolsList(updated);
+        }
+      } catch {}
     }
   };
 
@@ -182,8 +272,8 @@ export default function SchoolsTab() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex items-center justify-between gap-3">
+      {/* Search & Status Filters */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="relative w-full md:w-96">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -194,101 +284,176 @@ export default function SchoolsTab() {
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden"
           />
         </div>
+
+        {/* Status Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {[
+            { id: 'all', label: `All Schools (${allMergedSchools.length})` },
+            {
+              id: 'active',
+              label: `Active / Approved (${allMergedSchools.filter(s => !(s.status || '').toLowerCase().includes('pending')).length})`
+            },
+            {
+              id: 'pending',
+              label: `Pending Review (${allMergedSchools.filter(s => (s.status || '').toLowerCase().includes('pending')).length})`
+            }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                statusFilter === tab.id
+                  ? 'bg-teal-900 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Schools Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {filteredSchools.map((school) => (
-          <div
-            key={school.id}
-            className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs hover:shadow-md transition-all space-y-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
-                  <Building size={22} />
+        {filteredSchools.length === 0 ? (
+          <div className="col-span-full bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-3">
+            <Building size={36} className="mx-auto text-gray-300" />
+            <h4 className="font-bold text-gray-800 text-sm">No Schools Found</h4>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto">
+              No institutions match your search or filter criteria. Try resetting the filter.
+            </p>
+          </div>
+        ) : (
+          filteredSchools.map((school) => {
+            const isPending = (school.status || '').toLowerCase().includes('pending');
+
+            return (
+              <div
+                key={school.id || school._id}
+                className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs hover:shadow-md transition-all space-y-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold ${
+                      isPending ? 'bg-amber-50 text-amber-700' : 'bg-purple-50 text-purple-700'
+                    }`}>
+                      <Building size={22} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-sm text-gray-900 leading-snug">{school.name}</h3>
+                        {school.isCustom && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                            Custom Added
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                        <span className="font-semibold text-purple-800 bg-purple-50 px-2 py-0.2 rounded-md">
+                          {school.board || 'CBSE'}
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5"><MapPin size={11} /> {school.city}</span>
+                        {school.lat && school.lng && (
+                          <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
+                            {Number(school.lat).toFixed(4)}, {Number(school.lng).toFixed(4)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                    isPending ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {isPending ? 'Pending Review' : (school.status || 'Partner Active')}
+                  </span>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm text-gray-900 leading-snug">{school.name}</h3>
-                  <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-1.5 mt-0.5">
-                    <span className="font-semibold text-purple-800 bg-purple-50 px-2 py-0.2 rounded-md">
-                      {school.board}
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-0.5"><MapPin size={11} /> {school.city}</span>
-                    {school.lat && school.lng && (
-                      <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
-                        {school.lat.toFixed(4)}, {school.lng.toFixed(4)}
-                      </span>
-                    )}
+
+                {/* School Metrics */}
+                <div className="grid grid-cols-3 gap-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-center text-xs">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Students</span>
+                    <div className="font-bold text-gray-800 mt-0.5">{school.studentCount}</div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Classes</span>
+                    <div className="font-bold text-gray-800 mt-0.5">
+                      {Array.isArray(school.classes)
+                        ? (school.classes.length > 3 ? `${school.classes[0]} to ${school.classes[school.classes.length - 1]}` : school.classes.join(', '))
+                        : school.classes}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Rev Share</span>
+                    <div className="font-bold text-teal-800 mt-0.5">{school.commissionShare || '5%'}</div>
                   </div>
                 </div>
-              </div>
 
-              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
-                school.status === 'Partner Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {school.status}
-              </span>
-            </div>
-
-            {/* School Metrics */}
-            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-center text-xs">
-              <div>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Students</span>
-                <div className="font-bold text-gray-800 mt-0.5">{school.studentCount}</div>
-              </div>
-              <div>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Classes</span>
-                <div className="font-bold text-gray-800 mt-0.5">
-                  {Array.isArray(school.classes)
-                    ? (school.classes.length > 3 ? `${school.classes[0]} to ${school.classes[school.classes.length - 1]}` : school.classes.join(', '))
-                    : school.classes}
+                {/* Coordinator & Exclusive Kit */}
+                <div className="text-xs text-gray-600 space-y-1">
+                  <div>Coordinator: <span className="font-semibold text-gray-900">{school.contactPerson}</span></div>
+                  <div className="text-[11px] text-gray-500">{school.email} • {school.phone}</div>
                 </div>
-              </div>
-              <div>
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Rev Share</span>
-                <div className="font-bold text-teal-800 mt-0.5">{school.commissionShare || '5%'}</div>
-              </div>
-            </div>
 
-            {/* Coordinator & Exclusive Kit */}
-            <div className="text-xs text-gray-600 space-y-1">
-              <div>Coordinator: <span className="font-semibold text-gray-900">{school.contactPerson}</span></div>
-              <div className="text-[11px] text-gray-500">{school.email} • {school.phone}</div>
-            </div>
+                {/* Quick Governance Buttons & Actions */}
+                <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {canEdit && isPending && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickApproveSchool(school)}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all"
+                        >
+                          ✓ Approve School
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickPendingSchool(school)}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold cursor-pointer transition-all"
+                        >
+                          Keep Pending
+                        </button>
+                      </>
+                    )}
 
-            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-              {school.exclusiveKit ? (
-                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-                  <PackageCheck size={14} /> Official Uniform & Book Kit Live
-                </span>
-              ) : (
-                <span className="text-[11px] text-gray-400">Standard Catalog Only</span>
-              )}
+                    {canEdit && !isPending && (
+                      <button
+                        type="button"
+                        onClick={() => handleQuickPendingSchool(school)}
+                        className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold cursor-pointer transition-all"
+                      >
+                        Set to Pending
+                      </button>
+                    )}
+                  </div>
 
-              {canEdit && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleOpenEdit(school)}
-                    className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                    title="Edit School"
-                  >
-                    <Edit3 size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(school.id, school.name)}
-                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                    title="Delete School"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {canEdit && (
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <button
+                        onClick={() => handleOpenEdit(school)}
+                        className="p-1.5 text-gray-500 hover:text-teal-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        title="Edit School"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(school.id || school._id, school.name)}
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete School"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-          </div>
-        ))}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* School Modal */}

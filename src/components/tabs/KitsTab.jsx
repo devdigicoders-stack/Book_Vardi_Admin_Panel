@@ -406,12 +406,22 @@ export default function KitsTab() {
                             <Store className="w-3 h-3 text-gray-400" />
                             <span className="truncate max-w-[130px]">{k.sellerName || 'Marketplace'}</span>
                           </div>
-                          <span className={`inline-block px-2 py-0.5 text-[10px] font-semibold rounded ${
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded ${
                             Number(k.stock || k.stockQuantity || 0) > 0
                               ? 'bg-emerald-50 text-emerald-700'
                               : 'bg-rose-50 text-rose-700'
                           }`}>
-                            {Number(k.stock || k.stockQuantity || 0)} in stock
+                            {k.inventoryMode === 'fixed' || (Number(k.independentStock || 0) > 0) ? (
+                              <>
+                                <span>📦 {Number(k.stock || k.stockQuantity || 0)}</span>
+                                <span className="text-[9px] font-medium text-emerald-600">(Independent)</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>⚡ {Number(k.stock || k.stockQuantity || 0)}</span>
+                                <span className="text-[9px] font-medium text-indigo-600">(Auto-Dynamic)</span>
+                              </>
+                            )}
                           </span>
                         </div>
                       </td>
@@ -419,7 +429,7 @@ export default function KitsTab() {
                       {/* Approval Status */}
                       <td className="py-3.5 px-4">
                         <div className="space-y-1">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
                             curStatus === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                             curStatus === 'Rejected' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
                             'bg-amber-50 text-amber-700 border border-amber-200'
@@ -427,7 +437,7 @@ export default function KitsTab() {
                             {curStatus === 'Approved' && <CheckCircle2 className="w-3 h-3 mr-1" />}
                             {curStatus === 'Rejected' && <AlertTriangle className="w-3 h-3 mr-1" />}
                             {curStatus === 'Pending' && <Clock className="w-3 h-3 mr-1" />}
-                            {curStatus}
+                            {curStatus === 'Approved' ? 'Live in Store' : curStatus === 'Rejected' ? 'Rejected' : 'Pending Review'}
                           </span>
 
                           {curStatus === 'Rejected' && (k.approvalComment || k.rejectionReason) && (
@@ -441,15 +451,26 @@ export default function KitsTab() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1">
-                          {/* Quick Approve / Reject for Pending */}
+                          {/* Quick Approval Actions */}
                           {canEdit && curStatus !== 'Approved' && (
                             <button
                               type="button"
                               onClick={() => handleQuickApprove(kitId)}
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                              title="Quick Approve Kit"
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                              title="Approve & Publish to Store"
                             >
                               <Check className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {canEdit && curStatus !== 'Pending' && (
+                            <button
+                              type="button"
+                              onClick={() => updateKitApprovalStatus(kitId, 'Pending')}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              title="Keep in Pending Review"
+                            >
+                              <Clock className="w-4 h-4" />
                             </button>
                           )}
 
@@ -457,8 +478,8 @@ export default function KitsTab() {
                             <button
                               type="button"
                               onClick={() => setRejectModalKit(k)}
-                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                              title="Reject / Request Revision"
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Reject Kit"
                             >
                               <AlertTriangle className="w-4 h-4" />
                             </button>
@@ -467,7 +488,7 @@ export default function KitsTab() {
                           <button
                             type="button"
                             onClick={() => setDetailModalKit(k)}
-                            className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                             title="Inspect Kit Breakdown"
                           >
                             <Eye className="w-4 h-4" />
@@ -478,7 +499,7 @@ export default function KitsTab() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenEdit(k)}
-                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                                 title="Edit Kit Bundle"
                               >
                                 <Edit3 className="w-4 h-4" />
@@ -487,7 +508,7 @@ export default function KitsTab() {
                               <button
                                 type="button"
                                 onClick={() => handleDelete(kitId, k.title || k.name)}
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                 title="Delete Kit"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -520,10 +541,92 @@ export default function KitsTab() {
               </div>
               <button
                 onClick={() => setDetailModalKit(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg"
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Admin Governance Status & Quick Action Buttons */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" /> Admin Catalog Governance
+                </span>
+                <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full ${
+                  (detailModalKit.approvalStatus || 'Approved') === 'Approved'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : (detailModalKit.approvalStatus || 'Approved') === 'Rejected'
+                    ? 'bg-rose-100 text-rose-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {detailModalKit.approvalStatus || 'Approved'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                {(detailModalKit.approvalStatus || 'Approved') === 'Approved'
+                  ? '✓ This kit is Approved and visible to all students across school storefronts.'
+                  : (detailModalKit.approvalStatus || 'Approved') === 'Rejected'
+                  ? '✕ This kit is Rejected and hidden from public storefronts.'
+                  : '⏳ Catalog Visibility is Pending. It remains hidden until approved by an administrator.'}
+              </p>
+              {canEdit && (
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleQuickApprove(detailModalKit.id || detailModalKit._id);
+                      setDetailModalKit(prev => prev ? ({ ...prev, approvalStatus: 'Approved' }) : null);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all"
+                  >
+                    ✓ Approve & Publish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await updateKitApprovalStatus(detailModalKit.id || detailModalKit._id, 'Pending');
+                      setDetailModalKit(prev => prev ? ({ ...prev, approvalStatus: 'Pending' }) : null);
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold cursor-pointer transition-all"
+                  >
+                    Keep in Pending
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectModalKit(detailModalKit);
+                      setDetailModalKit(null);
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all"
+                  >
+                    Reject Kit
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Bundle Stock Availability Mode */}
+            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase text-gray-500">
+                  Bundle Stock Mode
+                </span>
+                <span className="text-xs font-black text-gray-900">
+                  {detailModalKit.stock || detailModalKit.stockQuantity || 0} Units Available
+                </span>
+              </div>
+              {detailModalKit.inventoryMode === 'fixed' || (Number(detailModalKit.independentStock || 0) > 0) ? (
+                <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <span>📦</span>
+                  <span><strong>Independent Stock:</strong> Fixed pool of pre-packed bundles ready in warehouse.</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-indigo-700 font-semibold flex items-center gap-1.5">
+                  <span>⚡</span>
+                  <span><strong>Auto-Dynamic Stock:</strong> Synchronized automatically with availability of constituent items.</span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -566,7 +669,7 @@ export default function KitsTab() {
               <button
                 type="button"
                 onClick={() => setDetailModalKit(null)}
-                className="px-4 py-2 bg-gray-800 text-white text-xs font-semibold rounded-xl hover:bg-gray-900"
+                className="px-4 py-2 bg-gray-800 text-white text-xs font-semibold rounded-xl hover:bg-gray-900 cursor-pointer"
               >
                 Close
               </button>

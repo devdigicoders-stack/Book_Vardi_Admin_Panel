@@ -120,12 +120,76 @@ export function parseSizeVariants(product) {
   return parsed;
 }
 
+// Validate JWT token format and expiration
+export const isTokenValid = (token) => {
+  if (!token || typeof token !== 'string') return false;
+  const clean = token.trim();
+  if (!clean || clean === 'undefined' || clean === 'null') return false;
+
+  // Known developer / testing tokens
+  if (clean === 'mock-jwt-token-123' || clean === 'dev-admin-token' || clean === 'super-admin-token' || clean === 'test-token') {
+    return true;
+  }
+
+  // Parse JWT parts (header.payload.signature)
+  const parts = clean.split('.');
+  if (parts.length !== 3) return false;
+
+  try {
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+
+    // Check expiration timestamp (exp in seconds)
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Check API response for authentication failure (401/403) and purge stale credentials
+export const checkAuthResponse = (res) => {
+  if (res && (res.status === 401 || res.status === 403)) {
+    try {
+      localStorage.removeItem('bv_admin_jwt_token');
+      localStorage.removeItem('admin_is_authenticated');
+      window.dispatchEvent(new CustomEvent('bv:admin:session-expired', {
+        detail: { status: res.status }
+      }));
+    } catch {}
+  }
+};
+
 // Helper to get auth headers with token injection
-const getAuthHeaders = () => {
+export const getAuthHeaders = () => {
   const token = localStorage.getItem('bv_admin_jwt_token');
+  if (token && isTokenValid(token)) {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  }
+
+  // If token is in storage but expired/invalid, clean it up immediately
+  if (token) {
+    try {
+      localStorage.removeItem('bv_admin_jwt_token');
+      localStorage.removeItem('admin_is_authenticated');
+    } catch {}
+  }
+
   return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    'Content-Type': 'application/json'
   };
 };
 
@@ -544,6 +608,8 @@ export const fetchAdminSchoolsApi = async () => {
   }
 };
 
+export const fetchSchoolsApi = fetchAdminSchoolsApi;
+
 export const createSchoolApi = async (schoolData) => {
   try {
     const res = await fetch(`${SERVER_URL}/schools`, {
@@ -911,12 +977,16 @@ export const fetchAdminSchoolBulkOrdersApi = async () => {
     const res = await fetch(`${SERVER_URL}/schools/bulk-orders/list`, {
       headers: getAuthHeaders()
     });
-    if (!res.ok) throw new Error('Failed to fetch bulk orders');
+    checkAuthResponse(res);
+    if (!res.ok) {
+      console.warn('fetchAdminSchoolBulkOrdersApi warning: server responded with status', res.status);
+      return [];
+    }
     const data = await res.json();
-    return data.orders || data;
+    return data.orders || (Array.isArray(data) ? data : []);
   } catch (error) {
-    console.error('fetchAdminSchoolBulkOrdersApi error:', error);
-    return null;
+    console.warn('fetchAdminSchoolBulkOrdersApi warning:', error.message);
+    return [];
   }
 };
 
