@@ -1021,6 +1021,30 @@ export const approveSellerQuotationApi = async (id, quoteId, updateData = {}) =>
   }
 };
 
+export const confirmBuyerAcceptanceApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/confirm-buyer-acceptance`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const confirmSellerAcceptanceApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/confirm-seller-acceptance`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 export const updateAdminSchoolOrderStatusApi = async (id, payload = {}) => {
   try {
     const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/status`, {

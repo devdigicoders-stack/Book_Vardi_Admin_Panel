@@ -451,23 +451,35 @@ export const AdminDataProvider = ({ children }) => {
     fetchAdminProductsApi().then(data => {
       const list = Array.isArray(data) ? data : (data?.products || []);
       if (list.length > 0) {
-        setProducts(list.map(p => ({
-          id: p._id || p.id,
-          _id: p._id || p.id,
-          name: p.name || p.title || 'Product',
-          price: Number(p.price || 0),
-          originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
-          mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
-          category: p.category || 'uniforms',
-          approvalStatus: p.approvalStatus || 'Approved',
-          stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
-          stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
-          image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
-          images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
-          sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
-          sizes: Array.isArray(p.sizes) ? p.sizes : [],
-          ...p
-        })));
+        setProducts(list.map(p => {
+          const idStr = String(p._id || p.id || '');
+          let cleanSku = p.sku;
+          if (!cleanSku || !String(cleanSku).trim() || String(cleanSku).includes('6ab') || String(cleanSku).length > 20) {
+            const numericSuffix = idStr.length >= 6 ? (parseInt(idStr.slice(-6), 16) % 9000 + 1000) : Math.floor(1000 + Math.random() * 9000);
+            cleanSku = `SC-${numericSuffix}`;
+          } else {
+            cleanSku = String(cleanSku).trim().toUpperCase();
+          }
+          return {
+            id: p._id || p.id,
+            _id: p._id || p.id,
+            sku: cleanSku,
+            displayId: cleanSku,
+            name: p.name || p.title || 'Product',
+            price: Number(p.price || 0),
+            originalPrice: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+            mrp: Number(p.mrp || p.originalPrice || Math.round(Number(p.price || 0) * 1.25)),
+            category: p.category || 'uniforms',
+            approvalStatus: p.approvalStatus || 'Approved',
+            stockQuantity: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+            stock: p.stock !== undefined ? p.stock : (p.stockQuantity || 50),
+            image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : (p.image || ''),
+            images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
+            sizeVariants: Array.isArray(p.sizeVariants) ? p.sizeVariants : [],
+            sizes: Array.isArray(p.sizes) ? p.sizes : [],
+            ...p
+          };
+        }));
       }
     }).catch(() => {});
 

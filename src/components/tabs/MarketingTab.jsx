@@ -9,7 +9,10 @@ import {
   Sparkles,
   Power,
   ArrowUpRight,
-  Palette
+  Palette,
+  Boxes,
+  Package,
+  Layers
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import CouponModal from '../modals/CouponModal';
@@ -260,33 +263,71 @@ export default function MarketingTab() {
             const isPercent = promo.discountType === 'percentage' || promo.type === 'percentage';
             const minCart = promo.minOrderValue ?? promo.minAmount ?? promo.minOrderAmount ?? 0;
             const validDate = promo.validUntil || (promo.expiryDate ? new Date(promo.expiryDate).toLocaleDateString('en-IN') : '');
+            const scopeVal = promo.applicableScope || promo.scope;
+            const isSpecificKit = scopeVal === 'specific_kit' || Boolean(promo.specificKitId);
+            const isAllKits = scopeVal === 'all_kits';
+            const isSpecificProduct = scopeVal === 'specific_product' || scopeVal === 'product' || Boolean(promo.specificProductId);
 
             return (
               <div
                 key={promoId || promo.code}
-                className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs space-y-3 relative overflow-hidden"
+                className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs space-y-3 relative overflow-hidden flex flex-col justify-between"
               >
-                <div className="flex items-start justify-between">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-brand-yellow/30 text-teal-950 border border-brand-yellow">
-                    {promo.code}
-                  </span>
-                  {canEdit && (
-                    <button
-                      onClick={() => deletePromotion(promoId)}
-                      className="p-1 text-gray-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
-                      title="Delete Coupon"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-
                 <div>
-                  <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{promo.title || `${promo.code} Offer`}</h4>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
-                    {isPercent ? `${discountVal}% OFF` : `Flat ₹${discountVal} OFF`} 
-                    {promo.maxDiscount ? ` (Up to ₹${promo.maxDiscount})` : ''}
-                  </p>
+                  <div className="flex items-start justify-between">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-brand-yellow/30 text-teal-950 border border-brand-yellow">
+                      {promo.code}
+                    </span>
+                    {canEdit && (
+                      <button
+                        onClick={() => deletePromotion(promoId)}
+                        className="p-1 text-gray-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
+                        title="Delete Coupon"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    {isSpecificKit ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                        <Boxes size={10} /> Specific Kit
+                      </span>
+                    ) : isAllKits ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                        <Boxes size={10} /> All Kits Only
+                      </span>
+                    ) : isSpecificProduct ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                        <Package size={10} /> Specific Product
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                        <Layers size={10} /> Storewide
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-2">
+                    <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{promo.title || `${promo.code} Offer`}</h4>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {isPercent ? `${discountVal}% OFF` : `Flat ₹${discountVal} OFF`} 
+                      {promo.maxDiscount ? ` (Up to ₹${promo.maxDiscount})` : ''}
+                    </p>
+                  </div>
+
+                  {isSpecificKit && (promo.specificKitTitle || promo.specificKitId) && (
+                    <div className="mt-2 p-1.5 bg-purple-50 rounded-lg text-[10px] text-purple-900 truncate font-semibold">
+                      Target Kit: {promo.specificKitTitle || promo.specificKitId}
+                    </div>
+                  )}
+
+                  {isSpecificProduct && (promo.specificProductName || promo.specificProductId) && (
+                    <div className="mt-2 p-1.5 bg-amber-50 rounded-lg text-[10px] text-amber-900 truncate font-semibold">
+                      Target Item: {promo.specificProductName || promo.specificProductId}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-gray-100 text-[10px] text-gray-500 space-y-1">
