@@ -14,6 +14,7 @@ import {
   Package,
   Layers,
   Info,
+  Loader2,
   Image as ImageIcon,
 } from 'lucide-react';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
