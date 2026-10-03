@@ -32,6 +32,30 @@ export const generateDynamicTrackingId = (courierName) => {
   return `${prefix}-${randomNum}`;
 };
 
+export const hasActiveReturnRequest = (order) => {
+  if (!order) return false;
+  const req = order.returnRequest;
+  if (req && typeof req === 'object') {
+    const type = req.requestType || req.type;
+    const status = String(req.status || '').toLowerCase().trim();
+    const invalidStatuses = ['', 'none', 'n/a', 'no_request', 'normal', 'null', 'undefined', 'requesting', 'requested'];
+    
+    if (type && !['none', 'n/a', ''].includes(String(type).toLowerCase())) return true;
+    if (status && !invalidStatuses.includes(status)) return true;
+    if (req.requestedAt) return true;
+    if (req.reason && req.reason !== 'N/A' && req.reason.trim() !== '') return true;
+  }
+  
+  const s = String(order.status || order.rawStatus || '').toLowerCase();
+  const returnStatuses = [
+    'return_requested', 'exchange_requested', 'return_approved', 'exchange_approved',
+    'return_rejected', 'exchange_rejected', 'pickup_scheduled', 'product_received',
+    'refund_initiated', 'refund_processed', 'refund_completed', 'exchanged', 'exchange_dispatched',
+    'refund_requested', 'refunded'
+  ];
+  return returnStatuses.includes(s);
+};
+
 export default function OrderDetailModal({ 
   isOpen, 
   onClose, 
@@ -137,33 +161,50 @@ export default function OrderDetailModal({
     let carrierUrl = '';
 
     if (isSelf) {
-      const hasDriver = Boolean(driverNameInput.trim() || driverPhoneInput.trim());
-      if (hasDriver) {
-        tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${Math.floor(100000 + Math.random() * 900000)}`).trim();
-        const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
-        selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
-        assignedTrackingNumber = tokenVal;
+      if (!driverNameInput.trim()) {
+        alert('⚠️ Please enter Driver / Delivery Person Name.');
+        return;
       }
+      if (!driverPhoneInput.trim()) {
+        alert('⚠️ Please enter Driver Phone Number.');
+        return;
+      }
+      if (!vehicleNumberInput.trim()) {
+        alert('⚠️ Please enter Vehicle Number (e.g. UP32 AB 1234).');
+        return;
+      }
+
+      tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${Math.floor(100000 + Math.random() * 900000)}`).trim();
+      const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+      selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+      assignedTrackingNumber = tokenVal;
     } else {
-      if (courierInput.trim()) {
-        assignedTrackingNumber = newTracking.trim() || generateDynamicTrackingId(courierInput);
-        setNewTracking(assignedTrackingNumber);
-        const lowerCourier = courierInput.toLowerCase();
-        carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${assignedTrackingNumber}` :
-          lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${assignedTrackingNumber}` :
-          lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${assignedTrackingNumber}` :
-          lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${assignedTrackingNumber}` :
-          `https://track.shiprocket.in/tracking/${assignedTrackingNumber}`;
+      if (!courierInput.trim()) {
+        alert('⚠️ Please select or enter a Courier Partner Name.');
+        return;
       }
+      assignedTrackingNumber = newTracking.trim() || generateDynamicTrackingId(courierInput);
+      setNewTracking(assignedTrackingNumber);
+
+      const lowerCourier = courierInput.toLowerCase().trim();
+      carrierUrl = lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${assignedTrackingNumber}` :
+        lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${assignedTrackingNumber}` :
+        lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${assignedTrackingNumber}` :
+        lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${assignedTrackingNumber}` :
+        lowerCourier.includes('fedex') ? `https://www.fedex.com/fedextrack/?trknbr=${assignedTrackingNumber}` :
+        lowerCourier.includes('shadowfax') ? `https://track.shadowfax.in/track?tracking_id=${assignedTrackingNumber}` :
+        lowerCourier.includes('xpressbees') ? `https://www.xpressbees.com/track?shipment_id=${assignedTrackingNumber}` :
+        lowerCourier.includes('indiapost') || lowerCourier.includes('speedpost') ? `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?consignmentNo=${assignedTrackingNumber}` :
+        `https://track.shiprocket.in/tracking/${assignedTrackingNumber}`;
     }
 
     const payload = {
       deliveryMode: deliveryModeInput,
       deliveryType: deliveryModeInput,
-      courierName: !isSelf ? courierInput : '',
+      courierName: !isSelf ? courierInput.trim() : '',
       trackingNumber: assignedTrackingNumber,
       trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
-      selfDeliveryDetails: isSelf && tokenVal ? {
+      selfDeliveryDetails: isSelf ? {
         ...(order.selfDeliveryDetails || {}),
         deliveryPersonName: driverNameInput.trim(),
         deliveryPersonPhone: driverPhoneInput.trim(),
@@ -180,7 +221,7 @@ export default function OrderDetailModal({
     if (onUpdateStatus) {
       onUpdateStatus(orderIdentifier, selectedStatus, payload);
     }
-    alert(`✅ Delivery partner & tracking details saved for Order #${order.id || order.orderId}!`);
+    alert(`✅ Delivery partner & tracking details saved successfully for Order #${order.id || order.orderId}!\n\nTracking Link: ${isSelf ? selfTrackingLink : carrierUrl}`);
   };
 
   const handleSaveTracking = () => {
@@ -291,42 +332,41 @@ export default function OrderDetailModal({
           )}
 
           {/* Customer Provided Receiving Payout Details Box */}
-          {(order.refundDetails || order.returnRequest?.refundDetails) && (
-            <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-teal-950 space-y-2 text-xs shadow-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-teal-800">
-                  <CreditCard size={16} />
-                  <span>Customer Receiving Refund Payout Account</span>
-                </div>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-700 text-white uppercase">
-                  {(order.refundDetails?.method || order.returnRequest?.refundDetails?.method) === 'UPI' ? 'UPI Transfer' : 'Bank Transfer'}
-                </span>
-              </div>
+          {(() => {
+            const details = order.refundDetails || order.returnRequest?.refundDetails;
+            const hasValidDetails = details && Boolean(details.upiId || details.accountNumber);
+            if (!hasValidDetails) return null;
 
-              {(() => {
-                const details = order.refundDetails || order.returnRequest?.refundDetails;
-                if (!details || (!details.upiId && !details.accountNumber)) return null;
-
-                return (
-                  <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5 font-mono text-xs">
-                    {details.method === 'UPI' ? (
-                      <p><strong>UPI ID:</strong> <span className="text-teal-950 font-bold bg-teal-50 px-2 py-0.5 rounded">{details.upiId}</span></p>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <p><strong>Account Holder:</strong> <span className="font-bold text-gray-900">{details.accountHolderName}</span></p>
-                        <p><strong>Bank Name:</strong> <span className="font-bold text-gray-900">{details.bankName}</span></p>
-                        <p><strong>Account Number:</strong> <span className="font-bold text-gray-900">{details.accountNumber}</span></p>
-                        <p><strong>IFSC Code:</strong> <span className="font-bold text-gray-900">{details.ifscCode}</span></p>
-                      </div>
-                    )}
+            return (
+              <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-teal-950 space-y-2 text-xs shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-teal-800">
+                    <CreditCard size={16} />
+                    <span>Customer Receiving Refund Payout Account</span>
                   </div>
-                );
-              })()}
-            </div>
-          )}
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-700 text-white uppercase">
+                    {details.method === 'UPI' ? 'UPI Transfer' : 'Bank Transfer'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-white rounded-xl border border-teal-100 space-y-1.5 font-mono text-xs">
+                  {details.method === 'UPI' ? (
+                    <p><strong>UPI ID:</strong> <span className="text-teal-950 font-bold bg-teal-50 px-2 py-0.5 rounded">{details.upiId}</span></p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <p><strong>Account Holder:</strong> <span className="font-bold text-gray-900">{details.accountHolderName}</span></p>
+                      <p><strong>Bank Name:</strong> <span className="font-bold text-gray-900">{details.bankName}</span></p>
+                      <p><strong>Account Number:</strong> <span className="font-bold text-gray-900">{details.accountNumber}</span></p>
+                      <p><strong>IFSC Code:</strong> <span className="font-bold text-gray-900">{details.ifscCode}</span></p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Return / Exchange Request Management Card */}
-          {order.returnRequest && (
+          {hasActiveReturnRequest(order) && (
             <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-3 shadow-xs">
               <div className="flex items-center justify-between border-b border-amber-200/60 pb-2.5">
                 <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-amber-900">
@@ -1000,7 +1040,7 @@ export default function OrderDetailModal({
                       ) : (
                         <div className="space-y-2">
                           <div>
-                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Select Courier Partner:</label>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Select Courier Partner <span className="text-red-500">*</span></label>
                             <select
                               value={courierInput}
                               onChange={e => {
@@ -1022,7 +1062,7 @@ export default function OrderDetailModal({
                           </div>
                           <div>
                             <div className="flex items-center justify-between mb-0.5">
-                              <label className="block text-[10px] font-bold text-gray-600">Tracking AWB Number:</label>
+                              <label className="block text-[10px] font-bold text-gray-600">Tracking AWB Number <span className="text-red-500">*</span></label>
                               <button
                                 type="button"
                                 onClick={() => setNewTracking(generateDynamicTrackingId(courierInput))}
@@ -1035,7 +1075,7 @@ export default function OrderDetailModal({
                               type="text"
                               value={newTracking}
                               onChange={e => setNewTracking(e.target.value)}
-                              placeholder="Not Assigned (Click Generate or type AWB)"
+                              placeholder="Click Generate or type AWB"
                               className="w-full px-2 py-1 text-xs font-mono border border-gray-300 rounded-lg outline-hidden"
                             />
                           </div>
@@ -1056,28 +1096,37 @@ export default function OrderDetailModal({
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <input
-                            type="text"
-                            value={driverNameInput}
-                            onChange={e => setDriverNameInput(e.target.value)}
-                            placeholder="Driver Name (e.g. Ramesh Kumar)"
-                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden"
-                          />
-                          <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Driver / Rider Name <span className="text-red-500">*</span></label>
                             <input
                               type="text"
-                              value={driverPhoneInput}
-                              onChange={e => setDriverPhoneInput(e.target.value)}
-                              placeholder="Phone (+91...)"
+                              value={driverNameInput}
+                              onChange={e => setDriverNameInput(e.target.value)}
+                              placeholder="Driver Name (e.g. Ramesh Kumar)"
                               className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden"
                             />
-                            <input
-                              type="text"
-                              value={vehicleNumberInput}
-                              onChange={e => setVehicleNumberInput(e.target.value)}
-                              placeholder="Vehicle (e.g. UP32...)"
-                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden font-mono"
-                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Phone Number <span className="text-red-500">*</span></label>
+                              <input
+                                type="text"
+                                value={driverPhoneInput}
+                                onChange={e => setDriverPhoneInput(e.target.value)}
+                                placeholder="Phone (+91...)"
+                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Vehicle Number <span className="text-red-500">*</span></label>
+                              <input
+                                type="text"
+                                value={vehicleNumberInput}
+                                onChange={e => setVehicleNumberInput(e.target.value)}
+                                placeholder="Vehicle (e.g. UP32...)"
+                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg outline-hidden font-mono"
+                              />
+                            </div>
                           </div>
                         </div>
                       )}

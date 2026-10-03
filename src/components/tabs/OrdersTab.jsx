@@ -17,7 +17,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
-import OrderDetailModal from '../modals/OrderDetailModal';
+import OrderDetailModal, { hasActiveReturnRequest } from '../modals/OrderDetailModal';
 import BulkOrderPreviewModal from './BulkOrderPreviewModal';
 
 export const isOutForDelivery = (status) => {
@@ -46,10 +46,7 @@ export const canViewTracking = (order) => {
 };
 
 export const isReturnOrExchangeOrder = (o) => {
-  if (!o) return false;
-  if (Boolean(o.returnRequest)) return true;
-  const s = String(o.status || o.rawStatus || '').toLowerCase();
-  return s.includes('return') || s.includes('exchange') || s.includes('refund');
+  return hasActiveReturnRequest(o);
 };
 
 export default function OrdersTab() {
@@ -623,7 +620,7 @@ export default function OrdersTab() {
                         }`}>
                           {order.status}
                         </span>
-                        {order.returnRequest && (
+                        {hasActiveReturnRequest(order) && (
                           <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
                             <RotateCcw size={9} /> {order.returnRequest.requestType === 'exchange' ? 'Exchange Req' : 'Return Req'}
                           </span>
