@@ -691,7 +691,8 @@ export default function OrderDetailModal({
                 const subtotalVal = Number(order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
                 const shipVal = Number(order.shippingFee ?? order.shippingCost ?? 0);
                 const couponVal = Number(order.discountAmount ?? order.discount ?? 0);
-                const grandVal = Number(order.total || order.totalAmount || (subtotalVal + shipVal - couponVal));
+                const codFeeVal = Number(order.codFee ?? order.codCharges ?? 0);
+                const grandVal = Number(order.total || order.totalAmount || (subtotalVal + shipVal + codFeeVal - couponVal));
 
                 let totalTaxable = 0;
                 let totalTax = 0;
@@ -785,6 +786,12 @@ export default function OrderDetailModal({
                         {shipVal === 0 ? 'Not Applied (FREE)' : `₹${shipVal.toFixed(2)}`}
                       </span>
                     </div>
+                    {codFeeVal > 0 && (
+                      <div className="flex justify-between text-gray-700">
+                        <span>COD / Convenience Fee:</span>
+                        <span className="font-mono font-bold text-emerald-700">₹{codFeeVal.toFixed(2)}</span>
+                      </div>
+                    )}
                     {couponVal > 0 ? (
                       <div className="flex justify-between text-emerald-700 font-bold">
                         <span>Offer / Coupon Applied:</span>
