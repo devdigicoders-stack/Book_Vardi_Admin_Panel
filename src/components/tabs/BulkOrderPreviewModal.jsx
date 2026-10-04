@@ -171,9 +171,9 @@ export default function BulkOrderPreviewModal({
   const [trackingNumber, setTrackingNumber] = useState(order?.trackingNumber || '');
   const [trackingUrl, setTrackingUrl] = useState(order?.trackingUrl || '');
   const [deliveryStatus, setDeliveryStatus] = useState(order?.deliveryStatus || order?.status || 'quote_accepted');
-  const [deliveryPersonName, setDeliveryPersonName] = useState(order?.selfDeliveryDetails?.deliveryPersonName || '');
-  const [deliveryPersonPhone, setDeliveryPersonPhone] = useState(order?.selfDeliveryDetails?.deliveryPersonPhone || '');
-  const [vehicleNumber, setVehicleNumber] = useState(order?.selfDeliveryDetails?.vehicleNumber || '');
+  const [deliveryPersonName, setDeliveryPersonName] = useState(order?.deliveryDetails?.deliveryBoyName || order?.deliveryDetails?.deliveryPersonName || order?.selfDeliveryDetails?.deliveryPersonName || '');
+  const [deliveryPersonPhone, setDeliveryPersonPhone] = useState(order?.deliveryDetails?.deliveryBoyPhone || order?.deliveryDetails?.deliveryPersonPhone || order?.selfDeliveryDetails?.deliveryPersonPhone || '');
+  const [vehicleNumber, setVehicleNumber] = useState(order?.deliveryDetails?.vehicleNumber || order?.selfDeliveryDetails?.vehicleNumber || '');
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [logisticsSavedMessage, setLogisticsSavedMessage] = useState('');
@@ -220,9 +220,9 @@ export default function BulkOrderPreviewModal({
       }
       setTrackingUrl(order.trackingUrl || '');
       setDeliveryStatus(order.deliveryStatus || order.status || 'quote_accepted');
-      setDeliveryPersonName(order.selfDeliveryDetails?.deliveryPersonName || '');
-      setDeliveryPersonPhone(order.selfDeliveryDetails?.deliveryPersonPhone || '');
-      setVehicleNumber(order.selfDeliveryDetails?.vehicleNumber || '');
+      setDeliveryPersonName(order.deliveryDetails?.deliveryBoyName || order.deliveryDetails?.deliveryPersonName || order.selfDeliveryDetails?.deliveryPersonName || '');
+      setDeliveryPersonPhone(order.deliveryDetails?.deliveryBoyPhone || order.deliveryDetails?.deliveryPersonPhone || order.selfDeliveryDetails?.deliveryPersonPhone || '');
+      setVehicleNumber(order.deliveryDetails?.vehicleNumber || order.selfDeliveryDetails?.vehicleNumber || '');
     }
   }, [order, initialTab]);
 
@@ -328,9 +328,28 @@ export default function BulkOrderPreviewModal({
     });
   };
 
-  const winningQuote = Array.isArray(order.quotations)
-    ? order.quotations.find(q => q.status === 'approved' || String(q._id) === String(order.acceptedQuoteId))
-    : null;
+  const winningQuote = useMemo(() => {
+    if (!order) return null;
+    if (Array.isArray(order.quotations) && order.quotations.length > 0) {
+      const found = order.quotations.find(q =>
+        q.status === 'approved' ||
+        q.status === 'buyer_accepted' ||
+        q.status === 'seller_accepted' ||
+        q.negotiationStage === 'buyer_accepted_quote' ||
+        q.negotiationStage === 'seller_accepted_counter' ||
+        String(q._id) === String(order.acceptedQuoteId) ||
+        String(q.id) === String(order.acceptedQuoteId)
+      );
+      if (found) return found;
+      if (order.status === 'quote_accepted') {
+        return existingSellerQuote || order.quotations[0];
+      }
+    }
+    if (order.status === 'quote_accepted' && existingSellerQuote) {
+      return existingSellerQuote;
+    }
+    return null;
+  }, [order, existingSellerQuote]);
 
   // Logistics tracking gating: strictly visible when Out for Delivery & partner decided
   const normStatus = String(order.deliveryStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
@@ -934,9 +953,10 @@ export default function BulkOrderPreviewModal({
                     </thead>
                     <tbody className="divide-y divide-gray-200 text-xs">
                       {requirementsList.map((item, idx) => {
-                        const imagesList = Array.isArray(item.sampleImages) && item.sampleImages.length > 0
+                        const rawImages = Array.isArray(item.sampleImages) && item.sampleImages.length > 0
                           ? item.sampleImages
                           : (item.sampleImage ? [item.sampleImage] : []);
+                        const imagesList = rawImages.filter(img => typeof img === 'string' && img.trim() !== '');
 
                         const custBudget = Number(item.budgetPerUnit || item.budgetUnit || 0);
                         const sellerPrice = Number(item.sellerPricePerUnit || item.sellerPrice || 0);
@@ -971,7 +991,7 @@ export default function BulkOrderPreviewModal({
                                       onClick={() => setZoomImage(img)}
                                       className="relative w-9 h-9 rounded-lg overflow-hidden border-2 border-white shadow-2xs cursor-pointer group hover:z-10 hover:scale-110 transition-transform"
                                     >
-                                      <img src={img} alt="Sample" className="w-full h-full object-cover" />
+                                      <img src={img || null} alt="Sample" className="w-full h-full object-cover" />
                                     </div>
                                   ))}
                                   {imagesList.length > 3 && (
@@ -1272,21 +1292,35 @@ export default function BulkOrderPreviewModal({
                           const sId = seller.id || seller._id;
                           const isChecked = selectedMultipleSellers.includes(sId);
                           return (
-                            <label
+                            <div
                               key={sId}
                               onClick={() => toggleSellerSelect(sId)}
-                              className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
-                                isChecked ? 'bg-purple-50 border-purple-300 text-purple-900 font-bold' : 'bg-white border-gray-100 hover:bg-gray-50'
+                              className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                isChecked ? 'bg-purple-50 border-purple-300 text-purple-900 font-bold shadow-2xs' : 'bg-white border-gray-100 hover:bg-purple-50/40 text-gray-700'
                               }`}
                             >
-                              <div className="flex items-center gap-2">
-                                <input type="checkbox" checked={isChecked} onChange={() => {}} className="accent-purple-700" />
+                              <div className="flex items-center gap-2.5 select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleSellerSelect(sId);
+                                  }}
+                                  className="accent-purple-700 w-4 h-4 cursor-pointer shrink-0"
+                                />
                                 <div>
-                                  <div>{seller.storeName || seller.businessName || seller.name}</div>
-                                  <div className="text-[10px] text-gray-400">{seller.ownerName} • {seller.city}</div>
+                                  <div className="font-bold text-gray-900">{seller.storeName || seller.businessName || seller.name}</div>
+                                  <div className="text-[10px] text-gray-500 font-normal">{seller.ownerName ? `${seller.ownerName} • ` : ''}{seller.city || 'Pan-India'}</div>
                                 </div>
                               </div>
-                            </label>
+                              {isChecked && (
+                                <span className="text-[10px] font-extrabold uppercase text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
                           );
                         })
                       )}
@@ -2087,7 +2121,7 @@ export default function BulkOrderPreviewModal({
             >
               <X size={20} />
             </button>
-            <img src={zoomImage} alt="Sample Zoomed" className="w-full h-full object-contain max-h-[80vh] rounded-2xl" />
+            <img src={zoomImage || null} alt="Sample Zoomed" className="w-full h-full object-contain max-h-[80vh] rounded-2xl" />
           </div>
         </div>
       )}
@@ -2125,9 +2159,10 @@ export default function BulkOrderPreviewModal({
               
               {/* Image Gallery */}
               {(() => {
-                const itemImages = Array.isArray(selectedItemForDetail.sampleImages) && selectedItemForDetail.sampleImages.length > 0
+                const rawItemImages = Array.isArray(selectedItemForDetail.sampleImages) && selectedItemForDetail.sampleImages.length > 0
                   ? selectedItemForDetail.sampleImages
                   : (selectedItemForDetail.sampleImage ? [selectedItemForDetail.sampleImage] : []);
+                const itemImages = rawItemImages.filter(img => typeof img === 'string' && img.trim() !== '');
 
                 return (
                   <div className="space-y-2">
@@ -2143,7 +2178,7 @@ export default function BulkOrderPreviewModal({
                             onClick={() => setZoomImage(imgSrc)}
                             className="relative aspect-square rounded-xl overflow-hidden border border-gray-300 shadow-2xs group cursor-pointer"
                           >
-                            <img src={imgSrc} alt={`Sample ${iIdx + 1}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                            <img src={imgSrc || null} alt={`Sample ${iIdx + 1}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
                               <Eye size={16} />
                             </div>

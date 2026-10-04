@@ -808,16 +808,23 @@ export const AdminDataProvider = ({ children }) => {
       }).catch(() => {});
     };
 
+    handleOrderSync();
     window.addEventListener('bv_orders_updated', handleOrderSync);
-    window.addEventListener('storage', (e) => {
+    window.addEventListener('focus', handleOrderSync);
+    const storageHandler = (e) => {
       if (e.key === 'bv_order_sync_timestamp' || e.key === 'admin_orders') {
         handleOrderSync();
       }
-    });
+    };
+    window.addEventListener('storage', storageHandler);
+
+    const pollInterval = setInterval(handleOrderSync, 5000);
 
     return () => {
       window.removeEventListener('bv_orders_updated', handleOrderSync);
-      window.removeEventListener('storage', handleOrderSync);
+      window.removeEventListener('focus', handleOrderSync);
+      window.removeEventListener('storage', storageHandler);
+      clearInterval(pollInterval);
     };
   }, []);
 

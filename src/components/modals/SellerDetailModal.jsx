@@ -1298,7 +1298,7 @@ export default function SellerDetailModal({
               <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-2xs space-y-4">
                 <div className="flex items-start gap-4">
                   <img
-                    src={storeLogo}
+                    src={storeLogo || null}
                     alt="Logo"
                     className="w-16 h-16 rounded-2xl object-cover border border-gray-200 shadow-xs shrink-0"
                   />

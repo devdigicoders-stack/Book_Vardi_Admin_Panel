@@ -593,29 +593,33 @@ export default function BulkOrdersTab() {
                         const sId = seller.id || seller._id;
                         const isChecked = selectedMultipleSellers.includes(sId);
                         return (
-                          <label
+                          <div
                             key={sId}
                             onClick={() => toggleSellerSelect(sId)}
-                            className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
                               isChecked
-                                ? 'bg-purple-50 border-purple-300 text-purple-900 font-semibold'
-                                : 'bg-white border-gray-100 hover:bg-gray-50 text-gray-700'
+                                ? 'bg-purple-50 border-purple-300 text-purple-950 font-bold shadow-2xs'
+                                : 'bg-white border-gray-100 hover:bg-purple-50/40 text-gray-700'
                             }`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2.5 select-none">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => {}} // Handled by div click
-                                className="accent-purple-700 rounded"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleSellerSelect(sId);
+                                }}
+                                className="accent-purple-700 w-4 h-4 cursor-pointer shrink-0"
                               />
                               <div>
-                                <div className="font-bold">{seller.storeName || seller.businessName || seller.name}</div>
-                                <div className="text-[10px] text-gray-400">{seller.ownerName} • {seller.city || 'Delhi'}</div>
+                                <div className="font-bold text-gray-900">{seller.storeName || seller.businessName || seller.name}</div>
+                                <div className="text-[10px] text-gray-500 font-normal">{seller.ownerName ? `${seller.ownerName} • ` : ''}{seller.city || 'Delhi'}</div>
                               </div>
                             </div>
-                            <span className="text-[10px] font-mono text-gray-400">{seller.phone}</span>
-                          </label>
+                            <span className="text-[10px] font-mono text-gray-500">{seller.phone}</span>
+                          </div>
                         );
                       })
                     )}
