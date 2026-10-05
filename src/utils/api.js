@@ -1003,6 +1003,19 @@ export const distributeSchoolBulkOrderApi = async (id, payload) => {
   }
 };
 
+export const updateBulkOrderPrepaymentPercentageApi = async (id, prepaymentPercentage) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/prepayment-percentage`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ prepaymentPercentage })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 export const approveSellerQuotationApi = async (id, quoteId, updateData = {}) => {
   try {
     const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/approve-quote`, {

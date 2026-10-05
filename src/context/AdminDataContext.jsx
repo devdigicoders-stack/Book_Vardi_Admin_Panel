@@ -47,6 +47,7 @@ import {
   deleteAnnouncementApi,
   fetchAdminSchoolBulkOrdersApi,
   distributeSchoolBulkOrderApi,
+  updateBulkOrderPrepaymentPercentageApi,
   approveSellerQuotationApi,
   updateAdminSchoolOrderStatusApi,
   fetchAdminKitsApi,
@@ -1769,6 +1770,46 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Bulk Order Distributed', `Distributed bulk order #${orderId} via ${assignmentMode} mode`);
   };
 
+  const updateBulkOrderPrepaymentPercentage = async (orderId, prepaymentPercentage) => {
+    const pct = Number(prepaymentPercentage) || 0;
+    setSchoolOrders(prev => prev.map(o => {
+      if (o.id === orderId || o._id === orderId) {
+        const base = Number(o.overallBudget || o.targetBudgetPerKit || 0);
+        const prepayAmt = base > 0 ? Math.round((base * pct) / 100) : 0;
+        const updatedQuotes = (o.quotations || []).map(q => {
+          const qAmt = Number(q.quoteAmount || 0);
+          const qPrepay = qAmt > 0 ? Math.round((qAmt * pct) / 100) : 0;
+          return {
+            ...q,
+            prepaymentPercentage: pct,
+            sellerAdvancePercentage: pct,
+            prepaymentAmount: qPrepay,
+            sellerAdvanceAmount: qPrepay
+          };
+        });
+        return {
+          ...o,
+          prepaymentPercentage: pct,
+          sellerAdvancePercentage: pct,
+          prepaymentAmount: prepayAmt,
+          sellerAdvanceAmount: prepayAmt,
+          quotations: updatedQuotes
+        };
+      }
+      return o;
+    }));
+
+    try {
+      const res = await updateBulkOrderPrepaymentPercentageApi(orderId, pct);
+      if (res?.success && res.order) {
+        setSchoolOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId ? { ...o, ...res.order } : o)));
+      }
+    } catch (e) {
+      console.warn('Backend prepayment percentage update fallback:', e);
+    }
+    logAudit('Bulk Order Prepayment Updated', `Set prepayment percentage for bulk order #${orderId} to ${pct}%`);
+  };
+
   const approveSellerQuotation = async (orderId, quoteId, updateData = {}) => {
     setSchoolOrders(prev => prev.map(o => {
       if (o.id === orderId || o._id === orderId) {
@@ -2239,6 +2280,7 @@ export const AdminDataProvider = ({ children }) => {
     updateOrderTracking,
     schoolOrders,
     distributeSchoolBulkOrder,
+    updateBulkOrderPrepaymentPercentage,
     approveSellerQuotation,
     updateSchoolOrderStatusAndTracking,
     sellers,
