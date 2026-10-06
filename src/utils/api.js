@@ -1123,3 +1123,26 @@ export const deleteAdminCategoryApi = async (id) => {
   }
 };
 
+export const downloadSellerFinancialStatementPdfApi = async (sellerId, storeName = 'Seller') => {
+  const token = localStorage.getItem('bv_admin_jwt_token');
+  const res = await fetch(`${API_BASE_URL}/sellers/${sellerId}/finance-statement/pdf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to download statement (HTTP ${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cleanName = storeName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  a.download = `Financial_Statement_${cleanName}_${Date.now()}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+

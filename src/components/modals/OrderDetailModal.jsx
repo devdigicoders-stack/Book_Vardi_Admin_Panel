@@ -74,6 +74,7 @@ export default function OrderDetailModal({
   const [showRefundPrompt, setShowRefundPrompt] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAwb, setCopiedAwb] = useState(false);
+  const [statusUpdatedToast, setStatusUpdatedToast] = useState(false);
 
   // Delivery Partner Decision State
   const [deliveryModeInput, setDeliveryModeInput] = useState('third_party'); // 'third_party' or 'self_delivery'
@@ -228,10 +229,19 @@ export default function OrderDetailModal({
     handleSaveDeliveryDetails();
   };
 
-  const handleStatusChange = (status) => {
+  const handleApplyStatusUpdate = (targetStatus) => {
+    const statusToApply = targetStatus || selectedStatus;
     const orderIdentifier = order._id || order.id || order.orderId;
-    setSelectedStatus(status);
-    onUpdateStatus(orderIdentifier, status);
+    setSelectedStatus(statusToApply);
+    if (onUpdateStatus) {
+      onUpdateStatus(orderIdentifier, statusToApply);
+    }
+    setStatusUpdatedToast(true);
+    setTimeout(() => setStatusUpdatedToast(false), 2500);
+  };
+
+  const handleStatusChange = (status) => {
+    handleApplyStatusUpdate(status);
   };
 
   const handleProcessRefund = () => {
@@ -607,12 +617,12 @@ export default function OrderDetailModal({
             </div>
           ) : (
             <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-600">Update Status:</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-gray-700">Order Status:</span>
                 <select
                   value={selectedStatus}
-                  onChange={e => handleStatusChange(e.target.value)}
-                  className="bg-white border border-gray-300 text-xs font-bold rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-yellow outline-hidden cursor-pointer"
+                  onChange={e => setSelectedStatus(e.target.value)}
+                  className="bg-white border border-gray-300 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer shadow-2xs"
                 >
                   <option value="Pending">Pending</option>
                   <option value="Confirmed">Confirmed</option>
@@ -629,6 +639,24 @@ export default function OrderDetailModal({
                   <option value="return_approved">Return Approved</option>
                   <option value="product_return_received">Product Return Received</option>
                 </select>
+
+                <button
+                  type="button"
+                  onClick={() => handleApplyStatusUpdate(selectedStatus)}
+                  className="px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {statusUpdatedToast ? (
+                    <>
+                      <Check size={14} className="text-emerald-300" />
+                      <span>Updated Status!</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={14} />
+                      <span>Update Status</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
@@ -707,7 +735,22 @@ export default function OrderDetailModal({
                       <div className="text-[11px] text-gray-500">
                         {item.size && `Size: ${item.size} • `}
                         {item.color && `Color: ${item.color} • `}
-                        Qty: {item.quantity}
+                        Qty: {(() => {
+                          const isUnstitched = Boolean(
+                            item.isMeterBased ||
+                            item.unit === 'meter' ||
+                            item.unit === 'm' ||
+                            String(item.category || '').toLowerCase().includes('unstitched') ||
+                            String(item.category || '').toLowerCase().includes('unstiched') ||
+                            String(item.subCategory || '').toLowerCase().includes('unstitched') ||
+                            String(item.subCategory || '').toLowerCase().includes('unstiched') ||
+                            String(item.name || '').toLowerCase().includes('unstitched') ||
+                            String(item.name || '').toLowerCase().includes('unstiched') ||
+                            (Number(item.quantity || 1) % 1 !== 0)
+                          );
+                          const rawQty = Number(item.quantity || 1);
+                          return isUnstitched ? rawQty.toFixed(2) : (rawQty % 1 === 0 ? rawQty : rawQty.toFixed(2));
+                        })()}
                       </div>
                       <div className="text-[10px] text-teal-900 font-medium flex items-center gap-1 mt-0.5">
                         <Store size={10} className="text-teal-700 shrink-0" />
@@ -718,10 +761,44 @@ export default function OrderDetailModal({
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right space-y-1">
                     <div className="font-bold text-xs text-gray-900">₹{item.price * item.quantity}</div>
                     <div className="text-[10px] text-gray-400">₹{item.price} each</div>
-                    <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-1 ${(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'}`}>
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                        item.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                        item.status === 'Shipped' || item.status === 'Out for Delivery' ? 'bg-purple-100 text-purple-800' :
+                        item.status === 'Packed' ? 'bg-indigo-100 text-indigo-800' :
+                        item.status === 'Confirmed' ? 'bg-blue-100 text-blue-800' :
+                        item.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
+                        'bg-amber-100 text-amber-800'
+                      }`}>
+                        {item.status || order.status || 'Pending'}
+                      </span>
+                      {!readOnly && (
+                        <select
+                          value={item.status || order.status || 'Pending'}
+                          onChange={(e) => {
+                            const newSt = e.target.value;
+                            if (onUpdateStatus) {
+                              onUpdateStatus(order.id || order._id, newSt, { itemId: item._id || item.id || idx });
+                            }
+                          }}
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 bg-white hover:border-teal-600 focus:outline-none cursor-pointer"
+                          title="Update status for this specific item"
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Confirmed">Confirmed</option>
+                          <option value="Processing">Processing</option>
+                          <option value="Packed">Packed</option>
+                          <option value="Shipped">Shipped</option>
+                          <option value="Out for Delivery">Out for Delivery</option>
+                          <option value="Delivered">Delivered</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      )}
+                    </div>
+                    <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 ${(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'}`}>
                       {(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? '🛵 Self-Delivery' : `🚚 ${item.thirdPartyDetails?.courierName || order.courierName || 'Courier'}`}
                     </span>
                   </div>

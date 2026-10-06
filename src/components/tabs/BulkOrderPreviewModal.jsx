@@ -1125,6 +1125,7 @@ export default function BulkOrderPreviewModal({
                         : 'Advance Status: Awaiting Payment'}
                     </span>
 
+                    {(order.advancePaymentStatus === 'paid' || order.advancePaymentStatus === 'paid_partially' || Boolean(order.advancePaidAmount && Number(order.advancePaidAmount) > 0)) && (
                     <button
                       type="button"
                       onClick={() => setIsReceiptModalOpen(true)}
@@ -1133,6 +1134,7 @@ export default function BulkOrderPreviewModal({
                       <FileText size={13} />
                       <span>Advance Receipt</span>
                     </button>
+                  )}
                   </div>
                 </div>
 
@@ -2065,7 +2067,8 @@ export default function BulkOrderPreviewModal({
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             {/* View Partial Advance Receipt Button */}
-            <button
+            {(order.advancePaymentStatus === 'paid' || order.advancePaymentStatus === 'paid_partially' || Boolean(order.advancePaidAmount && Number(order.advancePaidAmount) > 0)) && (
+              <button
               type="button"
               onClick={() => setIsReceiptModalOpen(true)}
               className="flex-1 sm:flex-initial px-3.5 py-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 font-extrabold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
@@ -2073,6 +2076,7 @@ export default function BulkOrderPreviewModal({
               <FileText size={14} className="text-emerald-700" />
               <span>Partial Receipt Voucher</span>
             </button>
+            )}
 
             {userRole === 'seller' && onSubmitQuote && order.status !== 'quote_accepted' && (
               <button
