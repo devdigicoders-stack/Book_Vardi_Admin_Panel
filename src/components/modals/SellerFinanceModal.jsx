@@ -120,7 +120,7 @@ export default function SellerFinanceModal({
 
         list.push({
           ...order,
-          orderId: order.orderId || order.id || `SC-${String(order._id || '').slice(-4)}`,
+          orderId: order.orderId || order.id || String(order._id || ''),
           sellerItems: relevantItems,
           relevantItems,
           itemsCount: relevantItems.length,

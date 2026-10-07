@@ -97,7 +97,7 @@ export const CATEGORY_FORM_SCHEMA = {
     showSizeChart: false,
     showGender: true,
     allowedScales: ['size', 'unit', 'count'],
-    allowedPresets: ['standard']
+    allowedPresets: ['shoes_kids', 'shoes_senior', 'shoes_all']
   },
 
   // 4. Uniforms & Clothing
@@ -144,6 +144,27 @@ export function getCategorySchema(categoryKey) {
 
 // Presets for Sizing & Measuring Matrix
 const SIZE_PRESETS = [
+  {
+    id: 'shoes_kids',
+    label: 'Kids Shoe Sizes (1 - 13 Kids)',
+    scale: 'size',
+    sizes: ['1 Kids', '2 Kids', '3 Kids', '4 Kids', '5 Kids', '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids']
+  },
+  {
+    id: 'shoes_senior',
+    label: 'Senior / Adult Shoe Sizes (Size 6 - 13)',
+    scale: 'size',
+    sizes: ['Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13']
+  },
+  {
+    id: 'shoes_all',
+    label: 'All Shoe Sizes (Kids 1-13 & Size 6-13)',
+    scale: 'size',
+    sizes: [
+      '1 Kids', '2 Kids', '3 Kids', '4 Kids', '5 Kids', '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids',
+      'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13'
+    ]
+  },
   {
     id: 'standard',
     label: 'Apparel Standard (S - XXL)',
@@ -586,29 +607,46 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
 
   // Apply Quick Size Preset
   const applySizePreset = (preset) => {
-    const defaultPrice = formData.price || '499';
-    const defaultMrp = formData.originalPrice || Math.round(Number(defaultPrice || 499) * 1.25).toString();
-    const defaultImage = formData.images[0] || formData.image || '';
-
-    const newVariants = preset.sizes.map(sz => {
-      const existing = sizeVariants.find(v => (v.size || v.measureValue || '').toLowerCase() === sz.toLowerCase());
-      if (existing) return existing;
-      return {
-        size: sz,
-        measureScale: preset.scale,
-        measureValue: sz,
-        unit: preset.scale.toUpperCase(),
-        price: defaultPrice,
-        mrp: defaultMrp,
-        stock: '25',
-        image: defaultImage,
-        images: defaultImage ? [defaultImage] : [],
-        sku: formData.sku ? `${formData.sku}-${sz}` : `SKU-${sz}`
-      };
-    });
-
-    setSizeVariants(newVariants);
-  };
+      const defaultPrice = formData.price || '499';
+      const defaultMrp = formData.originalPrice || Math.round(Number(defaultPrice || 499) * 1.25).toString();
+      const defaultImage = formData.images[0] || formData.image || '';
+  
+      const newVariants = preset.sizes.map(sz => {
+        const target = sz.toLowerCase();
+        const targetNoPrefix = target.replace(/^size\s+/i, '');
+        const existing = sizeVariants.find(v => {
+          const s = String(v.size || v.measureValue || '').toLowerCase().trim();
+          const sNoPrefix = s.replace(/^size\s+/i, '');
+          return s === target || s === targetNoPrefix || sNoPrefix === targetNoPrefix;
+        });
+        if (existing) return existing;
+        return {
+          size: sz,
+          measureScale: preset.scale,
+          measureValue: sz,
+          unit: preset.scale.toUpperCase(),
+          price: defaultPrice,
+          mrp: defaultMrp,
+          stock: '25',
+          image: defaultImage,
+          images: defaultImage ? [defaultImage] : [],
+          sku: formData.sku ? `${formData.sku}-${sz}` : `SKU-${sz}`
+        };
+      });
+  
+      // Preserve existing variants not in this preset
+      const remainingExisting = sizeVariants.filter(v => {
+        const s = String(v.size || v.measureValue || '').toLowerCase().trim();
+        const sNoPrefix = s.replace(/^size\s+/i, '');
+        return !preset.sizes.some(sz => {
+          const target = sz.toLowerCase();
+          const targetNoPrefix = target.replace(/^size\s+/i, '');
+          return s === target || s === targetNoPrefix || sNoPrefix === targetNoPrefix;
+        });
+      });
+  
+      setSizeVariants([...remainingExisting, ...newVariants]);
+    };
 
   // Kit Creation Helpers
   const handleAddProductToKit = (p) => {

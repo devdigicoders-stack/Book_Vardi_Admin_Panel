@@ -601,6 +601,14 @@ export const AdminDataProvider = ({ children }) => {
             ...o,
             id: o.orderId || o._id || o.id,
             _id: o._id || o.id,
+            date: o.createdAt
+              ? new Date(o.createdAt).toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  timeZone: 'Asia/Kolkata'
+                })
+              : (o.date || ''),
             customerName: custName,
             customerEmail: custEmail,
             customerPhone: custPhone,
@@ -788,6 +796,14 @@ export const AdminDataProvider = ({ children }) => {
               ...o,
               id: o.orderId || o._id || o.id,
               _id: o._id || o.id,
+              date: o.createdAt
+                ? new Date(o.createdAt).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    timeZone: 'Asia/Kolkata'
+                  })
+                : (o.date || ''),
               customerName: custName,
               customerEmail: custEmail,
               customerPhone: custPhone,
