@@ -567,6 +567,18 @@ export const updateOrderStatusApi = async (id, status, extraPayload = {}) => {
   }
 };
 
+export const resendRiderWhatsAppApi = async (orderId) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${orderId}/resend-rider-whatsapp`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 export const cancelOrderAdminApi = async (id, reason = '') => {
   try {
     const res = await fetch(`${SERVER_URL}/orders/${id}/status`, {

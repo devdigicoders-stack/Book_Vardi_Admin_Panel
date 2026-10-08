@@ -18,9 +18,13 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Lock
+  Lock,
+  Loader2,
+  MessageSquare
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
+import { resendRiderWhatsAppApi } from '../../utils/api';
+import { generateRiderWhatsAppMessage, buildRiderWhatsAppUrl } from '../../utils/whatsappRiderHelper';
 
 // Helper to generate dynamic tracking ID based on courier name
 export const generateDynamicTrackingId = (courierName) => {
@@ -83,6 +87,11 @@ export default function OrderDetailModal({
   const [driverPhoneInput, setDriverPhoneInput] = useState('');
   const [vehicleNumberInput, setVehicleNumberInput] = useState('');
 
+  // Automated WhatsApp dispatch state
+  const [isSavingDelivery, setIsSavingDelivery] = useState(false);
+  const [isResendingWhatsApp, setIsResendingWhatsApp] = useState(false);
+  const [whatsappSentRef, setWhatsappSentRef] = useState(null);
+
   const [returnActionState, setReturnActionState] = useState({
     showRejectInput: false,
     rejectionReason: '',
@@ -131,6 +140,16 @@ export default function OrderDetailModal({
       setDriverNameInput(order.selfDeliveryDetails?.deliveryPersonName || '');
       setDriverPhoneInput(order.selfDeliveryDetails?.deliveryPersonPhone || '');
       setVehicleNumberInput(order.selfDeliveryDetails?.vehicleNumber || '');
+
+      if (order.selfDeliveryDetails?.whatsappStatus) {
+        setWhatsappSentRef({
+          messageId: order.selfDeliveryDetails.whatsappMessageId,
+          sentTo: order.selfDeliveryDetails.whatsappSentTo,
+          sentAt: order.selfDeliveryDetails.whatsappSentAt
+        });
+      } else {
+        setWhatsappSentRef(null);
+      }
     }
   }, [order]);
 
@@ -154,7 +173,7 @@ export default function OrderDetailModal({
 
   if (!isOpen || !order) return null;
 
-  const handleSaveDeliveryDetails = () => {
+  const handleSaveDeliveryDetails = async () => {
     const isSelf = deliveryModeInput === 'self_delivery';
     let assignedTrackingNumber = '';
     let tokenVal = '';
@@ -215,14 +234,77 @@ export default function OrderDetailModal({
       } : undefined
     };
 
+    // If self-delivery, prepare WhatsApp URL and open tab immediately on click to prevent pop-up blocker
+    let waUrl = '';
+    if (isSelf && driverPhoneInput.trim()) {
+      const waMsg = generateRiderWhatsAppMessage({
+        order,
+        driverName: driverNameInput.trim(),
+        vehicleNumber: vehicleNumberInput.trim(),
+        trackingLink: selfTrackingLink
+      });
+      waUrl = buildRiderWhatsAppUrl({ phone: driverPhoneInput, message: waMsg });
+      if (waUrl) {
+        try {
+          window.open(waUrl, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+          console.warn('Could not open WhatsApp tab automatically:', e);
+        }
+      }
+    }
+
+    setIsSavingDelivery(true);
     const orderIdentifier = order._id || order.id || order.orderId;
-    if (onUpdateTracking) {
-      onUpdateTracking(orderIdentifier, payload.trackingNumber, payload);
+    try {
+      if (onUpdateTracking) {
+        await onUpdateTracking(orderIdentifier, payload.trackingNumber, payload);
+      }
+      if (onUpdateStatus) {
+        await onUpdateStatus(orderIdentifier, selectedStatus, payload);
+      }
+      if (isSelf) {
+        setWhatsappSentRef({
+          messageId: 'WA-MSG-SENT',
+          sentTo: driverPhoneInput.trim(),
+          sentAt: new Date().toISOString()
+        });
+        alert(`✅ Delivery partner saved successfully!\n\n📲 WhatsApp has been opened in a new tab to send instructions & tracking link to ${driverPhoneInput.trim()}.\nReview and click Send in WhatsApp!`);
+      } else {
+        alert(`✅ Delivery partner & tracking details saved successfully for Order #${order.id || order.orderId}!\n\nTracking Link: ${carrierUrl}`);
+      }
+    } finally {
+      setIsSavingDelivery(false);
     }
-    if (onUpdateStatus) {
-      onUpdateStatus(orderIdentifier, selectedStatus, payload);
+  };
+
+  const handleResendRiderWhatsApp = async () => {
+    const orderIdentifier = order._id || order.id || order.orderId;
+    if (!orderIdentifier || !driverPhoneInput.trim()) {
+      alert('⚠️ No rider phone number found to send WhatsApp message.');
+      return;
     }
-    alert(`✅ Delivery partner & tracking details saved successfully for Order #${order.id || order.orderId}!\n\nTracking Link: ${isSelf ? selfTrackingLink : carrierUrl}`);
+    const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
+    const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+    const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+
+    const waMsg = generateRiderWhatsAppMessage({
+      order,
+      driverName: driverNameInput.trim(),
+      vehicleNumber: vehicleNumberInput.trim(),
+      trackingLink: selfTrackingLink
+    });
+    const waUrl = buildRiderWhatsAppUrl({ phone: driverPhoneInput, message: waMsg });
+    if (waUrl) {
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    }
+    setIsResendingWhatsApp(true);
+    try {
+      await resendRiderWhatsAppApi(orderIdentifier);
+    } catch (err) {
+      console.warn('Backend resend log:', err);
+    } finally {
+      setIsResendingWhatsApp(false);
+    }
   };
 
   const handleSaveTracking = () => {
@@ -393,13 +475,89 @@ export default function OrderDetailModal({
                 </span>
               </div>
 
+              {Boolean(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange')) && (
+                <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-teal-50 border border-purple-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-extrabold text-xs uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
+                      <span>🔄</span> Exchange Items & Financial Action
+                    </span>
+                    {order.returnRequest?.priceAdjustmentType === 'extra_payment' && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-amber-200 text-amber-950 border border-amber-300">
+                        💰 Collect Extra: +₹{order.returnRequest.priceDifference}
+                      </span>
+                    )}
+                    {order.returnRequest?.priceAdjustmentType === 'partial_refund' && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-emerald-200 text-emerald-950 border border-emerald-300">
+                        💸 Refund Customer: ₹{Math.abs(order.returnRequest.priceDifference)}
+                      </span>
+                    )}
+                    {order.returnRequest?.priceAdjustmentType === 'none' && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-blue-200 text-blue-950 border border-blue-300">
+                        ⚖️ Equal Value (₹0)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white p-2.5 rounded-lg border border-purple-100">
+                      <span className="text-[10px] font-bold uppercase text-purple-600 block">Original Item to Collect:</span>
+                      <strong className="text-gray-900">{order.returnRequest?.itemName || order.items?.[0]?.name}</strong>
+                      <div className="text-[11px] text-gray-600 mt-0.5 font-mono">
+                        Spec: {order.items?.[0]?.size ? `Size ${order.items?.[0]?.size}` : (order.returnRequest?.isMeterBased ? `${order.items?.[0]?.quantity}m` : 'Base Item')} • Price: ₹{order.returnRequest?.originalItemPrice || order.items?.[0]?.price}
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-2.5 rounded-lg border border-purple-100">
+                      <span className="text-[10px] font-bold uppercase text-indigo-600 block">Replacement Item to Send:</span>
+                      <strong className="text-gray-900">{order.returnRequest?.itemName || order.items?.[0]?.name}</strong>
+                      <div className="text-[11px] text-indigo-900 font-extrabold mt-0.5 font-mono">
+                        Requested: {order.returnRequest?.exchangeLength ? `${order.returnRequest.exchangeLength} Meter(s)` : (order.returnRequest?.exchangeSize || order.returnRequest?.targetSize || 'Replacement')} • Price: ₹{order.returnRequest?.replacementItemPrice || order.returnRequest?.originalItemPrice || order.items?.[0]?.price}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] rounded-lg p-2 bg-white/80 border border-purple-100 font-semibold text-purple-950">
+                    {order.returnRequest?.priceAdjustmentType === 'extra_payment' ? (
+                      <span>⚠️ <strong>Delivery Rider Instruction:</strong> Rider must collect <strong>₹{order.returnRequest.priceDifference} in cash or UPI</strong> from the customer upon delivering replacement.</span>
+                    ) : order.returnRequest?.priceAdjustmentType === 'partial_refund' ? (
+                      <span>✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong>. Partial refund of ₹{Math.abs(order.returnRequest.priceDifference)} is credited directly to customer's account.</span>
+                    ) : (
+                      <span>✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong> (Equal price exchange).</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1">
                   <div className="text-[10px] font-bold text-gray-400 uppercase">Reason for Request</div>
                   <div className="font-semibold text-gray-800">{order.returnRequest.reason || 'N/A'}</div>
-                  {order.returnRequest.targetSize && (
-                    <div className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded inline-block mt-1">
-                      Requested Replacement Size: {order.returnRequest.targetSize}
+                  {(order.returnRequest.exchangeSize || order.returnRequest.targetSize || order.returnRequest.exchangeLength) && (
+                    <div className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-1 rounded inline-flex items-center gap-1.5 flex-wrap mt-1">
+                      <span>
+                        {order.returnRequest.isMeterBased || order.returnRequest.exchangeLength
+                          ? 'Requested Length:'
+                          : String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('kids')
+                          ? 'Requested Shoe Size:'
+                          : String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('line') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('pack') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('class') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('replacement')
+                          ? 'Requested Variant:'
+                          : 'Requested Replacement Size:'}{' '}
+                        <strong>
+                          {order.returnRequest.exchangeLength
+                            ? `${order.returnRequest.exchangeLength} Meter(s)`
+                            : (order.returnRequest.exchangeSize || order.returnRequest.targetSize)}
+                        </strong>
+                      </span>
+                      {order.returnRequest.priceAdjustmentType === 'extra_payment' && (
+                        <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded">
+                          +₹{order.returnRequest.priceDifference} Extra
+                        </span>
+                      )}
+                      {order.returnRequest.priceAdjustmentType === 'partial_refund' && (
+                        <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded">
+                          ₹{Math.abs(order.returnRequest.priceDifference)} Refund
+                        </span>
+                      )}
                     </div>
                   )}
                   {order.returnRequest.rejectionReason && (
@@ -1207,6 +1365,63 @@ export default function OrderDetailModal({
                           </div>
                         </div>
                       )}
+
+                      {/* Exchange Delivery Note */}
+                      {(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange')) && (
+                        <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg text-purple-950 text-xs space-y-1">
+                          <div className="font-extrabold flex items-center gap-1.5 text-[11px] text-purple-900">
+                            <span>🔄</span> 2-Way Exchange Delivery Task
+                          </div>
+                          <div className="text-[11px] text-purple-800">
+                            The rider will see instructions to <strong>collect the original item</strong> and <strong>deliver the replacement item</strong>.
+                            {order.returnRequest?.priceAdjustmentType === 'extra_payment' ? (
+                              <span className="block mt-0.5 font-bold text-amber-900">
+                                💰 Extra Payment: Rider must collect ₹{order.returnRequest.priceDifference} from customer.
+                              </span>
+                            ) : (
+                              <span className="block mt-0.5 font-semibold text-emerald-800">
+                                💸 Payment collection is ₹0 (Refund/Equal exchange handled separately).
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Manual WhatsApp Rider Dispatch Action & Status */}
+                      {driverPhoneInput && (
+                        <div className="space-y-2">
+                          <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                            <div>
+                              <div className="font-bold text-emerald-950 flex items-center gap-1.5 text-[11px]">
+                                <MessageSquare size={13} className="text-emerald-700" />
+                                <span>WhatsApp Rider Dispatch (Direct Web / App)</span>
+                                <span className="bg-emerald-200 text-emerald-900 text-[8px] px-1.5 py-0.2 rounded font-mono font-bold">READY</span>
+                              </div>
+                              <div className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                                Target Rider: +91 {driverPhoneInput.replace(/\D/g, '').slice(-10)}
+                              </div>
+                            </div>
+                          </div>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              disabled={isResendingWhatsApp}
+                              onClick={handleResendRiderWhatsApp}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1 shrink-0 disabled:opacity-50"
+                            >
+                              <MessageSquare size={12} />
+                              <span>📲 Open WhatsApp to Send to Rider</span>
+                            </button>
+                          )}
+                        </div>
+                          <div className="text-[10px] text-emerald-800 bg-white/70 p-1.5 rounded border border-emerald-200">
+                            💡 <strong>Direct Send:</strong> Clicking <em>"Save Delivery Partner & Tracking Details"</em> opens WhatsApp in a new tab with pre-filled instructions & tracking link. Simply click <strong>Send</strong> in WhatsApp Web/App!
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   )}
 
@@ -1217,11 +1432,21 @@ export default function OrderDetailModal({
                   <div className="flex justify-end pt-1">
                     <button
                       type="button"
+                      disabled={isSavingDelivery}
                       onClick={handleSaveDeliveryDetails}
-                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                      className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
                     >
-                      <Check size={14} />
-                      <span>Save Delivery Partner & Tracking Details</span>
+                      {isSavingDelivery ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Saving & Dispatching WhatsApp...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check size={14} />
+                          <span>Save Delivery Partner & Tracking Details</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}
