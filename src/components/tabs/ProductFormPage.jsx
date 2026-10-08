@@ -146,23 +146,23 @@ export function getCategorySchema(categoryKey) {
 const SIZE_PRESETS = [
   {
     id: 'shoes_kids',
-    label: 'Kids Shoe Sizes (1 - 13 Kids)',
+    label: 'Kids Shoe Sizes (6 - 13 Kids)',
     scale: 'size',
-    sizes: ['1 Kids', '2 Kids', '3 Kids', '4 Kids', '5 Kids', '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids']
+    sizes: ['6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids']
   },
   {
     id: 'shoes_senior',
-    label: 'Senior / Adult Shoe Sizes (Size 6 - 13)',
+    label: 'Senior / Adult Shoe Sizes (Size 1 - 13)',
     scale: 'size',
-    sizes: ['Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13']
+    sizes: ['Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13']
   },
   {
     id: 'shoes_all',
-    label: 'All Shoe Sizes (Kids 1-13 & Size 6-13)',
+    label: 'All Shoe Sizes (Kids 6-13 & Adult 1-13)',
     scale: 'size',
     sizes: [
-      '1 Kids', '2 Kids', '3 Kids', '4 Kids', '5 Kids', '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids',
-      'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13'
+      '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids',
+      'Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13'
     ]
   },
   {

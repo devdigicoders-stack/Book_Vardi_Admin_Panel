@@ -537,7 +537,7 @@ export default function OrderDetailModal({
                       <span>
                         {order.returnRequest.isMeterBased || order.returnRequest.exchangeLength
                           ? 'Requested Length:'
-                          : String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('kids')
+                          : String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('kids') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('uk/ind')
                           ? 'Requested Shoe Size:'
                           : String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('line') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('pack') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('class') || String(order.returnRequest.exchangeSize || order.returnRequest.targetSize || '').toLowerCase().includes('replacement')
                           ? 'Requested Variant:'
