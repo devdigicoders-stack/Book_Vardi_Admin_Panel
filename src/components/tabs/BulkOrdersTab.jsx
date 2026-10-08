@@ -22,7 +22,8 @@ import {
   Sparkles,
   Eye,
   Package,
-  Percent
+  Percent,
+  XCircle
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import BulkOrderPreviewModal from './BulkOrderPreviewModal';
@@ -351,27 +352,61 @@ export default function BulkOrdersTab() {
                 </div>
 
                 {/* Seller Quotations Summary Bar */}
-                {hasQuotes && (
-                  <div className="bg-purple-50/60 border border-purple-200/70 p-3 rounded-xl flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={16} className="text-purple-600" />
-                      <span className="font-bold text-purple-900">
-                        {quoteCount} Seller Quotations Submitted
-                      </span>
-                      <span className="text-[11px] text-purple-700">
-                        (Lowest Quote: ₹{Math.min(...order.quotations.map(q => Number(q.quoteAmount))).toLocaleString()})
-                      </span>
-                    </div>
+                {hasQuotes && (() => {
+                  const sIdStr = typeof order.sellerId === 'object' ? String(order.sellerId?._id || order.sellerId?.id) : String(order.sellerId || '');
+                  const winningQuote = order.quotations.find(q =>
+                    q.status !== 'rejected' &&
+                    q.negotiationStage !== 'rejected' &&
+                    ((sIdStr && String(q.sellerId) === sIdStr) || String(q._id) === String(order.acceptedQuoteId) || q.status === 'approved' || q.status === 'buyer_accepted')
+                  );
+                  const isAwarded = Boolean(order.acceptedQuoteId || winningQuote);
+                  const winningSellerName = winningQuote?.sellerStoreName || winningQuote?.sellerName || order.acceptedSellerName || "Selected Vendor";
+                  const outbidCount = winningQuote ? order.quotations.filter(q => String(q._id) !== String(winningQuote._id)).length : 0;
 
-                    <button
-                      onClick={() => setViewQuotesOrder(order)}
-                      className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
-                    >
-                      <span>Review Quotations</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                )}
+                  return (
+                    <div className={`p-3 rounded-xl flex items-center justify-between text-xs border ${
+                      isAwarded
+                        ? 'bg-emerald-50/70 border-emerald-300'
+                        : 'bg-purple-50/60 border-purple-200/70'
+                    }`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isAwarded ? (
+                          <>
+                            <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
+                            <span className="font-extrabold text-emerald-950">
+                              🏆 Awarded to {winningSellerName}
+                            </span>
+                            {outbidCount > 0 && (
+                              <span className="text-[11px] font-bold text-slate-600 bg-white/80 px-2 py-0.5 rounded-md border border-slate-200">
+                                {outbidCount} Other Proposal{outbidCount > 1 ? 's' : ''} Rejected / Outbid
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={16} className="text-purple-600" />
+                            <span className="font-bold text-purple-900">
+                              {quoteCount} Seller Quotations Submitted
+                            </span>
+                            <span className="text-[11px] text-purple-700">
+                              (Lowest Quote: ₹{Math.min(...order.quotations.map(q => Number(q.quoteAmount))).toLocaleString()})
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => setViewQuotesOrder(order)}
+                        className={`px-3 py-1.5 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-2xs flex items-center gap-1 shrink-0 ${
+                          isAwarded ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-purple-700 hover:bg-purple-800'
+                        }`}
+                      >
+                        <span>Review Quotations</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* Advance Payment Indicator Strip */}
                 {(() => {
@@ -680,10 +715,48 @@ export default function BulkOrdersTab() {
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {(!viewQuotesOrder.quotations || viewQuotesOrder.quotations.length === 0) ? (
                 <div className="text-center py-8 text-gray-400">No quotations submitted by sellers yet.</div>
-              ) : (
-                viewQuotesOrder.quotations.map((quote) => {
-                  const qId = quote._id || quote.id;
-                  const isApproved = quote.status === 'approved' || String(viewQuotesOrder.acceptedQuoteId) === String(qId);
+              ) : (() => {
+                const getCleanId = (val) => {
+                  if (!val) return '';
+                  if (typeof val === 'object') {
+                    if (val._id) return String(val._id);
+                    if (val.id) return String(val.id);
+                    if (typeof val.toString === 'function') {
+                      const str = val.toString();
+                      if (str !== '[object Object]') return str;
+                    }
+                  }
+                  return String(val);
+                };
+
+                const orderSellerId = getCleanId(viewQuotesOrder.sellerId);
+                const acceptedQuoteId = getCleanId(viewQuotesOrder.acceptedQuoteId || viewQuotesOrder.winningQuoteId);
+
+                const winningQuote = viewQuotesOrder.quotations.find(q => {
+                  if (q.status === 'rejected' || q.negotiationStage === 'rejected') return false;
+                  const qId = getCleanId(q._id || q.id);
+                  const qSellerId = getCleanId(q.sellerId);
+                  return (
+                    (orderSellerId && qSellerId && orderSellerId === qSellerId) ||
+                    (acceptedQuoteId && acceptedQuoteId === qId) ||
+                    q.status === 'approved' ||
+                    q.negotiationStage === 'approved' ||
+                    q.status === 'buyer_accepted'
+                  );
+                });
+                const winningSellerName = winningQuote?.sellerStoreName || winningQuote?.sellerName || viewQuotesOrder.acceptedSellerName || "another vendor";
+
+                return viewQuotesOrder.quotations.map((quote) => {
+                  const qId = getCleanId(quote._id || quote.id);
+                  const isWinner = Boolean(
+                    winningQuote && (getCleanId(winningQuote._id || winningQuote.id) === qId)
+                  );
+                  const isRejected = (
+                    quote.status === 'rejected' ||
+                    quote.negotiationStage === 'rejected' ||
+                    Boolean(winningQuote && !isWinner)
+                  );
+                  const isApproved = isWinner && !isRejected;
 
                   return (
                     <div
@@ -691,13 +764,25 @@ export default function BulkOrdersTab() {
                       className={`p-4 rounded-xl border transition-all space-y-3 ${
                         isApproved
                           ? 'bg-emerald-50/70 border-emerald-300'
+                          : isRejected
+                          ? 'bg-slate-50/70 border-slate-200 text-slate-500 opacity-80'
                           : 'bg-white border-gray-200 hover:border-purple-300'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-extrabold text-sm text-gray-900">
-                            {quote.sellerStoreName || quote.sellerName}
+                          <div className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+                            <span>{quote.sellerStoreName || quote.sellerName}</span>
+                            {isApproved && (
+                              <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                                Winning Proposal
+                              </span>
+                            )}
+                            {isRejected && (
+                              <span className="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <XCircle size={10} className="text-rose-600" /> Quotation Rejected / Outbid
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-gray-500">
                             {quote.sellerPhone} • {quote.sellerCity}
@@ -713,6 +798,21 @@ export default function BulkOrdersTab() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Notice Banner: Proposal Not Selected */}
+                      {isRejected && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 flex items-start gap-2 text-xs text-rose-900 shadow-2xs">
+                          <XCircle size={15} className="text-rose-600 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-extrabold text-[10px] uppercase tracking-wider text-rose-800">
+                              Quotation Proposal Not Selected
+                            </div>
+                            <p className="mt-0.5 text-rose-900 text-[11px]">
+                              This quotation proposal was not selected for procurement. Order awarded to <strong>{winningSellerName}</strong>.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Descriptive Item Breakdown Table */}
                       {Array.isArray(quote.itemPrices) && quote.itemPrices.length > 0 && (
@@ -730,7 +830,7 @@ export default function BulkOrdersTab() {
                                   <th className="py-2 px-3">Product Demand</th>
                                   <th className="py-2 px-2 text-center">Qty</th>
                                   <th className="py-2 px-2 text-right">User Budget</th>
-                                  <th className="py-2 px-2 text-right bg-emerald-50 text-emerald-950">Seller Price</th>
+                                  <th className={`py-2 px-2 text-right ${isRejected ? 'bg-gray-100 text-gray-700' : 'bg-emerald-50 text-emerald-950'}`}>Seller Price</th>
                                   <th className="py-2 px-3 text-right">Line Total</th>
                                   <th className="py-2 px-3">Scale Note</th>
                                 </tr>
@@ -751,7 +851,7 @@ export default function BulkOrdersTab() {
                                       <td className="py-2 px-2 text-right font-medium text-gray-600">
                                         {custBudget > 0 ? `₹${custBudget.toLocaleString()}` : 'N/A'}
                                       </td>
-                                      <td className="py-2 px-2 text-right font-black bg-emerald-50/70 text-emerald-900 font-mono">
+                                      <td className={`py-2 px-2 text-right font-black font-mono ${isRejected ? 'text-gray-600' : 'bg-emerald-50/70 text-emerald-900'}`}>
                                         ₹{sellerPrice.toLocaleString()}
                                       </td>
                                       <td className="py-2 px-3 text-right font-black text-gray-900 font-mono">
@@ -790,8 +890,8 @@ export default function BulkOrdersTab() {
                         </div>
                       )}
 
-                      {/* Demanded Advance Payment Banner */}
-                      {(quote.sellerAdvancePercentage || quote.sellerAdvanceAmount || quote.sellerAdvanceTerms) && (
+                      {/* Demanded Advance Payment Banner - only for winning/approved quote */}
+                      {!isRejected && isApproved && (quote.sellerAdvancePercentage || quote.sellerAdvanceAmount || quote.sellerAdvanceTerms) && (
                         <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-start gap-2 text-xs text-emerald-950">
                           <DollarSign size={15} className="text-emerald-700 shrink-0 mt-0.5" />
                           <div className="space-y-0.5 flex-1">
@@ -835,11 +935,15 @@ export default function BulkOrdersTab() {
                           <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1">
                             <CheckCircle2 size={14} /> Approved & Winning Seller Quote
                           </span>
+                        ) : isRejected ? (
+                          <span className="text-xs font-bold text-rose-800 bg-rose-50 px-3 py-1 rounded-full flex items-center gap-1 border border-rose-200">
+                            <XCircle size={14} className="text-rose-600" /> Quotation Rejected / Outbid
+                          </span>
                         ) : (
                           <span className="text-[11px] text-gray-400">Status: {quote.status}</span>
                         )}
 
-                        {!isApproved && (
+                        {!isApproved && !isRejected && (
                           <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
                             Awaiting Buyer Decision
                           </span>
@@ -847,8 +951,8 @@ export default function BulkOrdersTab() {
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
 
             <div className="pt-2 border-t border-gray-100 flex justify-end">
