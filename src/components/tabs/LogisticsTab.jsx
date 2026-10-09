@@ -18,11 +18,21 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function LogisticsTab() {
-  const { orders = [] } = useAdminData();
+  const { orders = [], settings = {}, updatePlatformSettings } = useAdminData();
 
   const [platformPartner, setPlatformPartner] = useState('shiprocket');
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState('999');
+  const [shippingFee, setShippingFee] = useState(String(settings.shippingFee ?? 49));
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(settings.minOrderFreeShipping || settings.freeShippingThreshold || '999'));
   const [codFee, setCodFee] = useState('40');
+
+  useEffect(() => {
+    if (settings) {
+      if (settings.shippingFee !== undefined) setShippingFee(String(settings.shippingFee));
+      if (settings.minOrderFreeShipping !== undefined || settings.freeShippingThreshold !== undefined) {
+        setFreeShippingThreshold(String(settings.minOrderFreeShipping || settings.freeShippingThreshold || '999'));
+      }
+    }
+  }, [settings]);
 
   const [shiprocketKey, setShiprocketKey] = useState('sr_sandbox_master_key_9981');
   const [delhiveryKey, setDelhiveryKey] = useState('delh_master_key_4412');
@@ -51,11 +61,18 @@ export default function LogisticsTab() {
     e.preventDefault();
     setIsSaving(true);
     setSaveMessage('');
+    if (updatePlatformSettings) {
+      updatePlatformSettings({
+        shippingFee: Number(shippingFee),
+        minOrderFreeShipping: Number(freeShippingThreshold),
+        freeShippingThreshold: Number(freeShippingThreshold)
+      });
+    }
     setTimeout(() => {
       setIsSaving(false);
       setSaveMessage('Master Logistics & Courier Configuration Saved Successfully!');
       setTimeout(() => setSaveMessage(''), 4000);
-    }, 600);
+    }, 500);
   };
 
   return (
@@ -100,7 +117,7 @@ export default function LogisticsTab() {
                 >
                   <option value="shiprocket">Shiprocket Multi-Carrier Aggregator</option>
                   <option value="delhivery">Delhivery Direct Express</option>
-                  <option value="bluedart">BlueDart Campus Air Priority</option>
+                  <option value="bluedart">BlueDart Air Priority</option>
                   <option value="local_express">BookVardi Local Express</option>
                 </select>
               </div>
@@ -135,9 +152,19 @@ export default function LogisticsTab() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Free Shipping (₹)</label>
+                  <label className="block font-bold text-gray-700 mb-1">Per Product (₹)</label>
+                  <input
+                    type="number"
+                    value={shippingFee}
+                    onChange={(e) => setShippingFee(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-gray-900"
+                    title="Universal delivery charge per distinct product applied below the free shipping threshold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Free Ship (₹)</label>
                   <input
                     type="number"
                     value={freeShippingThreshold}
@@ -146,7 +173,7 @@ export default function LogisticsTab() {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Base COD Fee (₹)</label>
+                  <label className="block font-bold text-gray-700 mb-1">COD Fee (₹)</label>
                   <input
                     type="number"
                     value={codFee}

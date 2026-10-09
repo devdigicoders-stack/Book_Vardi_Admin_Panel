@@ -74,6 +74,12 @@ export default function OrdersTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedBulkOrder, setSelectedBulkOrder] = useState(null);
 
+  const activeModalOrder = useMemo(() => {
+    if (!selectedOrder) return null;
+    const sId = selectedOrder._id || selectedOrder.id || selectedOrder.orderId;
+    return (orders || []).find(o => o._id === sId || o.id === sId || o.orderId === sId) || selectedOrder;
+  }, [orders, selectedOrder]);
+
   const returnRequestsCount = useMemo(() => {
     return (orders || []).filter(isReturnOrExchangeOrder).length;
   }, [orders]);
@@ -731,9 +737,17 @@ export default function OrdersTab() {
       {/* Order Detail Modal */}
       <OrderDetailModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        order={selectedOrder}
-        onUpdateStatus={updateOrderStatus}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedOrder(null);
+        }}
+        order={activeModalOrder}
+        onUpdateStatus={async (ordId, st, extra) => {
+          const updated = await updateOrderStatus(ordId, st, extra);
+          if (updated) {
+            setSelectedOrder(updated);
+          }
+        }}
         onUpdateTracking={updateOrderTracking}
         onCancelOrder={cancelOrder}
         onRefundOrder={refundOrder}

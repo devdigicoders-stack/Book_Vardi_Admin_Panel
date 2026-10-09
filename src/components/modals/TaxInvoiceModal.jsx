@@ -267,15 +267,28 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
 
     const storeCandidates = [
       ...candObjs.map(o => o.storeName),
+      ...candObjs.map(o => o.tradeName),
       ...candObjs.map(o => o.businessName),
+      ...candObjs.map(o => o.legalBusinessName),
       ...candObjs.map(o => o.name),
       ...candObjs.map(o => o.sellerName),
       firstItem.sellerStoreName,
       firstItem.storeName,
+      firstItem.tradeName,
+      firstItem.businessName,
+      firstItem.sellerDetails?.storeName,
+      firstItem.sellerDetails?.tradeName,
+      firstItem.sellerDetails?.businessName,
+      firstItem.sellerDetails?.legalBusinessName,
+      firstItem.sellerDetails?.sellerName,
       firstItem.sellerName,
       order.sellerStoreName,
-      order.sellerName,
-      order.storeName
+      order.storeName,
+      order.sellerDetails?.storeName,
+      order.sellerDetails?.tradeName,
+      order.sellerDetails?.businessName,
+      order.sellerDetails?.sellerName,
+      order.sellerName
     ];
 
     let storeName = '';
@@ -432,9 +445,16 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
     const candidateItemNames = [
       item?.sellerStoreName,
       item?.storeName,
-      item?.sellerName,
+      item?.sellerDetails?.storeName,
+      item?.sellerDetails?.tradeName,
+      item?.sellerDetails?.businessName,
+      item?.sellerDetails?.legalBusinessName,
+      item?.sellerDetails?.sellerName,
+      item?.tradeName,
+      item?.businessName,
       item?.legalBusinessName,
-      typeof item?.seller === 'string' ? item.seller : (item?.seller?.storeName || item?.seller?.name)
+      item?.sellerName,
+      typeof item?.seller === 'string' ? item.seller : (item?.seller?.storeName || item?.seller?.tradeName || item?.seller?.businessName || item?.seller?.name)
     ];
 
     for (const c of candidateItemNames) {
@@ -442,15 +462,21 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
     }
 
     const prodIdStr = String(item?.productId || item?.id || item?._id || '');
-    if (prodIdStr) {
+    const cleanItemName = String(item?.name || item?.productName || item?.itemName || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+
+    if (prodIdStr || cleanItemName) {
       try {
         const catalogSaved = localStorage.getItem('bv_sync_products') || localStorage.getItem('admin_products') || localStorage.getItem('bv_seller_products');
         if (catalogSaved) {
           const catalog = JSON.parse(catalogSaved);
           if (Array.isArray(catalog)) {
-            const matchedProd = catalog.find(p => String(p.id || p._id || p.productId) === prodIdStr);
+            const matchedProd = catalog.find(p => {
+              const pId = String(p.id || p._id || p.productId || '');
+              const pName = String(p.name || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+              return (prodIdStr && pId === prodIdStr) || (cleanItemName && pName && (pName === cleanItemName || cleanItemName.includes(pName) || pName.includes(cleanItemName)));
+            });
             if (matchedProd) {
-              const pSeller = matchedProd.sellerStoreName || matchedProd.storeName || matchedProd.sellerName || matchedProd.legalBusinessName || (typeof matchedProd.seller === 'string' ? matchedProd.seller : matchedProd.seller?.storeName);
+              const pSeller = matchedProd.sellerStoreName || matchedProd.storeName || matchedProd.tradeName || matchedProd.businessName || matchedProd.legalBusinessName || matchedProd.sellerName || matchedProd.vendor || (typeof matchedProd.seller === 'string' ? matchedProd.seller : (matchedProd.seller?.storeName || matchedProd.seller?.name)) || matchedProd.sellerDetails?.storeName;
               if (pSeller && !isPlaceholderName(pSeller)) return pSeller;
             }
           }
@@ -465,9 +491,12 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
         if (sellersSaved) {
           const sellersList = JSON.parse(sellersSaved);
           if (Array.isArray(sellersList)) {
-            const matchedSeller = sellersList.find(s => String(s.id || s._id || s.sellerId || s.phone || '') === sellerIdStr);
+            const matchedSeller = sellersList.find(s => {
+              const sId = String(s.id || s._id || s.sellerId || s.phone || '');
+              return sId === sellerIdStr || (sellerIdStr.length >= 8 && sId.endsWith(sellerIdStr.slice(-10)));
+            });
             if (matchedSeller) {
-              const sName = matchedSeller.storeName || matchedSeller.sellerName || matchedSeller.storeDetails?.storeName || matchedSeller.name || matchedSeller.legalName || matchedSeller.ownerFullName;
+              const sName = matchedSeller.storeName || matchedSeller.tradeName || matchedSeller.businessName || matchedSeller.legalBusinessName || matchedSeller.storeDetails?.storeName || matchedSeller.name || matchedSeller.sellerName || matchedSeller.legalName || matchedSeller.ownerFullName;
               if (sName && !isPlaceholderName(sName)) return sName;
             }
           }
@@ -477,16 +506,20 @@ export default function TaxInvoiceModal({ isOpen, onClose, order }) {
 
     const candidateOrderNames = [
       order?.sellerStoreName,
-      order?.sellerName,
       order?.storeName,
-      order?.sellerId && typeof order.sellerId === 'object' ? (order.sellerId.storeName || order.sellerId.name || order.sellerId.sellerName) : null
+      order?.sellerDetails?.storeName,
+      order?.sellerDetails?.tradeName,
+      order?.sellerDetails?.businessName,
+      order?.sellerDetails?.sellerName,
+      order?.sellerId && typeof order.sellerId === 'object' ? (order.sellerId.storeName || order.sellerId.name || order.sellerId.sellerName) : null,
+      order?.sellerName
     ];
 
     for (const c of candidateOrderNames) {
       if (c && !isPlaceholderName(c)) return c;
     }
 
-    return resolvedSeller.storeName || 'BookVardi Verified Seller';
+    return resolvedSeller.storeName || 'Partner Store';
   };
 
   // Helper to resolve dynamic seller commission rate

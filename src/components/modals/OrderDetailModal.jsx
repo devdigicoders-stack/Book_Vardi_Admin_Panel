@@ -71,14 +71,17 @@ export default function OrderDetailModal({
   onUpdateReturnExchangeStatus,
   readOnly = false 
 }) {
+  const [currentOrder, setCurrentOrder] = useState(order);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [newTracking, setNewTracking] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('Pending');
+  const [selectedStatus, setSelectedStatus] = useState(order?.overallStatus || order?.status || 'Pending');
   const [refundReason, setRefundReason] = useState('');
   const [showRefundPrompt, setShowRefundPrompt] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAwb, setCopiedAwb] = useState(false);
   const [statusUpdatedToast, setStatusUpdatedToast] = useState(false);
+
+  const displayOrder = currentOrder || order;
 
   // Delivery Partner Decision State
   const [deliveryModeInput, setDeliveryModeInput] = useState('third_party'); // 'third_party' or 'self_delivery'
@@ -127,8 +130,9 @@ export default function OrderDetailModal({
 
   useEffect(() => {
     if (order) {
+      setCurrentOrder(order);
       setNewTracking(order.trackingNumber || '');
-      setSelectedStatus(order.status || 'Pending');
+      setSelectedStatus(order.overallStatus || order.status || 'Pending');
 
       const isSelf = order.deliveryMode === 'self_delivery' ||
         order.deliveryType === 'self_delivery' ||
@@ -313,8 +317,51 @@ export default function OrderDetailModal({
 
   const handleApplyStatusUpdate = (targetStatus) => {
     const statusToApply = targetStatus || selectedStatus;
-    const orderIdentifier = order._id || order.id || order.orderId;
+    const activeOrder = displayOrder || order;
+    if (!activeOrder) return;
+    const orderIdentifier = activeOrder._id || activeOrder.id || activeOrder.orderId;
     setSelectedStatus(statusToApply);
+
+    // Fulfillment forward milestone ranks
+    const STATUS_PROGRESSION_RANK = {
+      pending: 0,
+      placed: 0,
+      confirmed: 1,
+      processing: 2,
+      packed: 3,
+      shipped: 4,
+      in_transit: 4,
+      out_for_delivery: 5,
+      delivered: 6,
+      completed: 6
+    };
+    const targetKey = String(statusToApply || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+    const targetRank = STATUS_PROGRESSION_RANK[targetKey];
+
+    // Optimistically apply forward promotion to local items
+    if (Array.isArray(activeOrder.items)) {
+      const updatedItems = activeOrder.items.map(it => {
+        const itKey = String(it.status || 'Pending').toLowerCase().trim().replace(/[\s-]+/g, '_');
+        if (itKey === 'cancelled' || itKey === 'canceled') return it;
+        if (targetRank !== undefined) {
+          const itRank = STATUS_PROGRESSION_RANK[itKey] !== undefined ? STATUS_PROGRESSION_RANK[itKey] : 0;
+          if (itRank < targetRank) {
+            return { ...it, status: statusToApply };
+          }
+          return it;
+        } else if (targetKey === 'cancelled') {
+          return { ...it, status: 'Cancelled' };
+        }
+        return it;
+      });
+      setCurrentOrder(prev => ({
+        ...prev,
+        status: statusToApply,
+        overallStatus: statusToApply,
+        items: updatedItems
+      }));
+    }
+
     if (onUpdateStatus) {
       onUpdateStatus(orderIdentifier, statusToApply);
     }
@@ -367,15 +414,15 @@ export default function OrderDetailModal({
               <div className="flex items-center gap-2">
                 <h3 className="font-display font-bold text-lg text-gray-900">Order #{order.id}</h3>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                  order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
-                  order.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
-                  (order.status === 'Out for Delivery' || order.status === 'out_for_delivery') ? 'bg-purple-100 text-purple-900 border border-purple-200' :
-                  order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
-                  (order.status === 'Packed' || order.status === 'Confirmed') ? 'bg-indigo-100 text-indigo-800' :
-                  order.status === 'Processing' ? 'bg-sky-100 text-sky-800' :
+                  (displayOrder?.overallStatus || displayOrder?.status) === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                  (displayOrder?.overallStatus || displayOrder?.status) === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                  ((displayOrder?.overallStatus || displayOrder?.status) === 'Out for Delivery' || (displayOrder?.overallStatus || displayOrder?.status) === 'out_for_delivery') ? 'bg-purple-100 text-purple-900 border border-purple-200' :
+                  (displayOrder?.overallStatus || displayOrder?.status) === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                  ((displayOrder?.overallStatus || displayOrder?.status) === 'Packed' || (displayOrder?.overallStatus || displayOrder?.status) === 'Confirmed') ? 'bg-indigo-100 text-indigo-800' :
+                  (displayOrder?.overallStatus || displayOrder?.status) === 'Processing' ? 'bg-sky-100 text-sky-800' :
                   'bg-amber-100 text-amber-800'
                 }`}>
-                  {order.status}
+                  {displayOrder?.overallStatus || displayOrder?.status}
                 </span>
               </div>
               <p className="text-xs text-gray-500">Placed on {order.date} • {order.school || 'General Retail'}</p>
@@ -770,7 +817,7 @@ export default function OrderDetailModal({
           {/* Quick Actions Bar / View-Only Status */}
           {readOnly ? (
             <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/70 flex items-center justify-between gap-3 text-xs">
-              <span className="font-bold text-amber-900">Current Order Status: <span className="font-black text-amber-950">{order.status}</span></span>
+              <span className="font-bold text-amber-900">Current Order Status: <span className="font-black text-amber-950">{displayOrder?.overallStatus || displayOrder?.status}</span></span>
               <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">View-Only</span>
             </div>
           ) : (
@@ -818,7 +865,7 @@ export default function OrderDetailModal({
               </div>
 
               <div className="flex items-center gap-2">
-                {order.status !== 'Cancelled' && (
+                {displayOrder?.status !== 'Cancelled' && displayOrder?.overallStatus !== 'Cancelled' && (
                   <button
                     onClick={handleCancel}
                     className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
@@ -877,10 +924,10 @@ export default function OrderDetailModal({
           {/* Order Items Table */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2.5">
-              Ordered Items ({order.items?.length || 0})
+              Ordered Items ({displayOrder?.items?.length || 0})
             </h4>
             <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
-              {order.items?.map((item, idx) => (
+              {displayOrder?.items?.map((item, idx) => (
                 <div key={idx} className="p-3 flex items-center justify-between gap-3 bg-white">
                   <div className="flex items-center gap-3">
                     <img 
@@ -912,7 +959,7 @@ export default function OrderDetailModal({
                       </div>
                       <div className="text-[10px] text-teal-900 font-medium flex items-center gap-1 mt-0.5">
                         <Store size={10} className="text-teal-700 shrink-0" />
-                        <span>Sold by: <strong className="font-bold text-teal-950">{item.storeName || item.sellerName || item.sellerDetails?.storeName || (typeof item.sellerId === 'object' ? item.sellerId.storeName : '') || order.sellerDetails?.storeName || 'Partner Merchant'}</strong></span>
+                        <span>Sold by: <strong className="font-bold text-teal-950">{item.storeName || item.sellerName || item.sellerDetails?.storeName || (typeof item.sellerId === 'object' ? item.sellerId.storeName : '') || displayOrder?.sellerDetails?.storeName || 'Partner Merchant'}</strong></span>
                         {(item.sellerPhone || item.sellerDetails?.phone) && (
                           <span className="text-gray-500">({item.sellerPhone || item.sellerDetails?.phone})</span>
                         )}
@@ -931,16 +978,33 @@ export default function OrderDetailModal({
                         item.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
                         'bg-amber-100 text-amber-800'
                       }`}>
-                        {item.status || order.status || 'Pending'}
+                        {item.status || displayOrder?.status || 'Pending'}
                       </span>
                       {!readOnly && (
                         <select
-                          value={item.status || order.status || 'Pending'}
+                          value={item.status || displayOrder?.status || 'Pending'}
                           onChange={(e) => {
                             const newSt = e.target.value;
+                            const activeOrder = displayOrder || order;
+                            const ordId = activeOrder._id || activeOrder.id || activeOrder.orderId;
+                            const itemIdVal = item._id || item.id || (item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId) || idx;
+
+                            // Optimistically update local modal state
+                            setCurrentOrder(prev => {
+                              if (!prev || !Array.isArray(prev.items)) return prev;
+                              const updatedItems = prev.items.map((it, i) => i === idx ? { ...it, status: newSt } : it);
+                              return { ...prev, items: updatedItems };
+                            });
+
                             if (onUpdateStatus) {
-                              onUpdateStatus(order.id || order._id, newSt, { itemId: item._id || item.id || idx });
+                              onUpdateStatus(ordId, newSt, {
+                                itemId: itemIdVal,
+                                itemIndex: idx,
+                                productId: item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId
+                              });
                             }
+                            setStatusUpdatedToast(true);
+                            setTimeout(() => setStatusUpdatedToast(false), 2000);
                           }}
                           className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 bg-white hover:border-teal-600 focus:outline-none cursor-pointer"
                           title="Update status for this specific item"

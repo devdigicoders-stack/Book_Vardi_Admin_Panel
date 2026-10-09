@@ -1246,17 +1246,86 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Delete Kit', `Deleted kit bundle #${id}`);
   };
 
+  // Fulfillment milestone ranks for forward progression
+  const STATUS_PROGRESSION_RANK = {
+    pending: 0,
+    placed: 0,
+    confirmed: 1,
+    processing: 2,
+    packed: 3,
+    shipped: 4,
+    in_transit: 4,
+    out_for_delivery: 5,
+    delivered: 6,
+    completed: 6
+  };
+
   // ==================== ORDER ACTIONS ====================
   const updateOrderStatus = async (orderId, newStatus, extraDetails = {}) => {
     const targetId = orderId;
+    const isItemLevelUpdate = extraDetails.itemId !== undefined || extraDetails.itemIndex !== undefined;
+
     setOrders(prev => {
-      const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, status: newStatus, overallStatus: newStatus, ...extraDetails } : o);
+      const updated = prev.map(o => {
+        if (o.id === targetId || o._id === targetId || o.orderId === targetId) {
+          if (isItemLevelUpdate && Array.isArray(o.items)) {
+            const updatedItems = o.items.map((it, idx) => {
+              const isMatch = String(it._id) === String(extraDetails.itemId) ||
+                              String(it.id) === String(extraDetails.itemId) ||
+                              (it.productId && String(it.productId._id || it.productId) === String(extraDetails.itemId)) ||
+                              (extraDetails.itemIndex !== undefined && idx === Number(extraDetails.itemIndex)) ||
+                              String(idx) === String(extraDetails.itemId);
+              return isMatch ? { ...it, status: newStatus } : it;
+            });
+            return {
+              ...o,
+              items: updatedItems,
+              ...extraDetails
+            };
+          }
+
+          // Universal order status update with Forward Promotion Rule:
+          const targetKey = String(newStatus || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+          const targetRank = STATUS_PROGRESSION_RANK[targetKey];
+
+          if (targetRank !== undefined && Array.isArray(o.items)) {
+            const updatedItems = o.items.map(it => {
+              const itKey = String(it.status || 'Pending').toLowerCase().trim().replace(/[\s-]+/g, '_');
+              if (itKey === 'cancelled' || itKey === 'canceled') return it; // Preserve cancellations
+              const itRank = STATUS_PROGRESSION_RANK[itKey] !== undefined ? STATUS_PROGRESSION_RANK[itKey] : 0;
+              if (itRank < targetRank) {
+                return { ...it, status: newStatus }; // Promote item behind
+              }
+              return it; // Keep items already at or ahead
+            });
+            return {
+              ...o,
+              status: newStatus,
+              overallStatus: newStatus,
+              items: updatedItems,
+              ...extraDetails
+            };
+          }
+
+          return { ...o, status: newStatus, overallStatus: newStatus, ...extraDetails };
+        }
+        return o;
+      });
       try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
 
+    let savedOrderResult = null;
     try {
-      await updateOrderStatusApi(targetId, newStatus, extraDetails);
+      const res = await updateOrderStatusApi(targetId, newStatus, extraDetails);
+      if (res?.order) {
+        savedOrderResult = res.order;
+        setOrders(prev => {
+          const synced = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, ...res.order } : o);
+          try { localStorage.setItem('admin_orders', JSON.stringify(synced)); } catch (e) {}
+          return synced;
+        });
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId: targetId, status: newStatus, ...extraDetails } }));
         localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
@@ -1265,6 +1334,7 @@ export const AdminDataProvider = ({ children }) => {
       console.error('Failed to update order status on server:', err);
     }
     logAudit('Order Status Updated', `Order ${targetId} marked as ${newStatus}`);
+    return savedOrderResult;
   };
 
   const cancelOrder = async (orderId, reason = 'Administrative cancellation') => {
@@ -1702,10 +1772,12 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   const updatePlatformSettings = async (newSettingsData) => {
-    const minVal = newSettingsData.minOrderFreeShipping !== undefined ? Number(newSettingsData.minOrderFreeShipping) : (newSettingsData.freeShippingThreshold !== undefined ? Number(newSettingsData.freeShippingThreshold) : (settings.minOrderFreeShipping || 99));
+    const minVal = newSettingsData.minOrderFreeShipping !== undefined ? Number(newSettingsData.minOrderFreeShipping) : (newSettingsData.freeShippingThreshold !== undefined ? Number(newSettingsData.freeShippingThreshold) : (settings.minOrderFreeShipping || 999));
+    const feeVal = (newSettingsData.shippingFee !== undefined && newSettingsData.shippingFee !== null) ? Number(newSettingsData.shippingFee) : (settings.shippingFee !== undefined ? Number(settings.shippingFee) : 49);
     const updated = {
       ...settings,
       ...newSettingsData,
+      shippingFee: feeVal,
       minOrderFreeShipping: minVal,
       freeShippingThreshold: minVal
     };
@@ -1713,6 +1785,7 @@ export const AdminDataProvider = ({ children }) => {
     try {
       localStorage.setItem('admin_settings', JSON.stringify(updated));
       localStorage.setItem('bv_free_shipping_threshold', JSON.stringify(minVal));
+      localStorage.setItem('bv_shipping_fee', JSON.stringify(feeVal));
     } catch (e) {}
     window.dispatchEvent(new CustomEvent('bv_settings_updated', { detail: updated }));
     try {
