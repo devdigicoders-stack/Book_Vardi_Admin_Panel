@@ -23,7 +23,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import TaxInvoiceModal from './TaxInvoiceModal';
-import { resendRiderWhatsAppApi } from '../../utils/api';
+import { resendRiderWhatsAppApi, SERVER_URL } from '../../utils/api';
 import { generateRiderWhatsAppMessage, buildRiderWhatsAppUrl } from '../../utils/whatsappRiderHelper';
 
 // Helper to generate dynamic tracking ID based on courier name
@@ -887,6 +887,19 @@ export default function OrderDetailModal({
                 >
                   <FileText size={13} /> Tax Invoice & Settlement
                 </button>
+                {(order.paymentStatus?.toLowerCase() === 'refunded' ||
+                  order.status?.toLowerCase().includes('refund') ||
+                  order.returnRequest?.status?.toLowerCase().includes('refund') ||
+                  order.status === 'product_received') && (
+                  <a
+                    href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
+                  >
+                    <FileText size={13} /> GST Credit Note
+                  </a>
+                )}
               </div>
             </div>
           )}
@@ -1067,13 +1080,27 @@ export default function OrderDetailModal({
                     { key: 'bihar', aliases: ['bihar', 'patna', 'br'] },
                     { key: 'telangana', aliases: ['telangana', 'hyderabad', 'tg', 'ts'] },
                     { key: 'andhrapradesh', aliases: ['andhra pradesh', 'andhrapradesh', 'visakhapatnam', 'ap'] },
+                    { key: 'uttarpradesh', aliases: ['uttar pradesh', 'uttarpradesh', 'u.p.', 'u.p', 'up', 'noida', 'lucknow', 'kanpur', 'ghaziabad', 'agra', 'varanasi', 'prayagraj', 'gorakhpur', 'meerut', 'bareilly', 'aligarh', 'moradabad', 'saharanpur'] },
+                    { key: 'delhi', aliases: ['delhi', 'new delhi', 'nct of delhi', 'nct', 'dl', 'newdelhi'] },
+                    { key: 'maharashtra', aliases: ['maharashtra', 'mumbai', 'pune', 'nagpur', 'thane', 'mh', 'navi mumbai'] },
+                    { key: 'karnataka', aliases: ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'ka'] },
+                    { key: 'tamilnadu', aliases: ['tamil nadu', 'tamilnadu', 'chennai', 'coimbatore', 'tn'] },
+                    { key: 'haryana', aliases: ['haryana', 'gurugram', 'gurgaon', 'faridabad', 'hr'] },
+                    { key: 'rajasthan', aliases: ['rajasthan', 'jaipur', 'jodhpur', 'udaipur', 'rj'] },
+                    { key: 'westbengal', aliases: ['west bengal', 'westbengal', 'kolkata', 'wb'] },
+                    { key: 'gujarat', aliases: ['gujarat', 'ahmedabad', 'surat', 'vadodara', 'gj'] },
+                    { key: 'punjab', aliases: ['punjab', 'ludhiana', 'amritsar', 'pb'] },
+                    { key: 'madhyapradesh', aliases: ['madhya pradesh', 'madhyapradesh', 'bhopal', 'indore', 'mp'] },
+                    { key: 'bihar', aliases: ['bihar', 'patna', 'br'] },
+                    { key: 'telangana', aliases: ['telangana', 'hyderabad', 'tg', 'ts'] },
+                    { key: 'andhrapradesh', aliases: ['andhra pradesh', 'andhrapradesh', 'visakhapatnam', 'ap'] },
                     { key: 'kerala', aliases: ['kerala', 'kochi', 'thiruvananthapuram', 'kl'] },
                     { key: 'uttarakhand', aliases: ['uttarakhand', 'dehradun', 'uk'] }
                   ];
 
                   for (const st of states) {
                     for (const alias of st.aliases) {
-                      if (new RegExp(`\\b${alias}\\b`, 'i').test(str)) {
+                      if (new RegExp(`\\b${alias}\\b`, 'i').test(str) || str.includes(alias)) {
                         return st.key;
                       }
                     }
@@ -1091,12 +1118,18 @@ export default function OrderDetailModal({
                 };
 
                 const firstSellerObj = order.items?.[0]?.sellerId;
-                const sellerStateKey = getDynamicState(firstSellerObj, `${order.sellerState || ''} ${order.sellerCity || ''} ${order.sellerAddress || ''}`);
-                const customerStateKey = getDynamicState(order.shippingAddress, typeof order.shippingAddress === 'string' ? order.shippingAddress : '');
+                const sellerStateKey = getDynamicState(firstSellerObj, `${order.sellerState || ''} ${order.sellerCity || ''} ${order.sellerAddress || ''}`) || 'uttarpradesh';
+                const customerStateKey = getDynamicState(order.shippingAddress, typeof order.shippingAddress === 'string' ? order.shippingAddress : `${order.shippingAddress?.street || ''} ${order.shippingAddress?.city || ''}`) || 'uttarpradesh';
 
                 const isSameState = !sellerStateKey || !customerStateKey || sellerStateKey === customerStateKey;
-                const sellerStateStr = (typeof firstSellerObj === 'object' ? firstSellerObj.state || firstSellerObj.city : '') || order.sellerState || sellerStateKey || 'Seller Location';
-                const customerStateStr = (typeof order.shippingAddress === 'object' ? order.shippingAddress?.state || order.shippingAddress?.city : '') || customerStateKey || 'Customer Location';
+                const sellerStateStr = (typeof firstSellerObj === 'object' ? firstSellerObj.state || firstSellerObj.city : '') || order.sellerState || (sellerStateKey === 'uttarpradesh' ? 'Uttar Pradesh' : sellerStateKey) || 'Uttar Pradesh';
+                const customerStateStr = (typeof order.shippingAddress === 'object' ? order.shippingAddress?.state || order.shippingAddress?.city : '') || (customerStateKey === 'uttarpradesh' ? 'Uttar Pradesh' : customerStateKey) || 'Uttar Pradesh';
+
+                // Aggregate shipping tax into total tax calculation for full order grand total breakdown
+                const shipTaxable = shipVal > 0 ? (shipVal / 1.18) : 0;
+                const shipTax = shipVal > 0 ? (shipVal - shipTaxable) : 0;
+                const combinedTaxable = totalTaxable + shipTaxable;
+                const combinedTax = totalTax + shipTax;
 
                 return (
                   <div className="p-3.5 bg-gray-50 border-t border-gray-200 space-y-2 text-xs">
@@ -1106,18 +1139,18 @@ export default function OrderDetailModal({
                     </div>
                     <div className="flex justify-between text-gray-500 text-[11px]">
                       <span>Base Taxable Value (Excl. GST):</span>
-                      <span className="font-mono">₹{totalTaxable.toFixed(2)}</span>
+                      <span className="font-mono">₹{combinedTaxable.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-emerald-800 text-[11px] bg-emerald-50 p-2 rounded-lg border border-emerald-100">
                       <div>
                         <span className="font-bold block">GST Tax Breakdown ({isSameState ? 'Intra-State Same State' : 'Inter-State Different State'}):</span>
                         {isSameState ? (
-                          <span className="text-[10px]">CGST (50%): ₹{(totalTax / 2).toFixed(2)} • SGST (50%): ₹{(totalTax / 2).toFixed(2)}</span>
+                          <span className="text-[10px]">CGST (50%): ₹{(combinedTax / 2).toFixed(2)} • SGST (50%): ₹{(combinedTax / 2).toFixed(2)}</span>
                         ) : (
-                          <span className="text-[10px]">IGST (Integrated 100%): ₹{totalTax.toFixed(2)} • Supply ({sellerStateStr} ➔ {customerStateStr})</span>
+                          <span className="text-[10px]">IGST (Integrated 100%): ₹{combinedTax.toFixed(2)} • Supply ({sellerStateStr} ➔ {customerStateStr})</span>
                         )}
                       </div>
-                      <span className="font-mono font-bold self-center">₹{totalTax.toFixed(2)}</span>
+                      <span className="font-mono font-bold self-center">₹{combinedTax.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-gray-700">
                       <span>Delivery Charges:</span>

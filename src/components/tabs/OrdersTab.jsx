@@ -580,6 +580,7 @@ export default function OrdersTab() {
                 <tr>
                   <th className="px-4 py-3">Order ID</th>
                   <th className="px-4 py-3">Customer & School</th>
+                  <th className="px-4 py-3">Seller / Store</th>
                   <th className="px-4 py-3">Items</th>
                   <th className="px-4 py-3">Total Amount</th>
                   <th className="px-4 py-3">Status</th>
@@ -588,7 +589,10 @@ export default function OrdersTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-medium">
-                {filteredRetailOrders.map((order) => (
+                {filteredRetailOrders.map((order) => {
+                  const displaySellerName = order.sellerStoreName || order.storeName || order.sellerDetails?.storeName || order.sellerName || (order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName) || 'National School Dress';
+
+                  return (
                   <tr key={order.id} className="hover:bg-gray-50/70 transition-colors">
                     
                     {/* Order ID & Date */}
@@ -601,6 +605,15 @@ export default function OrdersTab() {
                     <td className="px-4 py-3">
                       <div className="font-bold text-gray-900">{order.customerName}</div>
                       <div className="text-[10px] text-teal-700 font-medium truncate max-w-xs">{order.school}</div>
+                    </td>
+
+                    {/* Seller / Store (Quick Identification) */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-teal-950 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 truncate max-w-[150px] inline-block shadow-2xs" title={displaySellerName}>
+                          🏪 {displaySellerName}
+                        </span>
+                      </div>
                     </td>
 
                     {/* Items */}
@@ -713,7 +726,8 @@ export default function OrdersTab() {
                     </td>
 
                   </tr>
-                ))}
+                  );
+                })}
 
                 {filteredRetailOrders.length === 0 && (
                   <tr>
