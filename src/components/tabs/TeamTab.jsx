@@ -23,6 +23,7 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import { PERMISSION_MODULES } from '../modals/SubadminModal';
 import SubadminFormPage from './SubadminFormPage';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function TeamTab() {
   const { 
@@ -91,20 +92,20 @@ export default function TeamTab() {
 
   const handleDelete = async (sub) => {
     const id = sub._id || sub.id;
-    if (sub.role === 'admin' || sub.role === 'super_admin') {
-      if (!window.confirm(`Warning: "${sub.name}" is a Super Admin. Are you sure you want to remove this account?`)) {
-        return;
-      }
-    } else {
-      if (!window.confirm(`Are you sure you want to revoke access and delete account for "${sub.name}"?`)) {
-        return;
-      }
-    }
+    const isSuper = sub.role === 'admin' || sub.role === 'super_admin';
+    const isConfirmed = await confirmDelete({
+      title: isSuper ? 'Remove Super Admin?' : 'Revoke Staff Access?',
+      html: isSuper 
+        ? `<span style="color: #e11d48; font-weight: bold;">Warning:</span> "${sub.name}" is a Super Admin. Are you sure you want to remove this account?`
+        : `Are you sure you want to revoke access and delete account for <b>"${sub.name}"</b>?`,
+      confirmButtonText: 'Yes, Delete Account'
+    });
+
+    if (!isConfirmed) return;
 
     try {
       await deleteSubadmin(id);
-      setActionSuccess(`Staff account "${sub.name}" deleted`);
-      setTimeout(() => setActionSuccess(''), 3000);
+      showSuccessAlert('Account Deleted', `Staff account "${sub.name}" has been deleted.`);
     } catch (err) {
       setActionError(err.message || 'Failed to delete staff member');
     }

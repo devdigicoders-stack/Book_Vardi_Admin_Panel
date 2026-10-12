@@ -22,6 +22,7 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import { fetchAdminCategoriesApi, createAdminCategoryApi, updateAdminCategoryApi, deleteAdminCategoryApi } from '../../utils/api';
 import { CATEGORY_STRUCTURE } from '../../constants/categories';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function CategoriesTab() {
   const { isEditor } = useAdminData();
@@ -176,13 +177,19 @@ export default function CategoriesTab() {
   // Delete Category
   const handleDeleteCategory = async (cat) => {
     if (!canEdit) return;
-    if (!window.confirm(`Are you sure you want to delete category "${cat.name}" and all its subcategories?`)) return;
+    const isConfirmed = await confirmDelete({
+      title: 'Delete Category?',
+      html: `Are you sure you want to delete category <b>"${cat.name}"</b> and all its subcategories?<br/><span style="font-size: 12px; color: #6b7280; margin-top: 6px; display: inline-block;">This cannot be undone.</span>`,
+      confirmButtonText: 'Yes, Delete Category'
+    });
+    if (!isConfirmed) return;
 
     if (cat._id) {
       await deleteAdminCategoryApi(cat._id);
     }
     setCategories(prev => prev.filter(c => (c._id ? c._id !== cat._id : c.name !== cat.name)));
     loadCategories();
+    showSuccessAlert('Category Deleted', `"${cat.name}" has been removed.`);
   };
 
   // Quick Add Subcategory Inline

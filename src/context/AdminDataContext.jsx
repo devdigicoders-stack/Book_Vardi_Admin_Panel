@@ -1812,7 +1812,13 @@ export const AdminDataProvider = ({ children }) => {
       const updated = [school, ...prev];
       return updated;
     });
-    createSchoolApi(school).catch(() => {});
+    createSchoolApi(school).then(res => {
+      if (res?.success && res?.school) {
+        setSchools(prev => prev.map(s => s === school ? { ...s, ...res.school } : s));
+      }
+    }).catch(err => {
+      console.error('Failed to create school in API:', err);
+    });
     logAudit('School Onboarded', `Added partner institution: ${school.name}`);
   };
 

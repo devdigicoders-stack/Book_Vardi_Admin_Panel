@@ -22,63 +22,75 @@ import {
   Layers,
   Boxes
 } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdminData } from '../context/AdminDataContext';
+import { TAB_ROUTE_MAP, getTabFromPath } from '../constants/routes';
 
 export const ADMIN_TABS = [
   {
     title: 'Platform Overview',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={17} /> },
-      { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={17} /> },
-      { id: 'notifications', label: 'Notifications', icon: <Bell size={17} />, badgeKey: 'notifications' }
+      { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={17} /> },
+      { id: 'analytics', path: '/analytics', label: 'Analytics', icon: <BarChart3 size={17} /> },
+      { id: 'notifications', path: '/notifications', label: 'Notifications', icon: <Bell size={17} />, badgeKey: 'notifications' }
     ]
   },
   {
     title: 'Catalog & Stock',
     items: [
-      { id: 'products', label: 'Products', icon: <Package size={17} />, badgeKey: 'pendingProducts' },
-      { id: 'kits', label: 'Kits & Bundles', icon: <Boxes size={17} />, badgeKey: 'pendingKits' },
-      { id: 'categories', label: 'Categories', icon: <Layers size={17} /> },
-      { id: 'inventory', label: 'Inventory', icon: <Box size={17} />, badgeKey: 'lowStock' }
+      { id: 'products', path: '/products', label: 'Products', icon: <Package size={17} />, badgeKey: 'pendingProducts' },
+      { id: 'kits', path: '/kits', label: 'Kits & Bundles', icon: <Boxes size={17} />, badgeKey: 'pendingKits' },
+      { id: 'categories', path: '/categories', label: 'Categories', icon: <Layers size={17} /> },
+      { id: 'inventory', path: '/inventory', label: 'Inventory', icon: <Box size={17} />, badgeKey: 'lowStock' }
     ]
   },
   {
     title: 'Commerce & Orders',
     items: [
-      { id: 'orders', label: 'Orders', icon: <ShoppingBag size={17} />, badgeKey: 'pendingOrders' },
-      { id: 'bulkOrders', label: 'Bulk RFQs & B2B', icon: <Building2 size={17} />, badgeKey: 'pendingBulkOrders' },
-      { id: 'logistics', label: 'Logistics', icon: <Truck size={17} /> },
-      { id: 'finance', label: 'Finance', icon: <CreditCard size={17} /> }
+      { id: 'orders', path: '/orders', label: 'Orders', icon: <ShoppingBag size={17} />, badgeKey: 'pendingOrders' },
+      { id: 'bulkOrders', path: '/bulk-orders', label: 'Bulk RFQs & B2B', icon: <Building2 size={17} />, badgeKey: 'pendingBulkOrders' },
+      { id: 'logistics', path: '/logistics', label: 'Logistics', icon: <Truck size={17} /> },
+      { id: 'finance', path: '/finance', label: 'Finance', icon: <CreditCard size={17} /> }
     ]
   },
   {
     title: 'Stakeholders',
     items: [
-      { id: 'sellers', label: 'Sellers', icon: <Store size={17} />, badgeKey: 'pendingSellers' },
-      { id: 'schools', label: 'Schools', icon: <GraduationCap size={17} /> },
-      { id: 'users', label: 'Users', icon: <Users size={17} /> }
+      { id: 'sellers', path: '/sellers', label: 'Sellers', icon: <Store size={17} />, badgeKey: 'pendingSellers' },
+      { id: 'schools', path: '/schools', label: 'Schools', icon: <GraduationCap size={17} /> },
+      { id: 'users', path: '/users', label: 'Users', icon: <Users size={17} /> }
     ]
   },
   {
     title: 'Growth & Moderation',
     items: [
-      { id: 'marketing', label: 'Marketing', icon: <Tag size={17} /> },
-      { id: 'reviews', label: 'Reviews & Reports', icon: <MessageSquareWarning size={17} />, badgeKey: 'flaggedReviews' }
+      { id: 'marketing', path: '/marketing', label: 'Marketing', icon: <Tag size={17} /> },
+      { id: 'reviews', path: '/reviews', label: 'Reviews & Reports', icon: <MessageSquareWarning size={17} />, badgeKey: 'flaggedReviews' }
     ]
   },
   {
     title: 'System & Security',
     items: [
-      { id: 'team', label: 'Team & Roles', icon: <Shield size={17} /> },
-      { id: 'settings', label: 'Settings', icon: <Settings size={17} /> },
-      { id: 'profile', label: 'Admin Profile', icon: <UserCheck size={17} /> },
-      { id: 'support', label: 'Support', icon: <HelpCircle size={17} />, badgeKey: 'openTickets' }
+      { id: 'team', path: '/team', label: 'Team & Roles', icon: <Shield size={17} /> },
+      { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={17} /> },
+      { id: 'profile', path: '/profile', label: 'Admin Profile', icon: <UserCheck size={17} /> },
+      { id: 'support', path: '/support', label: 'Support', icon: <HelpCircle size={17} />, badgeKey: 'openTickets' }
     ]
   }
 ];
 
 export default function Sidebar({ activeTab, onSelectTab }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { products, kits = [], orders, sellers, reviews, supportTickets, notifications, adminUser, canViewTab } = useAdminData();
+
+  const currentTab = activeTab || getTabFromPath(location.pathname);
+
+  const handleTabClick = (tab) => {
+    if (onSelectTab) onSelectTab(tab.id);
+    const targetPath = tab.path || TAB_ROUTE_MAP[tab.id] || `/${tab.id}`;
+    navigate(targetPath);
+  };
 
   const getBadge = (key) => {
     switch (key) {
@@ -125,7 +137,10 @@ export default function Sidebar({ activeTab, onSelectTab }) {
         
         {/* Status indicator badge / Admin Profile Card */}
         <div 
-          onClick={() => onSelectTab('profile')}
+          onClick={() => {
+            if (onSelectTab) onSelectTab('profile');
+            navigate('/profile');
+          }}
           className="p-3 bg-teal-50/70 hover:bg-teal-100/70 transition-colors rounded-xl border border-teal-100 cursor-pointer"
           title="Click to view/edit admin profile"
         >
@@ -152,13 +167,13 @@ export default function Sidebar({ activeTab, onSelectTab }) {
                 {section.title}
               </div>
               {visibleItems.map((tab) => {
-                const isCurrent = activeTab === tab.id;
+                const isCurrent = currentTab === tab.id;
                 const badge = tab.badgeKey ? getBadge(tab.badgeKey) : null;
 
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => onSelectTab(tab.id)}
+                    onClick={() => handleTabClick(tab)}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-teal-800 text-white font-bold shadow-sm ring-1 ring-teal-700/50'

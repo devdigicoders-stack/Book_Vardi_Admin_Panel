@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import MobileNav from '../components/MobileNav';
 import { useAdminData } from '../context/AdminDataContext';
 import AdminLogin from '../components/Auth/AdminLogin';
 import { Eye, ShieldAlert } from 'lucide-react';
+import { TAB_ROUTE_MAP, getTabFromPath, getPathFromTab } from '../constants/routes';
 
 // Admin Tabs
 import DashboardTab from '../components/tabs/DashboardTab';
@@ -52,22 +54,30 @@ const TAB_ORDER = [
 ];
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, canViewTab, isEditor } = useAdminData();
-  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const activeTab = getTabFromPath(location.pathname);
+
+  const handleSelectTab = (tabId) => {
+    const targetPath = getPathFromTab(tabId);
+    navigate(targetPath);
+  };
 
   // If the active tab is not allowed for the logged in user, redirect to first permitted tab
   useEffect(() => {
     if (isAuthenticated && canViewTab && !canViewTab(activeTab)) {
       const firstAllowed = TAB_ORDER.find(tabId => canViewTab(tabId)) || 'profile';
-      setActiveTab(firstAllowed);
+      navigate(getPathFromTab(firstAllowed), { replace: true });
     }
-  }, [activeTab, isAuthenticated, canViewTab]);
+  }, [activeTab, isAuthenticated, canViewTab, navigate]);
 
   useEffect(() => {
-    const handleOpenKits = () => setActiveTab('kits');
+    const handleOpenKits = () => navigate('/kits');
     window.addEventListener('adminOpenKitsTab', handleOpenKits);
     return () => window.removeEventListener('adminOpenKitsTab', handleOpenKits);
-  }, []);
+  }, [navigate]);
 
   if (!isAuthenticated) {
     return <AdminLogin />;
@@ -86,7 +96,7 @@ export default function AdminDashboard() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardTab onNavigateTab={setActiveTab} />;
+        return <DashboardTab onNavigateTab={handleSelectTab} />;
       case 'products':
         return <ProductsTab />;
       case 'kits':
@@ -126,7 +136,7 @@ export default function AdminDashboard() {
       case 'profile':
         return <ProfileTab />;
       default:
-        return <DashboardTab onNavigateTab={setActiveTab} />;
+        return <DashboardTab onNavigateTab={handleSelectTab} />;
     }
   };
 
@@ -135,19 +145,19 @@ export default function AdminDashboard() {
       
       {/* Top Navbar */}
       <Header 
-        onOpenNotifications={() => setActiveTab('notifications')} 
-        onOpenProfile={() => setActiveTab('profile')} 
+        onOpenNotifications={() => navigate('/notifications')} 
+        onOpenProfile={() => navigate('/profile')} 
       />
 
       {/* Mobile Horizontal Navigation */}
-      <MobileNav activeTab={activeTab} onSelectTab={setActiveTab} />
+      <MobileNav activeTab={activeTab} onSelectTab={handleSelectTab} />
 
       {/* Main Workspace Layout */}
       <div className="container mx-auto px-4 mt-6">
         <div className="flex flex-col lg:flex-row items-start gap-6">
           
           {/* Sticky Desktop Left Navigation */}
-          <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
+          <Sidebar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
           {/* Main Workspace Content Area */}
           <main className="flex-1 w-full min-w-0">

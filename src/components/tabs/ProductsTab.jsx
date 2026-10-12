@@ -27,6 +27,7 @@ import { CATEGORIES } from '../../constants/categories';
 import ProductFormPage from './ProductFormPage';
 import ProductReviewModal from '../modals/ProductReviewModal';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function ProductsTab() {
   const {
@@ -89,10 +90,17 @@ export default function ProductsTab() {
     setEditingProduct(null);
   };
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (!canEdit) return;
-    if (window.confirm(`Are you sure you want to remove "${name}" from the marketplace catalog?`)) {
+    const isConfirmed = await confirmDelete({
+      title: 'Remove Product?',
+      html: `Are you sure you want to remove <b>"${name || 'this item'}"</b> from the marketplace catalog?<br/><span style="font-size: 12px; color: #6b7280; margin-top: 6px; display: inline-block;">This item will be removed from marketplace listings and inventory.</span>`,
+      confirmButtonText: 'Yes, Remove Product'
+    });
+
+    if (isConfirmed) {
       deleteProduct(id);
+      showSuccessAlert('Product Removed', `"${name || 'Product'}" has been successfully removed.`);
     }
   };
 

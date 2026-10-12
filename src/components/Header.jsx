@@ -1,13 +1,25 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, 
   Bell
 } from 'lucide-react';
 import { useAdminData } from '../context/AdminDataContext';
 
-export default function Header({ onOpenNotifications }) {
+export default function Header({ onOpenNotifications, onOpenProfile }) {
+  const navigate = useNavigate();
   const { adminUser, notifications } = useAdminData();
   const unreadCount = notifications.filter(n => n.unread).length;
+
+  const handleNotificationsClick = () => {
+    if (onOpenNotifications) onOpenNotifications();
+    navigate('/notifications');
+  };
+
+  const handleProfileClick = () => {
+    if (onOpenProfile) onOpenProfile();
+    navigate('/profile');
+  };
 
   return (
     <header className="bg-brand-teal text-white border-b border-white/10 sticky top-0 z-40 shadow-sm">
@@ -15,7 +27,11 @@ export default function Header({ onOpenNotifications }) {
         
         {/* Left: Brand & Admin Identity */}
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-          <div className="flex items-center gap-2.5">
+          <div 
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-2.5 cursor-pointer"
+            title="Go to Dashboard"
+          >
             <img
               src="/logo.png"
               alt="Book Vardi"
@@ -35,8 +51,8 @@ export default function Header({ onOpenNotifications }) {
 
           {/* Mobile Notification Button */}
           <button 
-            onClick={onOpenNotifications}
-            className="md:hidden relative p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
+            onClick={handleNotificationsClick}
+            className="md:hidden relative p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
           >
             <Bell size={18} />
             {unreadCount > 0 && (
@@ -50,7 +66,7 @@ export default function Header({ onOpenNotifications }) {
         {/* Right: Admin-only controls */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
           <button 
-            onClick={onOpenNotifications}
+            onClick={handleNotificationsClick}
             className="hidden md:flex relative p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer border border-white/10"
             title="View all notifications"
             aria-label="View all notifications"
@@ -63,10 +79,14 @@ export default function Header({ onOpenNotifications }) {
             )}
           </button>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-yellow text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs">
+          <button
+            onClick={handleProfileClick}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-yellow text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs hover:bg-amber-300 transition-colors cursor-pointer"
+            title="View Admin Profile"
+          >
             <ShieldCheck size={14} />
             <span>{adminUser?.role || 'Super Admin'}</span>
-          </div>
+          </button>
         </div>
 
       </div>
