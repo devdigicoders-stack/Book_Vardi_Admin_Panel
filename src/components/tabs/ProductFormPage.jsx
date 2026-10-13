@@ -107,21 +107,21 @@ export const CATEGORY_FORM_SCHEMA = {
     showSizeChart: true,
     showGender: true,
     allowedScales: ['size', 'meter', 'count', 'unit'],
-    allowedPresets: ['standard', 'uniform_waist', 'meters', 'packaging']
+    allowedPresets: ['standard', 'uniform_waist_kids', 'uniform_waist', 'uniform_waist_plus', 'uniform_waist_all', 'meters', 'packaging']
   },
   rain_winter: {
     showMeterCalculation: true,
     showSizeChart: true,
     showGender: true,
     allowedScales: ['size', 'meter', 'count', 'unit'],
-    allowedPresets: ['standard', 'uniform_waist', 'meters']
+    allowedPresets: ['standard', 'uniform_waist_kids', 'uniform_waist', 'uniform_waist_plus', 'uniform_waist_all', 'meters']
   },
   sports: {
     showMeterCalculation: true,
     showSizeChart: true,
     showGender: true,
     allowedScales: ['size', 'meter', 'count', 'unit'],
-    allowedPresets: ['standard', 'uniform_waist', 'meters']
+    allowedPresets: ['standard', 'uniform_waist_kids', 'uniform_waist', 'uniform_waist_plus', 'uniform_waist_all', 'meters']
   }
 };
 
@@ -153,17 +153,17 @@ const SIZE_PRESETS = [
   },
   {
     id: 'shoes_senior',
-    label: 'Senior / Adult Shoe Sizes (Size 1 - 13)',
+    label: 'Senior / Adult Shoe Sizes (Size 1 - 10)',
     scale: 'size',
-    sizes: ['Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13']
+    sizes: ['Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10']
   },
   {
     id: 'shoes_all',
-    label: 'All Shoe Sizes (Kids 6-13 & Adult 1-13)',
+    label: 'All Shoe Sizes (Kids 6-13 & Adult 1-10)',
     scale: 'size',
     sizes: [
       '6 Kids', '7 Kids', '8 Kids', '9 Kids', '10 Kids', '11 Kids', '12 Kids', '13 Kids',
-      'Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10', 'Size 11', 'Size 12', 'Size 13'
+      'Size 1', 'Size 2', 'Size 3', 'Size 4', 'Size 5', 'Size 6', 'Size 7', 'Size 8', 'Size 9', 'Size 10'
     ]
   },
   {
@@ -173,10 +173,28 @@ const SIZE_PRESETS = [
     sizes: ['S', 'M', 'L', 'XL', 'XXL']
   },
   {
+    id: 'uniform_waist_kids',
+    label: 'Kids Uniform Waist (18 - 24)',
+    scale: 'size',
+    sizes: ['18', '20', '22', '24']
+  },
+  {
     id: 'uniform_waist',
-    label: 'Uniform Waist / Chest (26 - 38)',
+    label: 'Regular Uniform Waist (26 - 38)',
     scale: 'size',
     sizes: ['26', '28', '30', '32', '34', '36', '38']
+  },
+  {
+    id: 'uniform_waist_plus',
+    label: 'Senior / Plus Waist (40 - 48)',
+    scale: 'size',
+    sizes: ['40', '42', '44', '46', '48']
+  },
+  {
+    id: 'uniform_waist_all',
+    label: 'All Uniform Waist (18 - 48)',
+    scale: 'size',
+    sizes: ['18', '20', '22', '24', '26', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48']
   },
   {
     id: 'book_sets',
@@ -1207,6 +1225,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1.5">Primary Category *</label>
                         <select
+                          required
                           value={formData.category}
                           onChange={e => {
                             const selectedCat = e.target.value;
@@ -1220,32 +1239,42 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                           }}
                           className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
                         >
-                          {availableCategories.length === 0 ? (
-                            <option value="">No categories found</option>
-                          ) : (
-                            availableCategories.map((c) => (
-                              <option key={c.id || c.name} value={c.name}>
-                                {c.name}
-                              </option>
-                            ))
-                          )}
+                          <option value="">-- Select Category --</option>
+                          {availableCategories.map((c) => (
+                            <option key={c.id || c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
                       {/* Sub-Category Dropdown */}
                       <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Sub-Category *</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                          Sub-Category * {!formData.category && <span className="text-[10px] text-amber-600 font-semibold">(Select Category first)</span>}
+                        </label>
                         <select
+                          required
+                          disabled={!formData.category}
                           value={formData.subCategory}
                           onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
-                          className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
+                          className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-hidden font-bold transition-all ${
+                            !formData.category
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-75'
+                              : 'bg-white border-gray-300 text-gray-800 cursor-pointer focus:ring-2 focus:ring-brand-yellow'
+                          }`}
                         >
-                          {activeSubCategories.length === 0 ? (
+                          {!formData.category ? (
+                            <option value="">-- Please Select Category First --</option>
+                          ) : activeSubCategories.length === 0 ? (
                             <option value="">No sub-categories</option>
                           ) : (
-                            activeSubCategories.map(sub => (
-                              <option key={sub} value={sub}>{sub}</option>
-                            ))
+                            <>
+                              <option value="">-- Select Sub-Category --</option>
+                              {activeSubCategories.map(sub => (
+                                <option key={sub} value={sub}>{sub}</option>
+                              ))}
+                            </>
                           )}
                         </select>
                       </div>
@@ -1834,7 +1863,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                                   )}
                                 </div>
                                 <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                  {v.stock || 0} pcs in stock
+                                  {v.stock || 0} {v.unit || 'pcs'} in stock
                                 </div>
                               </div>
                             </div>
@@ -1847,7 +1876,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                         <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider text-[11px]">
                           <tr>
                             <th className="px-4 py-3">Variant / Scale Value</th>
-                            <th className="px-4 py-3">Scale Type</th>
+                            <th className="px-4 py-3">Scale Type / Unit</th>
                             <th className="px-4 py-3">Selling Price (₹)</th>
                             <th className="px-4 py-3">MRP (₹)</th>
                             <th className="px-4 py-3">Stock</th>
@@ -1863,23 +1892,26 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                               </td>
                               <td className="px-4 py-3">
                                 <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-bold text-[10px] uppercase border border-teal-200">
-                                  {v.measureScale || 'size'}
+                                  {v.unit ? `${v.unit} (${v.measureScale || 'scale'})` : (v.measureScale || 'size')}
                                 </span>
                               </td>
                               <td className="px-4 py-3 font-extrabold text-gray-900">₹{v.price}</td>
                               <td className="px-4 py-3 text-gray-500 line-through">₹{v.mrp}</td>
                               <td className="px-4 py-3">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={v.stock !== undefined ? v.stock : (v.stockQuantity !== undefined ? v.stockQuantity : '')}
-                                  onChange={(e) => {
-                                    const newStock = e.target.value;
-                                    setSizeVariants(prev => prev.map((item, i) => i === idx ? { ...item, stock: newStock, stockQuantity: newStock } : item));
-                                  }}
-                                  className="w-20 px-2 py-1 bg-teal-50 border border-teal-300 rounded-lg text-xs font-bold text-teal-900 text-center outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
-                                  title="Edit variant stock quantity"
-                                />
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={v.stock !== undefined ? v.stock : (v.stockQuantity !== undefined ? v.stockQuantity : '')}
+                                    onChange={(e) => {
+                                      const newStock = e.target.value;
+                                      setSizeVariants(prev => prev.map((item, i) => i === idx ? { ...item, stock: newStock, stockQuantity: newStock } : item));
+                                    }}
+                                    className="w-20 px-2 py-1 bg-teal-50 border border-teal-300 rounded-lg text-xs font-bold text-teal-900 text-center outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                                    title="Edit variant stock quantity"
+                                  />
+                                  <span className="text-[10px] font-bold text-gray-400">{v.unit || 'pcs'}</span>
+                                </div>
                               </td>
                               <td className="px-4 py-3">
                                 {v.image ? (

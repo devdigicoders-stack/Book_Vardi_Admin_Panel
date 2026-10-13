@@ -28,6 +28,7 @@ import ProductFormPage from './ProductFormPage';
 import ProductReviewModal from '../modals/ProductReviewModal';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
 import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
+import { getProductStockUnit } from '../../utils/stockUnitHelper';
 
 export default function ProductsTab() {
   const {
@@ -440,7 +441,7 @@ export default function ProductsTab() {
                           (p.stockQuantity ?? 50) <= 15 ? 'bg-amber-100 text-amber-800' :
                           'bg-emerald-100 text-emerald-800'
                         }`}>
-                          {p.stockQuantity ?? 50} units
+                          {p.stockQuantity ?? 50} {getProductStockUnit(p, null, { short: true })}
                         </span>
                       </td>
 
@@ -620,7 +621,7 @@ export default function ProductsTab() {
                                         </td>
                                         <td className="px-3 py-2 font-extrabold text-gray-900">₹{v.price}</td>
                                         <td className="px-3 py-2 text-gray-400 line-through">₹{v.mrp || v.originalPrice || Math.round(v.price * 1.25)}</td>
-                                        <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} units</td>
+                                        <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} {getProductStockUnit(p, v, { short: true })}</td>
                                         <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{v.sku || '-'}</td>
                                       </tr>
                                     );
@@ -712,7 +713,7 @@ export default function ProductsTab() {
                   </div>
                   <div className="rounded-xl bg-gray-50 p-3 border border-gray-100">
                     <div className="text-gray-500 uppercase tracking-wider">Stock</div>
-                    <div className="font-bold text-gray-900 mt-1">{previewProduct.stockQuantity ?? 50} units</div>
+                    <div className="font-bold text-gray-900 mt-1">{previewProduct.stockQuantity ?? 50} {getProductStockUnit(previewProduct)}</div>
                   </div>
                 </div>
 
@@ -806,7 +807,7 @@ export default function ProductsTab() {
                             </td>
                             <td className="px-3 py-2 font-extrabold text-gray-900">₹{v.price}</td>
                             <td className="px-3 py-2 text-gray-400 line-through">₹{v.mrp || v.originalPrice || Math.round(v.price * 1.25)}</td>
-                            <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} units</td>
+                            <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} {getProductStockUnit(previewProduct, v, { short: true })}</td>
                             <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{v.sku || '-'}</td>
                           </tr>
                         );

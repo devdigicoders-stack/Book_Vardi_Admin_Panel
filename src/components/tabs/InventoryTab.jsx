@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { exportToExcel } from '../../utils/excelExporter';
+import { getProductStockUnit } from '../../utils/stockUnitHelper';
 
 export default function InventoryTab() {
   const { products, inventory = [], inventoryMetrics = {}, quickRestock, updateInventoryStock, logAudit } = useAdminData();
@@ -164,7 +165,7 @@ export default function InventoryTab() {
                 <th className="px-4 py-3">Product SKU & Title</th>
                 <th className="px-4 py-3">Vendor / Merchant</th>
                 <th className="px-4 py-3">Unit Price</th>
-                <th className="px-4 py-3">Stock Units</th>
+                <th className="px-4 py-3">Stock</th>
                 <th className="px-4 py-3">Stock Health</th>
                 <th className="px-4 py-3 text-right">Quick Restock</th>
               </tr>
@@ -233,7 +234,7 @@ export default function InventoryTab() {
                           className="cursor-pointer group flex items-center gap-1.5"
                           title="Click to adjust stock"
                         >
-                          <span className="font-extrabold text-sm text-gray-900 group-hover:text-teal-700">{stock}</span>
+                          <span className="font-extrabold text-sm text-gray-900 group-hover:text-teal-700">{stock} {getProductStockUnit(item, null, { short: true })}</span>
                           <span className="text-[11px] text-gray-400">in warehouse</span>
                           <span className="text-[10px] text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity font-semibold underline">Edit</span>
                         </div>

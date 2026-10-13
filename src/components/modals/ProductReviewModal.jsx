@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
+import { getProductStockUnit, formatStockQty } from '../../utils/stockUnitHelper';
 
 const REJECTION_PRESETS = [
   'Poor or blurry image quality / non-neutral background',
@@ -54,7 +55,6 @@ export default function ProductReviewModal({
 
   const getProductGallery = (prod) => {
     if (!prod) return [];
-    const list = [];
     const extractUrl = (val) => {
       if (!val) return '';
       if (typeof val === 'string') return val.trim();
@@ -62,30 +62,44 @@ export default function ProductReviewModal({
       return '';
     };
 
-    const primary = extractUrl(prod.image || prod.coverImage || prod.imageUrl || prod.photo || prod.primaryImage);
-    if (primary) list.push(primary);
+    const isPlaceholder = (url) => {
+      if (!url) return true;
+      const lower = String(url).toLowerCase();
+      return lower.includes('unsplash.com') || lower.includes('placeholder') || lower.includes('via.placeholder');
+    };
 
+    const seenUrls = new Set();
+    const result = [];
+
+    const addImage = (raw) => {
+      const u = extractUrl(raw);
+      if (!u) return;
+      const resolved = resolveImageUrl(u);
+      if (!resolved || isPlaceholder(resolved)) return;
+      if (!seenUrls.has(resolved)) {
+        seenUrls.add(resolved);
+        result.push(resolved);
+      }
+    };
+
+    // 1. Primary Cover Photo
+    addImage(prod.image || prod.coverImage || prod.imageUrl || prod.photo || prod.primaryImage);
+
+    // 2. Base Product Gallery Photos
     if (Array.isArray(prod.images)) {
-      prod.images.forEach(img => {
-        const u = extractUrl(img);
-        if (u && !list.includes(u)) list.push(u);
-      });
+      prod.images.forEach(img => addImage(img));
     }
 
+    // 3. Size Variants Images
     const variants = parseSizeVariants(prod);
     variants.forEach(v => {
-      const vImg = extractUrl(v.image);
-      if (vImg && !list.includes(vImg)) list.push(vImg);
+      if (v.image) addImage(v.image);
       if (Array.isArray(v.images)) {
-        v.images.forEach(img => {
-          const u = extractUrl(img);
-          if (u && !list.includes(u)) list.push(u);
-        });
+        v.images.forEach(img => addImage(img));
       }
     });
 
-    const resolved = list.map(img => resolveImageUrl(img)).filter(Boolean);
-    return [...new Set(resolved)];
+    return result;
   };
 
   const imagesList = getProductGallery(product);
@@ -292,7 +306,7 @@ export default function ProductReviewModal({
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
                     <span className="text-[10px] text-gray-400 block font-bold uppercase">Stock Level</span>
                     <span className="font-extrabold text-gray-800 text-xs">
-                      {product.stockQuantity ?? product.stock ?? 50} units
+                      {product.stockQuantity ?? product.stock ?? 50} {getProductStockUnit(product)}
                     </span>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
@@ -380,7 +394,11 @@ export default function ProductReviewModal({
                       {/* Variant Preview Image Layout in Row */}
                       <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 border-b border-gray-100 scrollbar-thin">
                         {variantsList.map((v, vIdx) => {
-                          const vRawImg = v.image || (Array.isArray(v.images) && v.images[0]) || product.image || (Array.isArray(product.images) && product.images[0]);
+                          const isPlaceholder = (img) => !img || (typeof img === 'string' && img.includes('unsplash.com'));
+                          const baseProductImg = product.image || (Array.isArray(product.images) && product.images[0]);
+                          const vRawImg = (v.image && !isPlaceholder(v.image))
+                            ? v.image
+                            : (baseProductImg || v.image);
                           const vImgUrl = vRawImg ? resolveImageUrl(vRawImg) : '';
                           const vVal = v.measureValue || v.size || `Var #${vIdx + 1}`;
 
@@ -415,7 +433,7 @@ export default function ProductReviewModal({
                                   )}
                                 </div>
                                 <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                  {v.stockQuantity ?? v.stock ?? 0} in stock
+                                  {v.stockQuantity ?? v.stock ?? 0} {getProductStockUnit(product, v)} in stock
                                 </div>
                               </div>
                             </div>
@@ -432,16 +450,25 @@ export default function ProductReviewModal({
                               <th className="px-3 py-2">Scale</th>
                               <th className="px-3 py-2">Price (₹)</th>
                               <th className="px-3 py-2">MRP (₹)</th>
-                              <th className="px-3 py-2">Stock</th>
+                              <th className="px-3 py-2">Stock ({getProductStockUnit(product)})</th>
                               <th className="px-3 py-2">SKU</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {variantsList.map((v, vIdx) => {
-                              const rawVImages = Array.isArray(v.images) && v.images.length > 0
-                                ? v.images
-                                : (v.image ? [v.image] : []);
-                              const vImages = rawVImages.map(img => resolveImageUrl(img)).filter(Boolean);
+                              const isPlaceholder = (img) => !img || (typeof img === 'string' && img.includes('unsplash.com'));
+                              const fallbackImg = product.image || (Array.isArray(product.images) && product.images[0]);
+                              const fallbackUrl = fallbackImg ? resolveImageUrl(fallbackImg) : '';
+                              const rawVImages = Array.isArray(v.images) && v.images.length > 0 && !v.images.every(isPlaceholder)
+                                ? v.images.filter(img => !isPlaceholder(img))
+                                : (v.image && !isPlaceholder(v.image) ? [v.image] : (fallbackImg ? [fallbackImg] : []));
+                              let vImages = Array.from(new Set(rawVImages.map(img => resolveImageUrl(img)).filter(Boolean)));
+                              if (vImages.length > 1 && fallbackUrl) {
+                                const customOnly = vImages.filter(u => u !== fallbackUrl);
+                                if (customOnly.length > 0) {
+                                  vImages = customOnly;
+                                }
+                              }
 
                             return (
                               <tr key={vIdx} className="hover:bg-gray-50">
@@ -486,7 +513,7 @@ export default function ProductReviewModal({
                                 </td>
                                 <td className="px-3 py-2 font-extrabold text-gray-900">₹{v.price}</td>
                                 <td className="px-3 py-2 text-gray-400 line-through">₹{v.mrp || Math.round(v.price * 1.25)}</td>
-                                <td className="px-3 py-2 font-bold text-emerald-700">{v.stock}</td>
+                                <td className="px-3 py-2 font-bold text-emerald-700">{v.stockQuantity ?? v.stock ?? 0} {getProductStockUnit(product, v, { short: true })}</td>
                                 <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{v.sku || '-'}</td>
                               </tr>
                             );
