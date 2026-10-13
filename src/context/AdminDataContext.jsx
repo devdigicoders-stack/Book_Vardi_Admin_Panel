@@ -175,30 +175,9 @@ export const AdminDataProvider = ({ children }) => {
     }
   }, []);
 
-  // 2. Orders
-  const [orders, setOrders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('admin_orders');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        return parsed.map(o => {
-          const rawAddr = (typeof o.shippingAddress === 'object' && o.shippingAddress !== null)
-            ? o.shippingAddress
-            : (typeof o.rawShippingAddress === 'object' && o.rawShippingAddress !== null ? o.rawShippingAddress : {});
-          const realName = rawAddr.name || rawAddr.fullName || (o.customerName !== 'Student' ? o.customerName : '') || (o.customer?.name !== 'Student' ? o.customer?.name : '') || 'Verified Consumer';
-          return {
-            ...o,
-            customerName: realName,
-            customer: { ...(o.customer || {}), name: realName }
-          };
-        });
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  });
+  // 2. Orders (Purely dynamic from MongoDB database via API)
+  const [orders, setOrders] = useState([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
 
   // 3. School Bulk Orders
   const [schoolOrders, setSchoolOrders] = useState(() => {
@@ -378,7 +357,6 @@ export const AdminDataProvider = ({ children }) => {
   useEffect(() => { safeSetLocalStorage('admin_products', products); }, [products]);
   useEffect(() => { safeSetLocalStorage('admin_kits', kits); }, [kits]);
   useEffect(() => { safeSetLocalStorage('admin_inventory', inventory); }, [inventory]);
-  useEffect(() => { safeSetLocalStorage('admin_orders', orders); }, [orders]);
   useEffect(() => { safeSetLocalStorage('admin_school_orders', schoolOrders); }, [schoolOrders]);
   useEffect(() => { safeSetLocalStorage('admin_sellers', sellers); }, [sellers]);
   useEffect(() => { safeSetLocalStorage('admin_schools', schools); }, [schools]);
@@ -776,9 +754,9 @@ export const AdminDataProvider = ({ children }) => {
 
       // Sync retail orders
       fetchAdminOrdersApi().then(data => {
+        if (!data) return;
         const list = Array.isArray(data) ? data : (data?.orders || []);
-        if (list.length > 0) {
-          setOrders(list.map(o => {
+        const normalized = list.map(o => {
             const rawAddr = o.shippingAddress && typeof o.shippingAddress === 'object' ? o.shippingAddress : {};
             const custName = o.customerName ||
               (typeof o.customer === 'object' && o.customer !== null ? o.customer.name : '') ||
@@ -836,8 +814,9 @@ export const AdminDataProvider = ({ children }) => {
 
             return {
               ...o,
-              id: o.orderId || o._id || o.id,
-              _id: o._id || o.id,
+              id: String(o.orderId || o.id || o._id || ''),
+              _id: String(o._id || o.id || o.orderId || ''),
+              orderId: String(o.orderId || o.id || o._id || ''),
               date: o.createdAt
                 ? new Date(o.createdAt).toLocaleDateString('en-GB', {
                     day: '2-digit',
@@ -862,11 +841,15 @@ export const AdminDataProvider = ({ children }) => {
               shippingAddress: formattedAddress,
               rawShippingAddress: rawAddr
             };
-          }));
-        }
-      }).catch(() => {}).finally(() => {
-        isOrderSyncingRef.current = false;
-      });
+          });
+
+          setOrders(normalized);
+        }).catch((err) => {
+          console.error('Failed to sync retail orders from DB:', err);
+        }).finally(() => {
+          setIsLoadingOrders(false);
+          isOrderSyncingRef.current = false;
+        });
 
       // Also sync school bulk orders
       fetchAdminSchoolBulkOrdersApi().then(data => {
@@ -901,6 +884,7 @@ export const AdminDataProvider = ({ children }) => {
           try {
             const data = JSON.parse(event.data);
             if (data && (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'SCHOOL_ORDER_UPDATED')) {
+              isOrderSyncingRef.current = false;
               handleOrderSync(false);
             }
           } catch (e) {}
@@ -1446,7 +1430,6 @@ export const AdminDataProvider = ({ children }) => {
         }
         return o;
       });
-      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
 
@@ -1457,7 +1440,6 @@ export const AdminDataProvider = ({ children }) => {
         savedOrderResult = res.order;
         setOrders(prev => {
           const synced = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, ...res.order } : o);
-          try { localStorage.setItem('admin_orders', JSON.stringify(synced)); } catch (e) {}
           return synced;
         });
       }
@@ -1470,13 +1452,12 @@ export const AdminDataProvider = ({ children }) => {
     }
     logAudit('Order Status Updated', `Order ${targetId} marked as ${newStatus}`);
     return savedOrderResult;
-  };
+    };
 
   const cancelOrder = async (orderId, reason = 'Administrative cancellation') => {
     const targetId = orderId;
     setOrders(prev => {
       const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, status: 'Cancelled', overallStatus: 'Cancelled', cancellationReason: reason } : o);
-      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
 
@@ -1496,7 +1477,6 @@ export const AdminDataProvider = ({ children }) => {
     const targetId = orderId;
     setOrders(prev => {
       const updated = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, paymentStatus: 'Refunded', status: 'Cancelled', overallStatus: 'Cancelled' } : o);
-      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
 
@@ -1520,7 +1500,6 @@ export const AdminDataProvider = ({ children }) => {
         trackingNumber,
         ...extraDetails
       } : o);
-      try { localStorage.setItem('admin_orders', JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
 
@@ -1550,6 +1529,12 @@ export const AdminDataProvider = ({ children }) => {
           setOrders(refreshedOrders.orders);
         }
         logAudit('Return/Exchange Updated', `Order ${orderId} return/exchange updated to ${payload.status}`);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bv_order_sync_timestamp', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('bv_orders_updated', { detail: { orderId, ...payload } }));
+          } catch (e) {}
+        }
       }
       return res;
     } catch (err) {
@@ -2503,6 +2488,7 @@ export const AdminDataProvider = ({ children }) => {
     updateInventoryStock,
     quickRestock,
     orders,
+    isLoadingOrders,
     updateOrderStatus,
     updateReturnExchangeStatus,
     cancelOrder,
