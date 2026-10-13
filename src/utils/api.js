@@ -306,11 +306,12 @@ export const updateProductApprovalApi = async (id, status, remark = '') => {
 
 export const createAdminProductApi = async (productData) => {
   try {
-    const res = await fetch(`${SERVER_URL}/products`, {
+    const res = await fetch(`${API_BASE_URL}/products`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(productData)
     });
+    checkAuthResponse(res);
     return await res.json();
   } catch (error) {
     return { success: false, message: error.message };

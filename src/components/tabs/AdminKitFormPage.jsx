@@ -32,16 +32,27 @@ import {
   Ban
 } from 'lucide-react';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
-import { resolveImageUrl } from '../../utils/api';
+import { resolveImageUrl, fetchAdminCategoriesApi } from '../../utils/api';
+import { useAdminData } from '../../context/AdminDataContext';
 import SchoolSelectorWithCustom from './SchoolSelectorWithCustom';
 
-const KIT_BADGES = [
+export const DEFAULT_KIT_BADGES = [
   'School Approved',
   'Best Seller',
   'New Arrival',
   'Verified KV',
   'Trending',
-  'Special Offer'
+  'Special Offer',
+  'Value Bundle',
+  'Official Kit'
+];
+
+export const DEFAULT_KIT_SUB_CATEGORIES = [
+  'School Uniform Kit',
+  'Books & Stationery Kit',
+  'Complete Academic Kit',
+  'Sports & Activity Kit',
+  'Winter Uniform Kit'
 ];
 
 export const GRADE_OPTIONS = [
@@ -130,6 +141,54 @@ export default function AdminKitFormPage({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const adminCtx = useAdminData ? useAdminData() : {};
+  const contextCategories = adminCtx?.categories || [];
+  const [dbCategories, setDbCategories] = useState(contextCategories);
+  const [isCustomSubCategory, setIsCustomSubCategory] = useState(false);
+  const [isCustomBadge, setIsCustomBadge] = useState(false);
+
+  useEffect(() => {
+    if (contextCategories && contextCategories.length > 0) {
+      setDbCategories(contextCategories);
+    } else {
+      fetchAdminCategoriesApi().then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setDbCategories(data);
+        }
+      }).catch(() => {});
+    }
+  }, [contextCategories]);
+
+  // Dynamic available subcategories for kits (from DB categories + defaults)
+  const availableKitSubCategories = useMemo(() => {
+    const list = [...DEFAULT_KIT_SUB_CATEGORIES];
+    if (Array.isArray(dbCategories)) {
+      dbCategories.forEach(cat => {
+        if (Array.isArray(cat.subCategories)) {
+          cat.subCategories.forEach(s => {
+            const subName = typeof s === 'string' ? s : s?.name;
+            if (subName && !list.includes(subName)) {
+              list.push(subName);
+            }
+          });
+        }
+      });
+    }
+    if (formData.subCategory && !list.includes(formData.subCategory)) {
+      list.push(formData.subCategory);
+    }
+    return list;
+  }, [dbCategories, formData.subCategory]);
+
+  // Dynamic available badges for kits (from defaults + custom badge)
+  const availableKitBadges = useMemo(() => {
+    const list = [...DEFAULT_KIT_BADGES];
+    if (formData.badgeTag && formData.badgeTag.trim() && !list.includes(formData.badgeTag.trim())) {
+      list.push(formData.badgeTag.trim());
+    }
+    return list;
+  }, [formData.badgeTag]);
 
   // Initialize or populate form on edit
   useEffect(() => {
@@ -869,21 +928,46 @@ export default function AdminKitFormPage({
 
               {/* Category, Gender, Badge Tag */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Dynamic Kit Sub-Category */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Kit Sub-Category
-                  </label>
-                  <select
-                    value={formData.subCategory}
-                    onChange={(e) => setFormData(prev => ({ ...prev, subCategory: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="School Uniform Kit">School Uniform Kit</option>
-                    <option value="Books & Stationery Kit">Books & Stationery Kit</option>
-                    <option value="Complete Academic Kit">Complete Academic Kit</option>
-                    <option value="Sports & Activity Kit">Sports & Activity Kit</option>
-                    <option value="Winter Uniform Kit">Winter Uniform Kit</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-700">
+                      Kit Sub-Category
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomSubCategory(!isCustomSubCategory)}
+                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
+                      {isCustomSubCategory ? '↺ Select from list' : '+ Custom Sub-Category'}
+                    </button>
+                  </div>
+                  {isCustomSubCategory ? (
+                    <input
+                      type="text"
+                      value={formData.subCategory}
+                      onChange={(e) => setFormData(prev => ({ ...prev, subCategory: e.target.value }))}
+                      placeholder="e.g. Science Lab Kit, Boarding Pack..."
+                      className="w-full px-3.5 py-2.5 text-sm bg-indigo-50/20 border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                  ) : (
+                    <select
+                      value={formData.subCategory}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomSubCategory(true);
+                          return;
+                        }
+                        setFormData(prev => ({ ...prev, subCategory: e.target.value }));
+                      }}
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+                    >
+                      {availableKitSubCategories.map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Sub-Category...</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -893,7 +977,7 @@ export default function AdminKitFormPage({
                   <select
                     value={formData.gender}
                     onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
                   >
                     <option value="Unisex">Unisex / All Students</option>
                     <option value="Boys">Boys</option>
@@ -901,19 +985,47 @@ export default function AdminKitFormPage({
                   </select>
                 </div>
 
+                {/* Dynamic Kit Badge / Tag */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Badge / Tag
-                  </label>
-                  <select
-                    value={formData.badgeTag}
-                    onChange={(e) => setFormData(prev => ({ ...prev, badgeTag: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    {KIT_BADGES.map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-700">
+                      Badge / Tag
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomBadge(!isCustomBadge)}
+                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
+                      {isCustomBadge ? '↺ Select from list' : '+ Custom Badge'}
+                    </button>
+                  </div>
+                  {isCustomBadge ? (
+                    <input
+                      type="text"
+                      value={formData.badgeTag}
+                      onChange={(e) => setFormData(prev => ({ ...prev, badgeTag: e.target.value }))}
+                      placeholder="e.g. KV EXCLUSIVE, 40% OFF..."
+                      className="w-full px-3.5 py-2.5 text-sm bg-indigo-50/20 border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                  ) : (
+                    <select
+                      value={formData.badgeTag}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomBadge(true);
+                          return;
+                        }
+                        setFormData(prev => ({ ...prev, badgeTag: e.target.value }));
+                      }}
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="">(None / No Badge)</option>
+                      {availableKitBadges.map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Badge / Tag...</option>
+                    </select>
+                  )}
                 </div>
               </div>
 

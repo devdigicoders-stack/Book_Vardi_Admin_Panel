@@ -21,11 +21,10 @@ import {
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { fetchAdminCategoriesApi, createAdminCategoryApi, updateAdminCategoryApi, deleteAdminCategoryApi } from '../../utils/api';
-import { CATEGORY_STRUCTURE } from '../../constants/categories';
 import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function CategoriesTab() {
-  const { isEditor } = useAdminData();
+  const { isEditor, refreshCategories } = useAdminData();
   const canEdit = isEditor ? isEditor('products') : true;
 
   const [categories, setCategories] = useState([]);
@@ -37,9 +36,7 @@ export default function CategoriesTab() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [categoryForm, setCategoryForm] = useState({
     name: '',
-    description: '',
     gstPercentage: '5',
-    icon: 'Package',
     subCategories: []
   });
   const [newSubInput, setNewSubInput] = useState('');
@@ -48,20 +45,21 @@ export default function CategoriesTab() {
   // Quick Inline Subcategory Input State (catId -> text)
   const [inlineSubInput, setInlineSubInput] = useState({});
 
-  // Fetch Categories from Backend API (or default structure)
+  // Fetch Categories from Backend API (strictly from database)
   const loadCategories = async () => {
     setLoading(true);
     try {
       const data = await fetchAdminCategoriesApi();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setCategories(data);
       } else {
-        setCategories(CATEGORY_STRUCTURE);
+        setCategories([]);
       }
     } catch {
-      setCategories(CATEGORY_STRUCTURE);
+      setCategories([]);
     } finally {
       setLoading(false);
+      if (refreshCategories) refreshCategories();
     }
   };
 
@@ -93,9 +91,7 @@ export default function CategoriesTab() {
     setEditingCategory(null);
     setCategoryForm({
       name: '',
-      description: '',
       gstPercentage: '5',
-      icon: 'Package',
       subCategories: []
     });
     setNewSubInput('');
@@ -111,9 +107,7 @@ export default function CategoriesTab() {
       : [];
     setCategoryForm({
       name: cat.name || '',
-      description: cat.description || '',
       gstPercentage: cat.gstPercentage !== undefined ? String(cat.gstPercentage) : '5',
-      icon: cat.icon || 'Package',
       subCategories: existingSubs
     });
     setNewSubInput('');
@@ -150,9 +144,9 @@ export default function CategoriesTab() {
     setSubmitting(true);
     const payload = {
       name: categoryForm.name.trim(),
-      description: categoryForm.description.trim(),
+      description: editingCategory?.description || '',
       gstPercentage: Number(categoryForm.gstPercentage),
-      icon: categoryForm.icon,
+      icon: editingCategory?.icon || 'Package',
       subCategories: categoryForm.subCategories.map(s => ({ name: s, slug: s.toLowerCase().replace(/[^a-z0-9]+/g, '-') }))
     };
 
@@ -223,6 +217,7 @@ export default function CategoriesTab() {
     }));
 
     setInlineSubInput(prev => ({ ...prev, [catId]: '' }));
+    if (refreshCategories) refreshCategories();
   };
 
   // Quick Remove Subcategory Inline
@@ -246,6 +241,8 @@ export default function CategoriesTab() {
         ? { ...c, subCategories: updatedSubs.map(s => ({ name: s, slug: s.toLowerCase().replace(/[^a-z0-9]+/g, '-') })) }
         : c;
     }));
+
+    if (refreshCategories) refreshCategories();
   };
 
   return (
@@ -325,7 +322,27 @@ export default function CategoriesTab() {
       </div>
 
       {/* Categories Grid List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {filteredCategories.length === 0 ? (
+        <div className="bg-white rounded-3xl p-12 text-center border border-gray-200 shadow-xs space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-brand-yellow/20 text-gray-800 flex items-center justify-center mx-auto">
+            <Layers size={32} />
+          </div>
+          <h3 className="font-display font-bold text-lg text-gray-900">No Categories Found in Database</h3>
+          <p className="text-xs text-gray-500 max-w-md mx-auto">
+            Currently there are 0 categories in MongoDB database. Click "Add New Category" above to create your first category with custom subcategories and GST rates.
+          </p>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="px-5 py-2.5 bg-brand-yellow text-gray-900 rounded-xl font-bold text-xs hover:bg-yellow-400 transition-colors inline-flex items-center gap-2 cursor-pointer shadow-xs"
+            >
+              <Plus size={16} />
+              <span>Create First Category</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredCategories.map((cat, idx) => {
           const catId = cat._id || cat.name;
           const subList = Array.isArray(cat.subCategories)
@@ -438,7 +455,8 @@ export default function CategoriesTab() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* Modal for Creating / Editing Category */}
       {isModalOpen && (
@@ -470,47 +488,19 @@ export default function CategoriesTab() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">GST Percentage (%) *</label>
-                  <select
-                    value={categoryForm.gstPercentage}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, gstPercentage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
-                  >
-                    <option value="0">0% (Tax Free / Books)</option>
-                    <option value="5">5% (Apparel / Uniforms)</option>
-                    <option value="12">12% (Footwear & Stationery)</option>
-                    <option value="18">18% (School Bags & Kits)</option>
-                    <option value="28">28% (Luxury Goods)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Category Icon</label>
-                  <select
-                    value={categoryForm.icon}
-                    onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
-                  >
-                    <option value="Shirt">Shirt / Uniform</option>
-                    <option value="BookOpen">Book / Textbooks</option>
-                    <option value="Edit3">Notebook & Pen</option>
-                    <option value="Footprints">Footwear & Shoes</option>
-                    <option value="ShoppingBag">School Bag & Kit</option>
-                    <option value="Package">Package General</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Description / Summary</label>
-                <textarea
-                  rows="2"
-                  value={categoryForm.description}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                  placeholder="e.g. Uniforms, readymade school wear, unstitched fabric and winter kits"
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-brand-yellow"
-                />
+                <label className="block text-xs font-bold text-gray-700 mb-1">GST Percentage (%) *</label>
+                <select
+                  value={categoryForm.gstPercentage}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, gstPercentage: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                >
+                  <option value="0">0% (Tax Free / Books)</option>
+                  <option value="5">5% (Apparel / Uniforms)</option>
+                  <option value="12">12% (Footwear & Stationery)</option>
+                  <option value="18">18% (School Bags & Kits)</option>
+                  <option value="28">28% (Luxury Goods)</option>
+                </select>
               </div>
 
               {/* Subcategories List Manager inside Modal */}

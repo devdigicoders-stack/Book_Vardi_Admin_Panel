@@ -55,6 +55,7 @@ import {
   createAdminKitApi,
   updateAdminKitApi,
   deleteAdminKitApi,
+  fetchAdminCategoriesApi,
   isTokenValid
 } from '../utils/api';
 
@@ -152,6 +153,26 @@ export const AdminDataProvider = ({ children }) => {
     }
   });
   const [isLoadingKits, setIsLoadingKits] = useState(false);
+
+  // 1.8 Categories
+  const [categories, setCategories] = useState([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+
+  const refreshCategories = useCallback(async () => {
+    setIsLoadingCategories(true);
+    try {
+      const data = await fetchAdminCategoriesApi();
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else {
+        setCategories([]);
+      }
+    } catch {
+      setCategories([]);
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, []);
 
   // 2. Orders
   const [orders, setOrders] = useState(() => {
@@ -728,7 +749,14 @@ export const AdminDataProvider = ({ children }) => {
         setInventory(data);
       }
     }).catch(() => {});
-  }, []);
+
+    refreshCategories();
+  }, [refreshCategories]);
+
+  // Load categories on initial mount unconditionally
+  useEffect(() => {
+    refreshCategories();
+  }, [refreshCategories]);
 
   // Real-time synchronization of orders across Admin, Seller, and Website
   useEffect(() => {
@@ -936,6 +964,7 @@ export const AdminDataProvider = ({ children }) => {
   // ==================== PRODUCT ACTIONS ====================
   const addProduct = async (newProd) => {
     const tempId = Date.now();
+    const cleanSellerId = (newProd.sellerId && newProd.sellerId !== 'self' && newProd.sellerId !== 'null' && newProd.sellerId !== 'undefined' && newProd.sellerId !== '') ? newProd.sellerId : undefined;
     const item = {
       id: tempId,
       _id: String(tempId),
@@ -951,8 +980,8 @@ export const AdminDataProvider = ({ children }) => {
       badge: newProd.badge || 'NEW',
       stockQuantity: Number(newProd.stockQuantity) || 0,
       stock: Number(newProd.stockQuantity) || 0,
-      sellerId: newProd.sellerId || '',
-      sellerName: newProd.sellerName || '',
+      sellerId: cleanSellerId,
+      sellerName: newProd.sellerName || 'Book Vardi Verified Seller',
       paymentMethodAllowed: newProd.paymentMethodAllowed || 'Both',
       approvalStatus: newProd.approvalStatus || 'Approved',
       approvalComment: newProd.approvalComment || '',
@@ -993,11 +1022,17 @@ export const AdminDataProvider = ({ children }) => {
           if (invRes?.metrics) setInventoryMetrics(invRes.metrics);
         }).catch(() => {});
         return normalizedSaved;
+      } else {
+        setProducts(prev => prev.filter(p => p.id !== tempId && p._id !== String(tempId)));
+        setInventory(prev => prev.filter(p => p.id !== tempId && p._id !== String(tempId)));
+        throw new Error(res?.message || 'Database rejected product save.');
       }
     } catch (err) {
-      console.warn('Backend product create fallback to local state:', err);
+      console.error('Backend product create error:', err);
+      setProducts(prev => prev.filter(p => p.id !== tempId && p._id !== String(tempId)));
+      setInventory(prev => prev.filter(p => p.id !== tempId && p._id !== String(tempId)));
+      throw err;
     }
-    return item;
   };
 
   const updateProduct = async (id, updates) => {
@@ -1006,11 +1041,16 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Update Product', `Updated product ID #${id}`);
 
     try {
+      const cleanSellerId = (updates.sellerId && updates.sellerId !== 'self' && updates.sellerId !== 'null' && updates.sellerId !== 'undefined' && updates.sellerId !== '') ? updates.sellerId : undefined;
       const payload = {
         ...updates,
+        sellerId: cleanSellerId,
         stock: updates.stockQuantity !== undefined ? updates.stockQuantity : updates.stock,
         mrp: updates.originalPrice !== undefined ? updates.originalPrice : updates.mrp
       };
+      if (cleanSellerId === undefined) {
+        delete payload.sellerId;
+      }
       const res = await updateAdminProductApi(id, payload);
       if (res?.success && res?.product) {
         const saved = res.product;
@@ -2416,7 +2456,10 @@ export const AdminDataProvider = ({ children }) => {
     markNotificationRead,
     clearAllNotifications,
     auditLog,
-    logAudit
+    logAudit,
+    categories,
+    isLoadingCategories,
+    refreshCategories
   };
 
   return (

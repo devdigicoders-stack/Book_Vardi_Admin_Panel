@@ -27,7 +27,7 @@ export const CATEGORY_STRUCTURE = [
 ];
 
 export function normalizeCategory(catName) {
-  if (!catName) return 'School Uniform';
+  if (!catName) return '';
   const lower = String(catName).toLowerCase().trim();
   if (lower === 'school uniform' || lower === 'uniforms' || lower === 'uniform') return 'School Uniform';
   if (lower === 'books' || lower === 'ncert' || lower === 'practice_books' || lower === 'drawing_books') return 'Books';
@@ -38,7 +38,7 @@ export function normalizeCategory(catName) {
   const matched = CATEGORY_STRUCTURE.find(c => c.name.toLowerCase() === lower || c.id.toLowerCase() === lower);
   if (matched) return matched.name;
 
-  return 'School Uniform';
+  return catName;
 }
 
 export function getSubCategories(catName) {
