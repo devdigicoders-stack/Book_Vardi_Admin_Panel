@@ -338,12 +338,26 @@ export default function BulkOrdersTab() {
 
                   <div>
                     <div className="text-gray-400 font-semibold text-[11px] uppercase">Distribution Mode</div>
-                    <div className="mt-1 flex items-center gap-1.5 font-bold text-gray-800">
-                      {order.assignmentMode === 'direct' && <><UserCheck size={14} className="text-blue-600" /> Direct Seller</>}
-                      {order.assignmentMode === 'selected' && <><Users size={14} className="text-purple-600" /> Selected Sellers ({order.invitedSellerIds?.length || 0})</>}
-                      {order.assignmentMode === 'broadcast' && <><Globe size={14} className="text-teal-600" /> Global Broadcast</>}
+                    <div className="mt-1 flex flex-col gap-1 font-bold text-gray-800">
+                      {order.assignmentMode === 'direct' && (() => {
+                        const sId = typeof order.sellerId === 'object' ? (order.sellerId?._id || order.sellerId?.id) : order.sellerId;
+                        const matchedSeller = verifiedSellers.find(s => String(s.id || s._id) === String(sId));
+                        const sellerDisplay = matchedSeller ? `${matchedSeller.storeName || matchedSeller.name} (${matchedSeller.ownerName || matchedSeller.name})` : (order.acceptedSellerName || (typeof order.sellerId === 'object' ? (order.sellerId?.storeName || order.sellerId?.name) : 'Specific Seller'));
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="flex items-center gap-1 text-blue-700 font-extrabold text-[11px]">
+                              <UserCheck size={13} className="text-blue-600" /> Direct Assigned Seller
+                            </span>
+                            <span className="text-[11px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-bold truncate max-w-[200px]" title={sellerDisplay}>
+                              {sellerDisplay}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {order.assignmentMode === 'selected' && <span className="flex items-center gap-1 text-purple-700 font-bold text-[11px]"><Users size={13} className="text-purple-600" /> Selected Sellers ({order.invitedSellerIds?.length || 0})</span>}
+                      {order.assignmentMode === 'broadcast' && <span className="flex items-center gap-1 text-teal-700 font-bold text-[11px]"><Globe size={13} className="text-teal-600" /> Global Broadcast</span>}
                       {(!order.assignmentMode || order.assignmentMode === 'unassigned') && (
-                        <span className="text-amber-700 font-semibold flex items-center gap-1">
+                        <span className="text-amber-700 font-semibold flex items-center gap-1 text-[11px]">
                           <AlertCircle size={13} /> Unassigned
                         </span>
                       )}
@@ -977,9 +991,11 @@ export default function BulkOrdersTab() {
           onClose={() => setPreviewOrder(null)}
           userRole="admin"
           sellers={sellers}
-          onDistribute={(orderId, payload) => {
-            distributeSchoolBulkOrder(orderId, payload);
-            setPreviewOrder(null);
+          onDistribute={async (orderId, payload) => {
+            const res = await distributeSchoolBulkOrder(orderId, payload);
+            if (res?.order) {
+              setPreviewOrder(prev => (prev ? { ...prev, ...res.order, id: res.order._id || res.order.id || prev.id } : null));
+            }
           }}
           onUpdateLogistics={(orderId, payload) => {
             if (updateSchoolOrderStatusAndTracking) updateSchoolOrderStatusAndTracking(orderId, payload);

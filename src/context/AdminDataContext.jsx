@@ -1970,28 +1970,63 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   const distributeSchoolBulkOrder = async (orderId, { assignmentMode, sellerId, invitedSellerIds }) => {
-    setSchoolOrders(prev => prev.map(o => {
-      if (o.id === orderId || o._id === orderId) {
-        return {
-          ...o,
-          assignmentMode,
-          sellerId: assignmentMode === 'direct' ? sellerId : null,
-          invitedSellerIds: assignmentMode === 'selected' ? invitedSellerIds : [],
-          status: assignmentMode === 'direct' ? 'assigned' : 'published'
-        };
-      }
-      return o;
-    }));
+    const cleanSellerId = sellerId ? (typeof sellerId === 'object' ? (sellerId._id || sellerId.id) : sellerId) : null;
+    const foundSeller = cleanSellerId ? sellers.find(s => String(s._id || s.id) === String(cleanSellerId)) : null;
 
+    setSchoolOrders(prev => {
+      const updatedList = prev.map(o => {
+        if (o.id === orderId || o._id === orderId || o.referenceId === orderId || String(o.id || o._id) === String(orderId)) {
+          return {
+            ...o,
+            assignmentMode,
+            sellerId: assignmentMode === 'direct' ? (foundSeller || cleanSellerId) : null,
+            acceptedSellerName: assignmentMode === 'direct' ? (foundSeller?.storeName || foundSeller?.name || 'Assigned Seller') : '',
+            invitedSellerIds: assignmentMode === 'selected' ? (invitedSellerIds || []) : [],
+            status: assignmentMode === 'direct' ? 'assigned' : (assignmentMode === 'admin_direct' ? 'assigned_to_admin' : 'published')
+          };
+        }
+        return o;
+      });
+
+      try {
+        ['admin_school_orders', 'bv_sync_school_orders', 'bv_customer_bulk_orders'].forEach(key => {
+          localStorage.setItem(key, JSON.stringify(updatedList));
+        });
+      } catch (e) {}
+
+      return updatedList;
+    });
+
+    let result = null;
     try {
-      const res = await distributeSchoolBulkOrderApi(orderId, { assignmentMode, sellerId, invitedSellerIds });
-      if (res?.success && res.order) {
-        setSchoolOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId ? { ...o, ...res.order } : o)));
+      result = await distributeSchoolBulkOrderApi(orderId, { assignmentMode, sellerId: cleanSellerId, invitedSellerIds });
+      if (result?.success && result.order) {
+        setSchoolOrders(prev => {
+          const freshList = prev.map(o => {
+            if (o.id === orderId || o._id === orderId || o.referenceId === orderId || String(o.id || o._id) === String(orderId)) {
+              return { ...o, ...result.order, id: result.order._id || result.order.id || o.id };
+            }
+            return o;
+          });
+          try {
+            ['admin_school_orders', 'bv_sync_school_orders', 'bv_customer_bulk_orders'].forEach(key => {
+              localStorage.setItem(key, JSON.stringify(freshList));
+            });
+          } catch (e) {}
+          return freshList;
+        });
       }
     } catch (e) {
       console.warn('Backend distribution fallback:', e);
     }
+
+    try {
+      window.dispatchEvent(new CustomEvent('bv_school_orders_updated'));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
     logAudit('Bulk Order Distributed', `Distributed bulk order #${orderId} via ${assignmentMode} mode`);
+    return result;
   };
 
   const updateBulkOrderPrepaymentPercentage = async (orderId, prepaymentPercentage) => {
