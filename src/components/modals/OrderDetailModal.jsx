@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ShoppingBag, 
@@ -22,7 +22,7 @@ import {
   Loader2,
   MessageSquare
 } from 'lucide-react';
-import TaxInvoiceModal from './TaxInvoiceModal';
+import TaxInvoiceModal, { parseStateInfo } from './TaxInvoiceModal';
 import { resendRiderWhatsAppApi, SERVER_URL } from '../../utils/api';
 import { generateRiderWhatsAppMessage, buildRiderWhatsAppUrl } from '../../utils/whatsappRiderHelper';
 
@@ -42,7 +42,7 @@ export const hasActiveReturnRequest = (order) => {
   if (req && typeof req === 'object') {
     const type = req.requestType || req.type;
     const status = String(req.status || '').toLowerCase().trim();
-    const invalidStatuses = ['', 'none', 'n/a', 'no_request', 'normal', 'null', 'undefined', 'requesting', 'requested'];
+    const invalidStatuses = ['', 'none', 'n/a', 'no_request', 'normal', 'null', 'undefined'];
     
     if (type && !['none', 'n/a', ''].includes(String(type).toLowerCase())) return true;
     if (status && !invalidStatuses.includes(status)) return true;
@@ -128,8 +128,19 @@ export default function OrderDetailModal({
     }
   };
 
+  const activeOrderIdRef = useRef(null);
+
   useEffect(() => {
-    if (order) {
+    if (!isOpen || !order) {
+      activeOrderIdRef.current = null;
+      return;
+    }
+
+    const orderId = order?._id || order?.id || order?.orderId;
+    const isNewOrderSelection = activeOrderIdRef.current !== orderId;
+
+    if (isNewOrderSelection) {
+      activeOrderIdRef.current = orderId;
       setCurrentOrder(order);
       setNewTracking(order.trackingNumber || '');
       setSelectedStatus(order.overallStatus || order.status || 'Pending');
@@ -154,8 +165,22 @@ export default function OrderDetailModal({
       } else {
         setWhatsappSentRef(null);
       }
+    } else {
+      // Same order background sync from polling:
+      // Update non-input fields without wiping the user's actively typed inputs
+      setCurrentOrder(prev => ({
+        ...(prev || order),
+        ...order,
+        deliveryMode: deliveryModeInput,
+        selfDeliveryDetails: {
+          ...(order.selfDeliveryDetails || {}),
+          deliveryPersonName: driverNameInput || prev?.selfDeliveryDetails?.deliveryPersonName || order.selfDeliveryDetails?.deliveryPersonName,
+          deliveryPersonPhone: driverPhoneInput || prev?.selfDeliveryDetails?.deliveryPersonPhone || order.selfDeliveryDetails?.deliveryPersonPhone,
+          vehicleNumber: vehicleNumberInput || prev?.selfDeliveryDetails?.vehicleNumber || order.selfDeliveryDetails?.vehicleNumber
+        }
+      }));
     }
-  }, [order]);
+  }, [isOpen, order?._id, order?.id, order?.orderId]);
 
   const formattedShippingAddress = React.useMemo(() => {
     if (!order?.shippingAddress) return 'Customer Address';
@@ -238,25 +263,6 @@ export default function OrderDetailModal({
       } : undefined
     };
 
-    // If self-delivery, prepare WhatsApp URL and open tab immediately on click to prevent pop-up blocker
-    let waUrl = '';
-    if (isSelf && driverPhoneInput.trim()) {
-      const waMsg = generateRiderWhatsAppMessage({
-        order,
-        driverName: driverNameInput.trim(),
-        vehicleNumber: vehicleNumberInput.trim(),
-        trackingLink: selfTrackingLink
-      });
-      waUrl = buildRiderWhatsAppUrl({ phone: driverPhoneInput, message: waMsg });
-      if (waUrl) {
-        try {
-          window.open(waUrl, '_blank', 'noopener,noreferrer');
-        } catch (e) {
-          console.warn('Could not open WhatsApp tab automatically:', e);
-        }
-      }
-    }
-
     setIsSavingDelivery(true);
     const orderIdentifier = order._id || order.id || order.orderId;
     try {
@@ -266,13 +272,30 @@ export default function OrderDetailModal({
       if (onUpdateStatus) {
         await onUpdateStatus(orderIdentifier, selectedStatus, payload);
       }
+
+      // Immediately sync local state so UI updates without needing reload
+      const updatedSelfDetails = isSelf ? {
+        ...(order.selfDeliveryDetails || {}),
+        deliveryPersonName: driverNameInput.trim(),
+        deliveryPersonPhone: driverPhoneInput.trim(),
+        vehicleNumber: vehicleNumberInput.trim(),
+        deliveryPartnerToken: tokenVal,
+        trackingUrl: selfTrackingLink
+      } : undefined;
+
+      setCurrentOrder(prev => ({
+        ...(prev || order),
+        ...payload,
+        courierName: isSelf ? '' : courierInput.trim(),
+        selfDeliveryDetails: updatedSelfDetails,
+        trackingNumber: payload.trackingNumber,
+        trackingUrl: payload.trackingUrl,
+        status: selectedStatus,
+        overallStatus: selectedStatus
+      }));
+
       if (isSelf) {
-        setWhatsappSentRef({
-          messageId: 'WA-MSG-SENT',
-          sentTo: driverPhoneInput.trim(),
-          sentAt: new Date().toISOString()
-        });
-        alert(`✅ Delivery partner saved successfully!\n\n📲 WhatsApp has been opened in a new tab to send instructions & tracking link to ${driverPhoneInput.trim()}.\nReview and click Send in WhatsApp!`);
+        alert(`✅ Delivery partner & driver details saved successfully for Order #${order.id || order.orderId}!\n\nDriver: ${driverNameInput.trim()} (${driverPhoneInput.trim()})\nVehicle: ${vehicleNumberInput.trim()}`);
       } else {
         alert(`✅ Delivery partner & tracking details saved successfully for Order #${order.id || order.orderId}!\n\nTracking Link: ${carrierUrl}`);
       }
@@ -635,76 +658,92 @@ export default function OrderDetailModal({
               {!readOnly && (
                 <div className="pt-2 border-t border-amber-200/60 space-y-2">
                   <div className="text-[11px] font-bold text-amber-900">Admin Action Workflow:</div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(order.returnRequest.status === 'return_requested' || order.returnRequest.status === 'exchange_requested') && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleReturnExchangeStatusUpdate(order.returnRequest.requestType === 'exchange' ? 'exchange_approved' : 'return_approved')}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          ✓ Approve Request
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
-                          className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          ✕ Reject Request
-                        </button>
-                      </>
-                    )}
+                  {(() => {
+                    const retReq = order.returnRequest || {};
+                    const retStatus = String(retReq.status || '').toLowerCase().trim();
+                    const retType = String(retReq.type || retReq.requestType || (retStatus.includes('exchange') ? 'exchange' : 'return')).toLowerCase().trim();
+                    const isExchange = retType === 'exchange';
+                    const isReturn = retType === 'return';
 
-                    {(order.returnRequest.status === 'return_approved' || order.returnRequest.status === 'exchange_approved') && (
-                      <button
-                        type="button"
-                        onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
-                        className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        📅 Schedule Pickup
-                      </button>
-                    )}
+                    const isRequested = ['requested', 'return_requested', 'exchange_requested'].includes(retStatus);
+                    const isApproved = ['approved', 'return_approved', 'exchange_approved'].includes(retStatus);
+                    const isPickupScheduled = retStatus === 'pickup_scheduled';
+                    const isProductReceived = ['product_received', 'product_return_received'].includes(retStatus);
+                    const isExchangeDispatched = retStatus === 'exchange_dispatched';
 
-                    {order.returnRequest.status === 'pickup_scheduled' && (
-                      <button
-                        type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('product_received')}
-                        className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        📦 Mark Product Received & Restore Stock
-                      </button>
-                    )}
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isRequested && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved')}
+                              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              ✓ Approve {isExchange ? 'Exchange' : 'Return'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
+                              className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              ✕ Reject Request
+                            </button>
+                          </>
+                        )}
 
-                    {(order.returnRequest.status === 'product_received' || (order.returnRequest.requestType === 'return' && order.returnRequest.status === 'return_approved')) && order.returnRequest.requestType === 'return' && (
-                      <button
-                        type="button"
-                        onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
-                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        💳 Mark Refund Completed
-                      </button>
-                    )}
+                        {isApproved && (
+                          <button
+                            type="button"
+                            onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
+                            className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            📅 Schedule Pickup
+                          </button>
+                        )}
 
-                    {(order.returnRequest.status === 'product_received' || (order.returnRequest.requestType === 'exchange' && order.returnRequest.status === 'exchange_approved')) && order.returnRequest.requestType === 'exchange' && (
-                      <button
-                        type="button"
-                        onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
-                        className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        🚚 Dispatch Replacement Unit
-                      </button>
-                    )}
+                        {isPickupScheduled && (
+                          <button
+                            type="button"
+                            onClick={() => handleReturnExchangeStatusUpdate('product_received')}
+                            className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            📦 Mark Product Received & Restore Stock
+                          </button>
+                        )}
 
-                    {order.returnRequest.status === 'exchange_dispatched' && (
-                      <button
-                        type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('exchanged')}
-                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        ✓ Complete Exchange
-                      </button>
-                    )}
-                  </div>
+                        {(isProductReceived || isApproved) && isReturn && (
+                          <button
+                            type="button"
+                            onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            💳 Mark Refund Completed
+                          </button>
+                        )}
+
+                        {(isProductReceived || isApproved) && isExchange && (
+                          <button
+                            type="button"
+                            onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
+                            className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            🚚 Dispatch Replacement Unit
+                          </button>
+                        )}
+
+                        {isExchangeDispatched && (
+                          <button
+                            type="button"
+                            onClick={() => handleReturnExchangeStatusUpdate('exchanged')}
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            ✓ Complete Exchange
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {returnActionState.showRejectInput && (
                     <div className="p-3 bg-white rounded-xl border border-rose-200 space-y-2">
@@ -890,7 +929,8 @@ export default function OrderDetailModal({
                 {(order.paymentStatus?.toLowerCase() === 'refunded' ||
                   order.status?.toLowerCase().includes('refund') ||
                   order.returnRequest?.status?.toLowerCase().includes('refund') ||
-                  order.status === 'product_received') && (
+                  order.status === 'product_received' ||
+                  order.status === 'cancelled') && (
                   <a
                     href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
                     target="_blank"
@@ -898,6 +938,18 @@ export default function OrderDetailModal({
                     className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
                   >
                     <FileText size={13} /> GST Credit Note
+                  </a>
+                )}
+                {(order.returnRequest?.type === 'exchange' ||
+                  order.returnRequest?.requestType === 'exchange' ||
+                  String(order.status).toLowerCase().includes('exchange')) && (
+                  <a
+                    href={`${SERVER_URL}/orders/${order.id || order._id}/exchange-invoice`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-indigo-200"
+                  >
+                    <FileText size={13} /> Exchange Invoice
                   </a>
                 )}
               </div>
@@ -1062,68 +1114,21 @@ export default function OrderDetailModal({
                   }
                 });
 
-                const parseStateKeyFromText = (text) => {
-                  if (!text) return '';
-                  const str = String(text).toLowerCase();
-                  const states = [
-                    { key: 'uttarpradesh', aliases: ['uttar pradesh', 'uttarpradesh', 'up', 'noida', 'lucknow', 'kanpur', 'ghaziabad', 'agra', 'varanasi', 'prayagraj'] },
-                    { key: 'delhi', aliases: ['delhi', 'new delhi', 'nct of delhi', 'nct', 'dl'] },
-                    { key: 'maharashtra', aliases: ['maharashtra', 'mumbai', 'pune', 'nagpur', 'thane', 'mh'] },
-                    { key: 'karnataka', aliases: ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'ka'] },
-                    { key: 'tamilnadu', aliases: ['tamil nadu', 'tamilnadu', 'chennai', 'coimbatore', 'tn'] },
-                    { key: 'haryana', aliases: ['haryana', 'gurugram', 'gurgaon', 'faridabad', 'hr'] },
-                    { key: 'rajasthan', aliases: ['rajasthan', 'jaipur', 'jodhpur', 'udaipur', 'rj'] },
-                    { key: 'westbengal', aliases: ['west bengal', 'westbengal', 'kolkata', 'wb'] },
-                    { key: 'gujarat', aliases: ['gujarat', 'ahmedabad', 'surat', 'vadodara', 'gj'] },
-                    { key: 'punjab', aliases: ['punjab', 'ludhiana', 'amritsar', 'pb'] },
-                    { key: 'madhyapradesh', aliases: ['madhya pradesh', 'madhyapradesh', 'bhopal', 'indore', 'mp'] },
-                    { key: 'bihar', aliases: ['bihar', 'patna', 'br'] },
-                    { key: 'telangana', aliases: ['telangana', 'hyderabad', 'tg', 'ts'] },
-                    { key: 'andhrapradesh', aliases: ['andhra pradesh', 'andhrapradesh', 'visakhapatnam', 'ap'] },
-                    { key: 'uttarpradesh', aliases: ['uttar pradesh', 'uttarpradesh', 'u.p.', 'u.p', 'up', 'noida', 'lucknow', 'kanpur', 'ghaziabad', 'agra', 'varanasi', 'prayagraj', 'gorakhpur', 'meerut', 'bareilly', 'aligarh', 'moradabad', 'saharanpur'] },
-                    { key: 'delhi', aliases: ['delhi', 'new delhi', 'nct of delhi', 'nct', 'dl', 'newdelhi'] },
-                    { key: 'maharashtra', aliases: ['maharashtra', 'mumbai', 'pune', 'nagpur', 'thane', 'mh', 'navi mumbai'] },
-                    { key: 'karnataka', aliases: ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'ka'] },
-                    { key: 'tamilnadu', aliases: ['tamil nadu', 'tamilnadu', 'chennai', 'coimbatore', 'tn'] },
-                    { key: 'haryana', aliases: ['haryana', 'gurugram', 'gurgaon', 'faridabad', 'hr'] },
-                    { key: 'rajasthan', aliases: ['rajasthan', 'jaipur', 'jodhpur', 'udaipur', 'rj'] },
-                    { key: 'westbengal', aliases: ['west bengal', 'westbengal', 'kolkata', 'wb'] },
-                    { key: 'gujarat', aliases: ['gujarat', 'ahmedabad', 'surat', 'vadodara', 'gj'] },
-                    { key: 'punjab', aliases: ['punjab', 'ludhiana', 'amritsar', 'pb'] },
-                    { key: 'madhyapradesh', aliases: ['madhya pradesh', 'madhyapradesh', 'bhopal', 'indore', 'mp'] },
-                    { key: 'bihar', aliases: ['bihar', 'patna', 'br'] },
-                    { key: 'telangana', aliases: ['telangana', 'hyderabad', 'tg', 'ts'] },
-                    { key: 'andhrapradesh', aliases: ['andhra pradesh', 'andhrapradesh', 'visakhapatnam', 'ap'] },
-                    { key: 'kerala', aliases: ['kerala', 'kochi', 'thiruvananthapuram', 'kl'] },
-                    { key: 'uttarakhand', aliases: ['uttarakhand', 'dehradun', 'uk'] }
-                  ];
-
-                  for (const st of states) {
-                    for (const alias of st.aliases) {
-                      if (new RegExp(`\\b${alias}\\b`, 'i').test(str) || str.includes(alias)) {
-                        return st.key;
-                      }
-                    }
-                  }
-                  return str.trim();
-                };
-
-                const getDynamicState = (obj, fallbackText) => {
-                  if (obj && typeof obj === 'object') {
-                    if (obj.state && String(obj.state).trim()) return parseStateKeyFromText(obj.state);
-                    const combined = `${obj.street || ''} ${obj.addressLine || ''} ${obj.city || ''} ${obj.address || ''}`;
-                    if (combined.trim()) return parseStateKeyFromText(combined);
-                  }
-                  return parseStateKeyFromText(fallbackText || '');
-                };
-
                 const firstSellerObj = order.items?.[0]?.sellerId;
-                const sellerStateKey = getDynamicState(firstSellerObj, `${order.sellerState || ''} ${order.sellerCity || ''} ${order.sellerAddress || ''}`) || 'uttarpradesh';
-                const customerStateKey = getDynamicState(order.shippingAddress, typeof order.shippingAddress === 'string' ? order.shippingAddress : `${order.shippingAddress?.street || ''} ${order.shippingAddress?.city || ''}`) || 'uttarpradesh';
+                const sellerStateInfo = parseStateInfo(
+                  firstSellerObj,
+                  `${order.sellerState || ''} ${order.sellerCity || ''} ${order.sellerAddress || ''} ${order.sellerGst || ''}`
+                );
+                const customerStateInfo = parseStateInfo(
+                  order.shippingAddress,
+                  typeof order.shippingAddress === 'string'
+                    ? order.shippingAddress
+                    : `${order.shippingAddress?.street || ''} ${order.shippingAddress?.city || ''} ${order.shippingAddress?.state || ''} ${order.shippingAddress?.pincode || ''}`
+                );
 
-                const isSameState = !sellerStateKey || !customerStateKey || sellerStateKey === customerStateKey;
-                const sellerStateStr = (typeof firstSellerObj === 'object' ? firstSellerObj.state || firstSellerObj.city : '') || order.sellerState || (sellerStateKey === 'uttarpradesh' ? 'Uttar Pradesh' : sellerStateKey) || 'Uttar Pradesh';
-                const customerStateStr = (typeof order.shippingAddress === 'object' ? order.shippingAddress?.state || order.shippingAddress?.city : '') || (customerStateKey === 'uttarpradesh' ? 'Uttar Pradesh' : customerStateKey) || 'Uttar Pradesh';
+                const isSameState = !sellerStateInfo.key || !customerStateInfo.key || sellerStateInfo.key === customerStateInfo.key;
+                const sellerStateStr = sellerStateInfo.name || 'Uttar Pradesh';
+                const customerStateStr = customerStateInfo.name || 'Uttar Pradesh';
 
                 // Aggregate shipping tax into total tax calculation for full order grand total breakdown
                 const shipTaxable = shipVal > 0 ? (shipVal / 1.18) : 0;
@@ -1514,7 +1519,7 @@ export default function OrderDetailModal({
                           )}
                         </div>
                           <div className="text-[10px] text-emerald-800 bg-white/70 p-1.5 rounded border border-emerald-200">
-                            💡 <strong>Direct Send:</strong> Clicking <em>"Save Delivery Partner & Tracking Details"</em> opens WhatsApp in a new tab with pre-filled instructions & tracking link. Simply click <strong>Send</strong> in WhatsApp Web/App!
+                            💡 <strong>WhatsApp Rider Dispatch:</strong> Click <em>"📲 Open WhatsApp to Send to Rider"</em> above anytime to dispatch live tracking & customer address to the rider via WhatsApp.
                           </div>
                         </div>
                       )}

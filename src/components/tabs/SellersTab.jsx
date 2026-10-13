@@ -203,7 +203,7 @@ export default function SellersTab() {
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase font-bold">Commission</span>
-                    <div className="font-bold text-teal-900">{seller.commissionRate || 10}% Fee</div>
+                    <div className="font-bold text-teal-900">{seller.commissionRate ?? seller.commissionPercentage ?? 5}% Fee</div>
                   </div>
                 </div>
 

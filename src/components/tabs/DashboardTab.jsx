@@ -34,7 +34,16 @@ export default function DashboardTab({ onNavigateTab }) {
 
   // Metrics Calculations - dynamically derived from live database records
   const totalGMV = orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
-  const platformCommission = Math.round(orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || 0) * 0.10), 0));
+  const platformCommission = Math.round(orders.reduce((sum, o) => {
+    const total = Number(o.totalAmount || o.total || 0);
+    const seller = sellers.find(s => {
+      const sId = String(s.id || s._id || '');
+      const oSellerId = String(o.sellerId?._id || o.sellerId || o.items?.[0]?.sellerId?._id || o.items?.[0]?.sellerId || '');
+      return sId && sId === oSellerId;
+    });
+    const commRate = Number(o.commissionRate ?? o.items?.[0]?.commissionRate ?? seller?.commissionRate ?? seller?.commissionPercentage ?? 5);
+    return sum + (total * (commRate / 100));
+  }, 0));
   const totalPendingPayout = sellers.reduce((sum, s) => sum + Number(s.payoutBalance || s.walletBalance || 0), 0);
   const pendingOrders = orders.filter(o => o.status === 'Pending' || o.overallStatus === 'pending' || o.status === 'placed').length;
   const pendingSellers = sellers.filter(s => s.status === 'Pending Approval' || s.status === 'Pending' || s.status === 'pending');
@@ -53,7 +62,7 @@ export default function DashboardTab({ onNavigateTab }) {
       border: 'border-emerald-200'
     },
     {
-      label: 'Net Platform Commission (10%)',
+      label: 'Net Platform Commission Revenue',
       value: `₹${platformCommission.toLocaleString()}`,
       change: totalPendingPayout > 0 ? `₹${totalPendingPayout.toLocaleString()} pending settlement` : 'Settlements up to date',
       icon: <CreditCard size={20} className="text-teal-700" />,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Store, 
@@ -50,10 +50,18 @@ export default function SellerDetailModal({
   const [activeTab, setActiveTab] = useState('dossier'); // 'dossier' | 'documents' | 'storefront' | 'financials'
 
   // Commission & rejection state
-  const [commission, setCommission] = useState(seller.commissionRate || 10);
+  const [commission, setCommission] = useState(() => seller.commissionRate ?? seller.commissionPercentage ?? 5);
   const [commissionSaved, setCommissionSaved] = useState(false);
   const [rejectReason, setRejectReason] = useState(seller.rejectionReason || '');
   const [showRejectBox, setShowRejectBox] = useState(false);
+
+  useEffect(() => {
+    if (seller) {
+      const resolvedRate = seller.commissionRate ?? seller.commissionPercentage ?? 5;
+      setCommission(resolvedRate);
+      setRejectReason(seller.rejectionReason || '');
+    }
+  }, [seller]);
 
   // Document inspector preview state
   const [previewDoc, setPreviewDoc] = useState(null);
@@ -1089,7 +1097,7 @@ export default function SellerDetailModal({
                     </div>
                     <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200 font-semibold">
                       <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
-                      <span>Marketplace Commission Schedule Accepted</span>
+                      <span>Marketplace Commission Schedule Accepted ({commission}% Platform Fee)</span>
                     </div>
                     <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-200 font-semibold">
                       <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   loginAdminApi,
   fetchAdminSellersApi,
@@ -55,7 +55,8 @@ import {
   createAdminKitApi,
   updateAdminKitApi,
   deleteAdminKitApi,
-  isTokenValid
+  isTokenValid,
+  SERVER_URL
 } from '../utils/api';
 
 const AdminDataContext = createContext();
@@ -370,6 +371,9 @@ export const AdminDataProvider = ({ children }) => {
   useEffect(() => { safeSetLocalStorage('admin_audit_log', auditLog); }, [auditLog]);
   useEffect(() => { safeSetLocalStorage('admin_profile', adminUser); }, [adminUser]);
   useEffect(() => { safeSetLocalStorage('admin_is_authenticated', isAuthenticated); }, [isAuthenticated]);
+
+  const isOrderSyncingRef = useRef(false);
+  const isProductsPollingRef = useRef(false);
 
   // Listen for session expiration events dispatched on 401/403 responses
   useEffect(() => {
@@ -732,7 +736,17 @@ export const AdminDataProvider = ({ children }) => {
 
   // Real-time synchronization of orders across Admin, Seller, and Website
   useEffect(() => {
-    const handleOrderSync = () => {
+    let sseSource = null;
+    let reconnectTimeout = null;
+
+    const handleOrderSync = (isPeriodic = false) => {
+      if (isPeriodic && typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (isOrderSyncingRef.current) return;
+      isOrderSyncingRef.current = true;
+
+      // Sync retail orders
       fetchAdminOrdersApi().then(data => {
         const list = Array.isArray(data) ? data : (data?.orders || []);
         if (list.length > 0) {
@@ -822,24 +836,95 @@ export const AdminDataProvider = ({ children }) => {
             };
           }));
         }
+      }).catch(() => {}).finally(() => {
+        isOrderSyncingRef.current = false;
+      });
+
+      // Also sync school bulk orders
+      fetchAdminSchoolBulkOrdersApi().then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setSchoolOrders(data.map(o => ({
+            ...o,
+            id: o._id || o.id,
+            referenceId: o.referenceId || `SCH-${o.id}`,
+            schoolName: o.institutionName || o.schoolName || 'Partner School',
+            contactPerson: o.contactName || o.contactPerson || 'Administrator',
+            requirementSummary: Array.isArray(o.requirements) && o.requirements.length > 0
+              ? o.requirements.map(r => `${r.itemName} (${r.quantity})`).join(', ')
+              : (o.additionalNotes || 'Bulk Supplies'),
+            estimatedBudget: o.targetBudgetPerKit || 0,
+            quoteAmount: o.targetBudgetPerKit || 0
+          })));
+        }
       }).catch(() => {});
     };
 
-    handleOrderSync();
-    window.addEventListener('bv_orders_updated', handleOrderSync);
-    window.addEventListener('focus', handleOrderSync);
+    handleOrderSync(false);
+
+    // 1. Establish Real-Time SSE connection to backend
+    const connectSSE = () => {
+      if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+      try {
+        const rawServer = SERVER_URL || 'http://localhost:5000/api';
+        const streamUrl = `${rawServer.replace(/\/+$/, '')}/realtime/stream`;
+        sseSource = new EventSource(streamUrl);
+
+        sseSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'SCHOOL_ORDER_UPDATED')) {
+              handleOrderSync(false);
+            }
+          } catch (e) {}
+        };
+
+        sseSource.onerror = () => {
+          if (sseSource) {
+            sseSource.close();
+            sseSource = null;
+          }
+          reconnectTimeout = setTimeout(() => {
+            connectSSE();
+          }, 5000);
+        };
+      } catch (err) {}
+    };
+
+    connectSSE();
+
+    // 2. High-Responsiveness Event Listeners
+    const onOrderEvent = () => handleOrderSync(false);
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleOrderSync(false);
+      }
+    };
+
+    window.addEventListener('bv_orders_updated', onOrderEvent);
+    window.addEventListener('focus', onOrderEvent);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     const storageHandler = (e) => {
-      if (e.key === 'bv_order_sync_timestamp' || e.key === 'admin_orders') {
-        handleOrderSync();
+      if (e.key === 'bv_order_sync_timestamp') {
+        handleOrderSync(false);
       }
     };
     window.addEventListener('storage', storageHandler);
 
-    const pollInterval = setInterval(handleOrderSync, 5000);
+    // 3. Fast polling fallback every 4 seconds
+    const pollInterval = setInterval(() => handleOrderSync(true), 4000);
 
     return () => {
-      window.removeEventListener('bv_orders_updated', handleOrderSync);
-      window.removeEventListener('focus', handleOrderSync);
+      if (sseSource) {
+        sseSource.close();
+        sseSource = null;
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      window.removeEventListener('bv_orders_updated', onOrderEvent);
+      window.removeEventListener('focus', onOrderEvent);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('storage', storageHandler);
       clearInterval(pollInterval);
     };
@@ -856,8 +941,14 @@ export const AdminDataProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Auto-poll products every 15 seconds for real-time seller submission updates
+    // Auto-poll products every 35 seconds for real-time seller submission updates
     const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (isProductsPollingRef.current) return;
+      isProductsPollingRef.current = true;
+
       const token = localStorage.getItem('bv_admin_jwt_token');
       if (token && isTokenValid(token)) {
         fetchAdminProductsApi().then(data => {
@@ -881,9 +972,13 @@ export const AdminDataProvider = ({ children }) => {
               ...p
             })));
           }
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => {
+          isProductsPollingRef.current = false;
+        });
+      } else {
+        isProductsPollingRef.current = false;
       }
-    }, 15000);
+    }, 35000);
 
     // Sync product approval notifications & product submissions in real-time
     const syncFromStorage = () => {

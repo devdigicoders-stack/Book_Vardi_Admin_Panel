@@ -762,7 +762,10 @@ export default function OrdersTab() {
             setSelectedOrder(updated);
           }
         }}
-        onUpdateTracking={updateOrderTracking}
+        onUpdateTracking={async (ordId, trk, extra) => {
+          await updateOrderTracking(ordId, trk, extra);
+          setSelectedOrder(prev => prev ? { ...prev, trackingNumber: trk, ...extra } : prev);
+        }}
         onCancelOrder={cancelOrder}
         onRefundOrder={refundOrder}
         onUpdateReturnExchangeStatus={updateReturnExchangeStatus}

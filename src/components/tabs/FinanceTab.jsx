@@ -64,7 +64,12 @@ export default function FinanceTab() {
         }
 
         // Calculate dynamic platform commission for this order
-        const rate = Number(o.commissionRate || 5);
+        const sMatch = sellers.find(s => {
+          const sId = String(s.id || s._id || '');
+          const oSellerId = String(o.sellerId?._id || o.sellerId || o.items?.[0]?.sellerId?._id || o.items?.[0]?.sellerId || '');
+          return sId && sId === oSellerId;
+        });
+        const rate = Number(o.commissionRate ?? o.items?.[0]?.commissionRate ?? sMatch?.commissionRate ?? sMatch?.commissionPercentage ?? 5);
         totalPlatformRevenue += Math.round(orderTotal * (rate / 100) * 100) / 100;
       }
     });
@@ -124,7 +129,8 @@ export default function FinanceTab() {
             : Number(o.total || o.totalAmount || 0);
 
           realSales += subtotal;
-          const orderCut = Math.round(subtotal * (commRate / 100) * 100) / 100;
+          const itemCommRate = Number(o.commissionRate ?? sItems[0]?.commissionRate ?? commRate);
+          const orderCut = Math.round(subtotal * (itemCommRate / 100) * 100) / 100;
           realPlatformCut += orderCut;
 
           if (String(o.paymentMethod || '').toUpperCase().includes('COD')) {
