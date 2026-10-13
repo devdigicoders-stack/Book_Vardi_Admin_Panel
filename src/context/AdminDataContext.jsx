@@ -307,23 +307,32 @@ export const AdminDataProvider = ({ children }) => {
   });
 
   // Helper to sanitize heavy base64 images & PDF document blobs before persisting to localStorage
-  const sanitizeForStorage = (data) => {
+  const sanitizeForStorage = (data, keyName = '') => {
     if (!data) return data;
     if (typeof data === 'string') {
+      const isImageKey = /(sample|image|photo|thumbnail|img)/i.test(keyName);
+      if (isImageKey && data.length < 350000) {
+        return data;
+      }
       if (data.startsWith('data:') || data.length > 500) return '';
       return data;
     }
     if (Array.isArray(data)) {
-      return data.slice(0, 50).map(item => sanitizeForStorage(item));
+      return data.slice(0, 50).map(item => sanitizeForStorage(item, keyName));
     }
     if (typeof data === 'object') {
       const copy = {};
       for (const key of Object.keys(data)) {
         const val = data[key];
+        const isImageKey = /(sample|image|photo|thumbnail|img)/i.test(key);
         if (typeof val === 'string' && (val.startsWith('data:') || val.length > 500)) {
-          copy[key] = '';
+          if (isImageKey && val.length < 350000) {
+            copy[key] = val;
+          } else {
+            copy[key] = '';
+          }
         } else if (val && typeof val === 'object') {
-          copy[key] = sanitizeForStorage(val);
+          copy[key] = sanitizeForStorage(val, key);
         } else {
           copy[key] = val;
         }
