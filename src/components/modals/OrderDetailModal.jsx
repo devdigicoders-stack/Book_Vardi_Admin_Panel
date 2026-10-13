@@ -224,7 +224,7 @@ export default function OrderDetailModal({
       }
 
       tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${Math.floor(100000 + Math.random() * 900000)}`).trim();
-      const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+      const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
       selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
       assignedTrackingNumber = tokenVal;
     } else {
@@ -311,7 +311,7 @@ export default function OrderDetailModal({
       return;
     }
     const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
-    const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+    const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
     const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
 
     const waMsg = generateRiderWhatsAppMessage({
@@ -1295,7 +1295,7 @@ export default function OrderDetailModal({
             const canSeeTracking = isOut && isPartnerDecided;
 
             const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
-            const clientAppUrl = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+            const clientAppUrl = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
             const selfDeliveryUrl = `${clientAppUrl}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
 
             const sellerDetails = order.sellerDetails || order.items?.[0]?.sellerDetails || (order.items?.[0]?.sellerId && typeof order.items[0].sellerId === 'object' ? order.items[0].sellerId : null);
@@ -1605,7 +1605,7 @@ export default function OrderDetailModal({
         order={(() => {
           const isSelf = deliveryModeInput === 'self_delivery';
           const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
-          const websiteOrigin = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173');
+          const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
           const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
           
           let carrierUrl = order.trackingUrl || '';
