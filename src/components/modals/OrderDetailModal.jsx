@@ -25,6 +25,7 @@ import {
 import TaxInvoiceModal, { parseStateInfo } from './TaxInvoiceModal';
 import { resendRiderWhatsAppApi, SERVER_URL } from '../../utils/api';
 import { generateRiderWhatsAppMessage, buildRiderWhatsAppUrl } from '../../utils/whatsappRiderHelper';
+import { useToast } from '../../context/ToastContext';
 
 // Helper to generate dynamic tracking ID based on courier name
 export const generateDynamicTrackingId = (courierName) => {
@@ -72,6 +73,7 @@ export default function OrderDetailModal({
   readOnly = false 
 }) {
   const [currentOrder, setCurrentOrder] = useState(order);
+  const toast = useToast();
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [newTracking, setNewTracking] = useState('');
   const [selectedStatus, setSelectedStatus] = useState(order?.overallStatus || order?.status || 'Pending');
@@ -110,21 +112,36 @@ export default function OrderDetailModal({
   const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}) => {
     const orderIdentifier = order?._id || order?.id || order?.orderId;
     if (onUpdateReturnExchangeStatus && orderIdentifier) {
-      await onUpdateReturnExchangeStatus(orderIdentifier, {
-        status: newStatus,
-        ...extraPayload
-      });
-      setReturnActionState({
-        showRejectInput: false,
-        rejectionReason: '',
-        showPickupInput: false,
-        pickupDate: '',
-        showRefundInput: false,
-        refundTxnId: '',
-        showDispatchInput: false,
-        exchangeAwb: '',
-        exchangeCourier: ''
-      });
+      try {
+        const res = await onUpdateReturnExchangeStatus(orderIdentifier, {
+          status: newStatus,
+          ...extraPayload
+        });
+        if (res && res.success === false) {
+          if (toast?.error) {
+            toast.error(res.message || 'Failed to update Return/Exchange status');
+          }
+          return;
+        }
+        if (toast?.success) {
+          toast.success(`Return/Exchange status updated to ${newStatus.replace(/_/g, ' ')}`);
+        }
+        setReturnActionState({
+          showRejectInput: false,
+          rejectionReason: '',
+          showPickupInput: false,
+          pickupDate: '',
+          showRefundInput: false,
+          refundTxnId: '',
+          showDispatchInput: false,
+          exchangeAwb: '',
+          exchangeCourier: ''
+        });
+      } catch (err) {
+        if (toast?.error) {
+          toast.error(err.message || 'Failed to update Return/Exchange status');
+        }
+      }
     }
   };
 
@@ -712,7 +729,7 @@ export default function OrderDetailModal({
                           </button>
                         )}
 
-                        {(isProductReceived || isApproved) && isReturn && (
+                        {isProductReceived && isReturn && (
                           <button
                             type="button"
                             onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
@@ -722,7 +739,7 @@ export default function OrderDetailModal({
                           </button>
                         )}
 
-                        {(isProductReceived || isApproved) && isExchange && (
+                        {isProductReceived && isExchange && (
                           <button
                             type="button"
                             onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
@@ -876,12 +893,6 @@ export default function OrderDetailModal({
                   <option value="Out for Delivery">Out for Delivery</option>
                   <option value="Delivered">Delivered</option>
                   <option value="Cancelled">Cancelled</option>
-                  <option value="refund_approved">Refund Approved</option>
-                  <option value="refund_initiated">Refund Initiated</option>
-                  <option value="refund_completed">Refund Completed</option>
-                  <option value="return_requested">Return Requested</option>
-                  <option value="return_approved">Return Approved</option>
-                  <option value="product_return_received">Product Return Received</option>
                 </select>
 
                 <button

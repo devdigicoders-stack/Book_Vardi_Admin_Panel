@@ -89,11 +89,14 @@ export default function OrdersTab() {
     return (orders || []).filter(o => {
       const searchLower = searchTerm.toLowerCase();
       const custName = typeof o.customerName === 'object' ? (o.customerName?.name || '') : String(o.customerName || '');
+      const oId = String(o.id || o.orderId || o._id || '');
+      const oTracking = String(o.trackingNumber || '');
+      const oSchool = String(o.school || '');
       const matchesSearch = !searchTerm ||
-                            o.id.toLowerCase().includes(searchLower) ||
+                            oId.toLowerCase().includes(searchLower) ||
                             custName.toLowerCase().includes(searchLower) ||
-                            (o.trackingNumber && o.trackingNumber.toLowerCase().includes(searchLower)) ||
-                            (o.school && o.school.toLowerCase().includes(searchLower));
+                            oTracking.toLowerCase().includes(searchLower) ||
+                            oSchool.toLowerCase().includes(searchLower);
 
       if (!matchesSearch) return false;
 
@@ -120,15 +123,19 @@ export default function OrdersTab() {
       const custName = typeof o.customerName === 'object' ? (o.customerName?.name || '') : String(o.customerName || '');
       const returnReason = String(o.returnRequest?.reason || '').toLowerCase();
       const targetSize = String(o.returnRequest?.targetSize || '').toLowerCase();
+      const oId = String(o.id || o.orderId || o._id || '');
+      const oSchool = String(o.school || '');
+      const refundTxn = String(o.returnRequest?.refundTxnId || '');
+      const exchangeAwb = String(o.returnRequest?.exchangeAwb || '');
 
       const matchesSearch = !searchTerm ||
-                            o.id.toLowerCase().includes(searchLower) ||
+                            oId.toLowerCase().includes(searchLower) ||
                             custName.toLowerCase().includes(searchLower) ||
                             returnReason.includes(searchLower) ||
                             targetSize.includes(searchLower) ||
-                            (o.school && o.school.toLowerCase().includes(searchLower)) ||
-                            (o.returnRequest?.refundTxnId && o.returnRequest.refundTxnId.toLowerCase().includes(searchLower)) ||
-                            (o.returnRequest?.exchangeAwb && o.returnRequest.exchangeAwb.toLowerCase().includes(searchLower));
+                            oSchool.toLowerCase().includes(searchLower) ||
+                            refundTxn.toLowerCase().includes(searchLower) ||
+                            exchangeAwb.toLowerCase().includes(searchLower);
 
       if (!matchesSearch) return false;
 

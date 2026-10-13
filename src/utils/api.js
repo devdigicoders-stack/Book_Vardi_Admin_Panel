@@ -600,9 +600,14 @@ export const updateReturnExchangeStatusApi = async (orderId, payload) => {
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
-    return await res.json();
+    const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data?.message || `Request failed with status ${res.status}`;
+      throw new Error(errMsg);
+    }
+    return data;
   } catch (error) {
-    return { success: false, message: error.message };
+    throw error;
   }
 };
 
