@@ -23,6 +23,7 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import AdminKitFormPage from './AdminKitFormPage';
 import { resolveImageUrl } from '../../utils/api';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function KitsTab() {
   const {
@@ -110,10 +111,17 @@ export default function KitsTab() {
     setEditingKit(null);
   };
 
-  const handleDelete = (id, title) => {
+  const handleDelete = async (id, title) => {
     if (!canEdit) return;
-    if (window.confirm(`Are you sure you want to delete kit bundle "${title}"?`)) {
+    const isConfirmed = await confirmDelete({
+      title: 'Delete Kit Bundle?',
+      html: `Are you sure you want to delete kit bundle <b>"${title || 'this bundle'}"</b>?<br/><span style="font-size: 12px; color: #6b7280; margin-top: 6px; display: inline-block;">This kit bundle will be removed from school listings.</span>`,
+      confirmButtonText: 'Yes, Delete Kit'
+    });
+
+    if (isConfirmed) {
       deleteKit(id);
+      showSuccessAlert('Kit Deleted', `"${title || 'Kit'}" has been removed.`);
     }
   };
 

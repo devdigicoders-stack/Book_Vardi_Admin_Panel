@@ -311,6 +311,7 @@ export const createAdminProductApi = async (productData) => {
       headers: getAuthHeaders(),
       body: JSON.stringify(productData)
     });
+    checkAuthResponse(res);
     return await res.json();
   } catch (error) {
     return { success: false, message: error.message };

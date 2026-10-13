@@ -11,9 +11,11 @@ import {
   Store,
   ShoppingBag
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAdminData, APPROVED_ADMIN_ROLES } from '../../context/AdminDataContext';
 
 export default function AdminLogin() {
+  const navigate = useNavigate();
   const { loginAdmin } = useAdminData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,27 +30,9 @@ export default function AdminLogin() {
 
     try {
       await loginAdmin({ email, password, role });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message || 'Authentication Failed: Invalid credentials or backend connection issue. Please retry.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickLogin = async (selectedRole) => {
-    setRole(selectedRole);
-    setError('');
-    setLoading(true);
-    const demoEmail = selectedRole === 'Super Admin' ? 'admin@admin.com' : `${selectedRole.toLowerCase().replace(/\s+/g, '.')}@bookvardi.in`;
-    setEmail(demoEmail);
-    try {
-      await loginAdmin({ 
-        email: demoEmail, 
-        password: 'admin123',
-        role: selectedRole 
-      });
-    } catch (err) {
-      setError(err.message || 'Authentication Failed: Unable to authenticate with live server.');
     } finally {
       setLoading(false);
     }
@@ -165,28 +149,6 @@ export default function AdminLogin() {
             </button>
           </form>
 
-          {/* Quick Demo Logins */}
-          <div className="pt-5 mt-5 border-t border-gray-100">
-            <div className="text-[10px] uppercase font-extrabold text-gray-400 text-center mb-2.5 tracking-wider">
-              Fast Demo Sign In
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('Super Admin')}
-                className="px-2.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-900 rounded-xl text-[11px] font-bold transition-colors cursor-pointer text-center"
-              >
-                Super Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('Finance Admin')}
-                className="px-2.5 py-2 bg-gray-50 hover:bg-gray-100 text-gray-800 rounded-xl text-[11px] font-bold transition-colors cursor-pointer text-center border border-gray-200"
-              >
-                Finance Admin
-              </button>
-            </div>
-          </div>
 
           {/* Cross-Platform Links */}
           <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">

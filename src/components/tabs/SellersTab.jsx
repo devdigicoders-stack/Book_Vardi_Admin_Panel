@@ -198,7 +198,7 @@ export default function SellersTab() {
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase font-bold">GSTIN</span>
                     <div className="font-mono font-semibold text-gray-800 truncate">
-                      {seller.gstin || seller.rawApplication?.gstin || (seller.rawApplication?.hasGstExemption ? 'Exempted' : '07AAAAA0000A1Z5')}
+                      {seller.gstNumber || seller.gstin || seller.rawApplication?.gstin || (seller.rawApplication?.hasGstExemption ? 'Exempted' : 'N/A')}
                     </div>
                   </div>
                   <div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   Package,
@@ -25,9 +25,10 @@ import {
   BookOpen,
   Layers3
 } from 'lucide-react';
-import { CATEGORIES, CATEGORY_STRUCTURE, normalizeCategory, getSubCategories } from '../../constants/categories';
+import { normalizeCategory } from '../../constants/categories';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
-import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
+import { resolveImageUrl, parseSizeVariants, fetchAdminCategoriesApi } from '../../utils/api';
+import { useAdminData } from '../../context/AdminDataContext';
 
 // Universal Category Form Configuration Schema Matrix
 export const CATEGORY_FORM_SCHEMA = {
@@ -224,7 +225,7 @@ export function parseBool(val, defaultVal = true) {
   return Boolean(val);
 }
 
-export default function ProductFormPage({ product, sellers = [], existingProducts = [], onSave, onBack }) {
+export default function ProductFormPage({ product, sellers = [], categories: passedCategories = [], existingProducts = [], onSave, onBack }) {
   const isEdit = Boolean(product);
 
   // Entry Type: 'single' (Standard product) or 'kit' (Kit / Bundle)
@@ -244,8 +245,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
     subtitle: '',
     price: '',
     originalPrice: '',
-    category: 'School Uniform',
-    subCategory: 'Ready to wear',
+    category: '',
+    subCategory: '',
     gst: '5',
     isGstInclusive: true,
     schoolName: '',
@@ -279,6 +280,85 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
       rows: []
     }
   });
+
+  const adminCtx = useAdminData ? useAdminData() : {};
+  const contextCategories = adminCtx?.categories || passedCategories || [];
+  const [liveCategories, setLiveCategories] = useState(contextCategories);
+
+  useEffect(() => {
+    if (contextCategories && contextCategories.length > 0) {
+      setLiveCategories(contextCategories);
+    }
+    fetchAdminCategoriesApi().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setLiveCategories(data);
+      }
+    }).catch(() => {});
+  }, [contextCategories]);
+
+  // Dynamic available categories list (Strictly from Database)
+  const availableCategories = useMemo(() => {
+    if (Array.isArray(liveCategories) && liveCategories.length > 0) {
+      const list = liveCategories.map(c => ({
+        id: c._id || c.id || c.name,
+        name: c.name,
+        subCategories: Array.isArray(c.subCategories)
+          ? c.subCategories.map(s => typeof s === 'string' ? s : s?.name).filter(Boolean)
+          : []
+      }));
+      // If editing an existing product whose category is saved, preserve it
+      if (product && product.category && !list.some(c => c.name?.toLowerCase() === product.category?.toLowerCase())) {
+        list.push({
+          id: product.category,
+          name: product.category,
+          subCategories: product.subCategory ? [product.subCategory] : []
+        });
+      }
+      return list;
+    }
+    return [];
+  }, [liveCategories, product]);
+
+  // Dynamic available subcategories strictly from selected category
+  const activeSubCategories = useMemo(() => {
+    if (!formData.category) return [];
+    const matched = availableCategories.find(c =>
+      c.name?.toLowerCase() === formData.category.toLowerCase() ||
+      c.id?.toLowerCase() === formData.category.toLowerCase()
+    );
+    return matched && Array.isArray(matched.subCategories) ? matched.subCategories : [];
+  }, [availableCategories, formData.category]);
+
+  // Ensure selected category & subcategory are always valid and default to the first created category
+  useEffect(() => {
+    if (availableCategories.length > 0) {
+      const currentCatObj = availableCategories.find(
+        c => c.name?.toLowerCase() === (formData.category || '').toLowerCase()
+      );
+      if (!currentCatObj) {
+        const firstCat = availableCategories[0];
+        const firstSub = firstCat.subCategories?.[0] || '';
+        setFormData(prev => ({
+          ...prev,
+          category: firstCat.name,
+          subCategory: firstSub
+        }));
+      } else {
+        const subCats = currentCatObj.subCategories || [];
+        if (subCats.length > 0) {
+          const isSubValid = subCats.some(
+            s => s.toLowerCase() === (formData.subCategory || '').toLowerCase()
+          );
+          if (!isSubValid) {
+            setFormData(prev => ({
+              ...prev,
+              subCategory: subCats[0]
+            }));
+          }
+        }
+      }
+    }
+  }, [availableCategories, formData.category, formData.subCategory]);
 
   // Dynamic Category Form Schema (Hides meter calculations/kg/size-charts for NCERT books & non-apparel)
   const categorySchema = getCategorySchema(formData.category);
@@ -350,8 +430,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         subtitle: product.subtitle || '',
         price: product.price !== undefined ? String(product.price) : '',
         originalPrice: product.originalPrice || product.mrp ? String(product.originalPrice || product.mrp) : '',
-        category: normalizeCategory(product.category),
-        subCategory: product.subCategory || (getSubCategories(product.category)[0] || 'Ready to wear'),
+        category: product.category || '',
+        subCategory: product.subCategory || '',
         gst: product.gst !== undefined ? String(product.gst) : (product.gstPercentage !== undefined ? String(product.gstPercentage) : '5'),
         isGstInclusive: parseBool(product.isGstInclusive, true),
         schoolName: product.schoolName || '',
@@ -497,8 +577,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
         subtitle: '',
         price: '',
         originalPrice: '',
-        category: 'School Uniform',
-        subCategory: 'Ready to wear',
+        category: '',
+        subCategory: '',
         schoolName: '',
         gender: 'Unisex',
         badge: '',
@@ -768,8 +848,11 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
           : (paymentAllowedStr === 'COD_Only' ? ['COD'] : ['COD', 'Online']);
 
         const selectedGstNum = Number(formData.gst !== undefined && formData.gst !== null ? formData.gst : 5);
+        const cleanSellerId = (formData.sellerId && formData.sellerId !== 'self' && formData.sellerId !== 'null' && formData.sellerId !== 'undefined' && formData.sellerId !== '') ? formData.sellerId : undefined;
         const payload = {
           ...formData,
+          sellerId: cleanSellerId,
+          sellerName: formData.sellerName || 'Book Vardi Verified Seller',
           gst: selectedGstNum,
           gstPercent: selectedGstNum,
           gstPercentage: selectedGstNum,
@@ -910,8 +993,8 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
           images: finalImages,
           paymentMethodAllowed: paymentAllowedStr,
           paymentMethodsAllowed: paymentAllowedArr,
-          sellerId: formData.sellerId,
-          sellerName: formData.sellerName
+          sellerId: (formData.sellerId && formData.sellerId !== 'self' && formData.sellerId !== 'null' && formData.sellerId !== 'undefined' && formData.sellerId !== '') ? formData.sellerId : undefined,
+          sellerName: formData.sellerName || 'Book Vardi Verified Seller'
         };
 
         await onSave(payload);
@@ -1120,13 +1203,15 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Primary Category Dropdown */}
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1.5">Primary Category *</label>
                         <select
                           value={formData.category}
                           onChange={e => {
-                            const selectedCat = normalizeCategory(e.target.value);
-                            const subs = getSubCategories(selectedCat);
+                            const selectedCat = e.target.value;
+                            const matched = availableCategories.find(c => c.name?.toLowerCase() === selectedCat.toLowerCase());
+                            const subs = matched && Array.isArray(matched.subCategories) ? matched.subCategories : [];
                             setFormData({
                               ...formData,
                               category: selectedCat,
@@ -1135,13 +1220,19 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                           }}
                           className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
                         >
-                          {CATEGORY_STRUCTURE.map((c) => (
-                            <option key={c.name} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
+                          {availableCategories.length === 0 ? (
+                            <option value="">No categories found</option>
+                          ) : (
+                            availableCategories.map((c) => (
+                              <option key={c.id || c.name} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))
+                          )}
                         </select>
                       </div>
+
+                      {/* Sub-Category Dropdown */}
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1.5">Sub-Category *</label>
                         <select
@@ -1149,9 +1240,13 @@ export default function ProductFormPage({ product, sellers = [], existingProduct
                           onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
                           className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden font-bold cursor-pointer"
                         >
-                          {getSubCategories(formData.category).map(sub => (
-                            <option key={sub} value={sub}>{sub}</option>
-                          ))}
+                          {activeSubCategories.length === 0 ? (
+                            <option value="">No sub-categories</option>
+                          ) : (
+                            activeSubCategories.map(sub => (
+                              <option key={sub} value={sub}>{sub}</option>
+                            ))
+                          )}
                         </select>
                       </div>
                     </div>

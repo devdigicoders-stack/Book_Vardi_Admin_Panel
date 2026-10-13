@@ -27,6 +27,7 @@ import { CATEGORIES } from '../../constants/categories';
 import ProductFormPage from './ProductFormPage';
 import ProductReviewModal from '../modals/ProductReviewModal';
 import { resolveImageUrl, parseSizeVariants } from '../../utils/api';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function ProductsTab() {
   const {
@@ -36,6 +37,7 @@ export default function ProductsTab() {
     updateProductApprovalStatus,
     deleteProduct,
     sellers,
+    categories: dbCategories = [],
     isEditor
   } = useAdminData();
 
@@ -89,10 +91,17 @@ export default function ProductsTab() {
     setEditingProduct(null);
   };
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (!canEdit) return;
-    if (window.confirm(`Are you sure you want to remove "${name}" from the marketplace catalog?`)) {
+    const isConfirmed = await confirmDelete({
+      title: 'Remove Product?',
+      html: `Are you sure you want to remove <b>"${name || 'this item'}"</b> from the marketplace catalog?<br/><span style="font-size: 12px; color: #6b7280; margin-top: 6px; display: inline-block;">This item will be removed from marketplace listings and inventory.</span>`,
+      confirmButtonText: 'Yes, Remove Product'
+    });
+
+    if (isConfirmed) {
       deleteProduct(id);
+      showSuccessAlert('Product Removed', `"${name || 'Product'}" has been successfully removed.`);
     }
   };
 
@@ -114,6 +123,7 @@ export default function ProductsTab() {
       <ProductFormPage
         product={editingProduct}
         sellers={sellers}
+        categories={dbCategories}
         onSave={handleSaveProduct}
         onBack={() => {
           setViewMode('catalog');
@@ -298,15 +308,23 @@ export default function ProductsTab() {
             className="px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-700 bg-white focus:ring-2 focus:ring-brand-yellow outline-hidden capitalize cursor-pointer"
           >
             <option key="cat-all" value="all">All Categories</option>
-            {CATEGORIES.map((c, idx) => {
-              const catId = typeof c === 'string' ? c : (c.id || c.name || `cat-${idx}`);
-              const catName = typeof c === 'string' ? c : (c.name || c.label || c.id);
-              return (
-                <option key={catId} value={catId}>
-                  {catName}
+            {dbCategories && dbCategories.length > 0 ? (
+              dbCategories.map((c) => (
+                <option key={c._id || c.name} value={c.name}>
+                  {c.name}
                 </option>
-              );
-            })}
+              ))
+            ) : (
+              CATEGORIES.map((c, idx) => {
+                const catId = typeof c === 'string' ? c : (c.id || c.name || `cat-${idx}`);
+                const catName = typeof c === 'string' ? c : (c.name || c.label || c.id);
+                return (
+                  <option key={catId} value={catId}>
+                    {catName}
+                  </option>
+                );
+              })
+            )}
           </select>
 
           {/* Status Filter */}

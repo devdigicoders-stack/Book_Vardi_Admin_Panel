@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import SchoolModal from '../modals/SchoolModal';
+import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function SchoolsTab() {
   const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius, isEditor } = useAdminData();
@@ -146,10 +147,17 @@ export default function SchoolsTab() {
     } catch {}
   };
 
-  const handleDelete = (id, name) => {
+  const handleDelete = async (id, name) => {
     if (!canEdit) return;
-    if (window.confirm(`Are you sure you want to remove ${name} from partner schools?`)) {
+    const isConfirmed = await confirmDelete({
+      title: 'Remove School?',
+      html: `Are you sure you want to remove <b>"${name || 'this school'}"</b> from partner schools?`,
+      confirmButtonText: 'Yes, Remove School'
+    });
+
+    if (isConfirmed) {
       deleteSchool(id);
+      showSuccessAlert('School Removed', `"${name || 'School'}" has been removed.`);
       try {
         const stored = localStorage.getItem('bookvardi_custom_schools');
         if (stored) {
