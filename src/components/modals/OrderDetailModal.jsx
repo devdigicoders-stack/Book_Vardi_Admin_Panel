@@ -162,13 +162,17 @@ export default function OrderDetailModal({
       setNewTracking(order.trackingNumber || '');
       setSelectedStatus(order.overallStatus || order.status || 'Pending');
 
+      const hasExplicitCourier = Boolean(
+        (order.courierName && order.courierName !== 'N/A' && order.courierName !== 'Delhivery' && order.trackingNumber) ||
+        (order.thirdPartyDetails?.courierName && order.thirdPartyDetails?.trackingNumber)
+      );
       const isSelf = order.deliveryMode === 'self_delivery' ||
         order.deliveryType === 'self_delivery' ||
         order.deliveryType === 'self' ||
-        Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
+        !hasExplicitCourier;
 
       setDeliveryModeInput(isSelf ? 'self_delivery' : 'third_party');
-      setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || 'Delhivery');
+      setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || '');
       setDriverNameInput(order.selfDeliveryDetails?.deliveryPersonName || '');
       setDriverPhoneInput(order.selfDeliveryDetails?.deliveryPersonPhone || '');
       setVehicleNumberInput(order.selfDeliveryDetails?.vehicleNumber || '');
@@ -1614,12 +1618,13 @@ export default function OrderDetailModal({
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
         order={(() => {
+          const currentBase = displayOrder || order;
           const isSelf = deliveryModeInput === 'self_delivery';
-          const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
+          const tokenVal = String(currentBase.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${currentBase.id}`).trim();
           const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
           const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
           
-          let carrierUrl = order.trackingUrl || '';
+          let carrierUrl = currentBase.trackingUrl || '';
           if (!isSelf && newTracking.trim()) {
             const lowerCourier = courierInput.toLowerCase();
             carrierUrl = lowerCourier.includes('delhivery') ? `https://www.delhivery.com/track/package/${newTracking.trim()}` :
@@ -1630,22 +1635,22 @@ export default function OrderDetailModal({
           }
 
           return {
-            ...order,
-            status: selectedStatus || order.status,
-            overallStatus: selectedStatus || order.status,
+            ...currentBase,
+            status: selectedStatus || currentBase.status,
+            overallStatus: selectedStatus || currentBase.overallStatus || currentBase.status,
             deliveryMode: deliveryModeInput,
             deliveryType: deliveryModeInput,
             courierName: !isSelf ? courierInput : '',
             trackingNumber: !isSelf ? newTracking.trim() : tokenVal,
             trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
             selfDeliveryDetails: isSelf ? {
-              ...(order.selfDeliveryDetails || {}),
+              ...(currentBase.selfDeliveryDetails || {}),
               deliveryPersonName: driverNameInput.trim(),
               deliveryPersonPhone: driverPhoneInput.trim(),
               vehicleNumber: vehicleNumberInput.trim(),
               deliveryPartnerToken: tokenVal,
               trackingUrl: selfTrackingLink
-            } : order.selfDeliveryDetails
+            } : currentBase.selfDeliveryDetails
           };
         })()}
       />

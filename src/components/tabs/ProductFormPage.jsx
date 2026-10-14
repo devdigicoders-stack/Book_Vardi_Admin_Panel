@@ -530,8 +530,12 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
         }
       });
 
-      // Load sizeVariants safely via parseSizeVariants
-      const parsedVariants = parseSizeVariants(product);
+      // Load sizeVariants safely via parseSizeVariants (filtering out any legacy/artificial base product)
+      const parsedVariants = parseSizeVariants(product).filter(v => 
+        !v.isBase && 
+        String(v.size || '').trim().toLowerCase() !== 'base product' && 
+        String(v.measureValue || '').trim().toLowerCase() !== 'base product'
+      );
       if (parsedVariants.length > 0) {
         setSizeVariants(parsedVariants.map(v => ({
           size: v.size || v.measureValue || '',
@@ -851,9 +855,14 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
 
       setSubmitting(true);
       try {
-        const validPrices = sizeVariants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
+        const cleanVariants = sizeVariants.filter(v => 
+          !v.isBase && 
+          String(v.size || '').trim().toLowerCase() !== 'base product' && 
+          String(v.measureValue || '').trim().toLowerCase() !== 'base product'
+        );
+        const validPrices = cleanVariants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
         const minVariantPrice = validPrices.length > 0 ? Math.min(...validPrices) : Number(formData.price);
-        const totalVariantStock = sizeVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+        const totalVariantStock = cleanVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
 
         const finalImages = (formData.images && formData.images.length > 0)
           ? formData.images
@@ -877,11 +886,11 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
           gstRate: selectedGstNum,
           isGstInclusive: parseBool(formData.isGstInclusive, true),
           bundleType: 'single',
-          price: sizeVariants.length > 0 ? minVariantPrice : Number(formData.price),
+          price: cleanVariants.length > 0 ? minVariantPrice : Number(formData.price),
           originalPrice: Number(formData.originalPrice) || Math.round(minVariantPrice * 1.25),
           mrp: Number(formData.originalPrice) || Math.round(minVariantPrice * 1.25),
-          stockQuantity: sizeVariants.length > 0 ? totalVariantStock : Number(formData.stockQuantity || 0),
-          stock: sizeVariants.length > 0 ? totalVariantStock : Number(formData.stockQuantity || 0),
+          stockQuantity: cleanVariants.length > 0 ? totalVariantStock : Number(formData.stockQuantity || 0),
+          stock: cleanVariants.length > 0 ? totalVariantStock : Number(formData.stockQuantity || 0),
           image: primaryImg,
           images: finalImages,
           paymentMethodAllowed: paymentAllowedStr,
@@ -895,8 +904,8 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
           isRefundable: Boolean(formData.isRefundable ?? formData.isExchangeable ?? formData.isReturnable),
           returnWindowDays: Number(formData.returnWindowDays) || 7,
           sizeChart: formData.enableSizeChart ? formData.sizeChart : { rows: [] },
-          sizes: sizeVariants.map(v => v.size || v.measureValue),
-          sizeVariants: sizeVariants.map(v => ({
+          sizes: cleanVariants.map(v => v.size || v.measureValue),
+          sizeVariants: cleanVariants.map(v => ({
             size: v.size || v.measureValue,
             measureScale: v.measureScale || 'size',
             measureValue: v.measureValue || v.size,
@@ -910,7 +919,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
             images: Array.isArray(v.images) && v.images.length > 0 ? v.images : [v.image || primaryImg],
             sku: v.sku || `${formData.sku}-${v.size}`
           })),
-          variants: sizeVariants.map(v => ({
+          variants: cleanVariants.map(v => ({
             size: v.size || v.measureValue,
             measureScale: v.measureScale || 'size',
             measureValue: v.measureValue || v.size,

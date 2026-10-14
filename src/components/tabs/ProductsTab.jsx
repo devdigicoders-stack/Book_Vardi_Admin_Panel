@@ -424,7 +424,7 @@ export default function ProductsTab() {
                               title="Click to expand variant list & details"
                             >
                               <Layers size={11} />
-                              <span>{p.sizeVariants.length} Variants</span>
+                              <span>{pVariants.length} Variants</span>
                               {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                             </button>
                           )}

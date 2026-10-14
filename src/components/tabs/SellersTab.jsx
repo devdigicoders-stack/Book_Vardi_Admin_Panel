@@ -14,14 +14,17 @@ import {
   RefreshCw,
   AlertTriangle,
   Clock,
-  Filter
+  Filter,
+  CreditCard
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import SellerDetailModal from '../modals/SellerDetailModal';
+import SellerFinanceModal from '../modals/SellerFinanceModal';
 
 export default function SellersTab() {
   const { 
     sellers, 
+    orders = [],
     approveSeller, 
     rejectSeller, 
     setPendingSeller,
@@ -37,6 +40,7 @@ export default function SellersTab() {
   const [selectedStatusTab, setSelectedStatusTab] = useState('all');
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [financeSeller, setFinanceSeller] = useState(null);
 
   // Status counts
   const counts = {
@@ -271,21 +275,35 @@ export default function SellersTab() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between text-xs pt-1">
+                <div className="flex items-center justify-between text-xs pt-1 gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold text-teal-700 flex items-center gap-1">
                     <Star size={13} className="text-amber-400 fill-amber-400" />
                     <span>{seller.rating > 0 ? seller.rating : 'New Seller'}</span>
                   </span>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenDetail(seller);
-                    }}
-                    className="text-xs text-teal-800 hover:text-teal-950 font-extrabold flex items-center gap-1"
-                  >
-                    <span>Full Details & Dossier →</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFinanceSeller(seller);
+                      }}
+                      className="text-[11px] bg-teal-50 hover:bg-teal-100 text-teal-900 font-extrabold px-2.5 py-1 rounded-lg border border-teal-200 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="View dynamic order cuts, Rule 1 settlements & deductions"
+                    >
+                      <CreditCard size={12} className="text-teal-700" />
+                      <span>Finance & Settlement (₹)</span>
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenDetail(seller);
+                      }}
+                      className="text-xs text-teal-800 hover:text-teal-950 font-extrabold flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Full Dossier →</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -313,8 +331,19 @@ export default function SellersTab() {
         onToggleStatus={toggleSellerStatus}
         onUpdateCommission={updateSellerCommission}
         onReleasePayout={releaseSellerPayout}
+        onOpenFinance={(seller) => setFinanceSeller(seller)}
         readOnly={!canEdit}
       />
+
+      {/* Seller Finance & Settlement Modal */}
+      {financeSeller && (
+        <SellerFinanceModal
+          isOpen={!!financeSeller}
+          onClose={() => setFinanceSeller(null)}
+          seller={financeSeller}
+          orders={orders}
+        />
+      )}
 
     </div>
   );

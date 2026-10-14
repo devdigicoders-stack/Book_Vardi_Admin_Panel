@@ -40,6 +40,7 @@ export default function SellerDetailModal({
   onToggleStatus,
   onUpdateCommission, 
   onReleasePayout,
+  onOpenFinance,
   readOnly = false 
 }) {
   if (!isOpen || !seller) return null;
@@ -1449,14 +1450,30 @@ export default function SellerDetailModal({
                     </span>
                   </div>
 
-                  {seller.payoutBalance > 0 && (
-                    <button
-                      onClick={handlePayout}
-                      className="px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                    >
-                      Release ₹{seller.payoutBalance.toLocaleString()} Payout
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {onOpenFinance && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onOpenFinance(seller);
+                        }}
+                        className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                        title="View dynamic order cuts, Rule 1 settlements & deductions"
+                      >
+                        <CreditCard size={14} />
+                        <span>View Settlement Ledger & Cuts</span>
+                      </button>
+                    )}
+
+                    {seller.payoutBalance > 0 && (
+                      <button
+                        onClick={handlePayout}
+                        className="px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                      >
+                        Release ₹{seller.payoutBalance.toLocaleString()} Payout
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
