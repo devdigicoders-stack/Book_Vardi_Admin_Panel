@@ -893,6 +893,20 @@ export const deleteAnnouncementApi = async (id) => {
   }
 };
 
+export const broadcastPromotionalSmsApi = async (payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/broadcast-sms`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+
 // ==========================================
 // 10. Customer Reviews Moderation APIs
 // ==========================================

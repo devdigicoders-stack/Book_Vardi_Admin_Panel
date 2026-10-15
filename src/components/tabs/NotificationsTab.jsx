@@ -8,9 +8,11 @@ import {
   CheckCheck, 
   Trash2,
   CheckCircle2,
-  Users
+  Users,
+  AlertCircle
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
+import { broadcastPromotionalSmsApi } from '../../utils/api';
 
 export default function NotificationsTab() {
   const { 
@@ -25,9 +27,47 @@ export default function NotificationsTab() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [sentAlert, setSentAlert] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  const handleBroadcast = (e) => {
+  // SMS Promotional Template controls (Fast2SMS DLT Approved Templates 11 & 12)
+  const [smsTemplateType, setSmsTemplateType] = useState('special_discount'); // 'special_discount' | 'back_to_school'
+  const [smsStoreUrl, setSmsStoreUrl] = useState('https://bookvardi.in');
+  const [customPhones, setCustomPhones] = useState('');
+
+  const handleBroadcast = async (e) => {
     e.preventDefault();
+
+    if (channel === 'SMS') {
+      setIsSending(true);
+      try {
+        const payload = {
+          templateType: smsTemplateType,
+          storeUrl: smsTemplateType === 'back_to_school' ? smsStoreUrl : undefined,
+          audience: customPhones.trim() ? undefined : (audience === 'sellers' ? 'sellers' : 'all'),
+          customPhones: customPhones.trim() ? customPhones.split(',').map(p => p.trim()).filter(Boolean) : undefined
+        };
+
+        const res = await broadcastPromotionalSmsApi(payload);
+        if (res?.success) {
+          setSentAlert(`DLT SMS Broadcast Sent! Successfully delivered to ${res.successCount || 0} recipient(s).`);
+          broadcastNotification({
+            title: `DLT Promotional SMS Dispatched`,
+            message: `Template: ${smsTemplateType === 'back_to_school' ? 'Back to School (#225925)' : 'Special Discount (#225924)'} sent to ${res.successCount || 0} phones.`,
+            type: 'sms'
+          });
+          setCustomPhones('');
+        } else {
+          setSentAlert(`SMS Broadcast failed: ${res?.message || 'Server error'}`);
+        }
+      } catch (err) {
+        setSentAlert(`SMS broadcast failed: ${err.message}`);
+      } finally {
+        setIsSending(false);
+        setTimeout(() => setSentAlert(''), 6000);
+      }
+      return;
+    }
+
     if (!title.trim() || !message.trim()) return;
 
     broadcastNotification({
@@ -106,51 +146,115 @@ export default function NotificationsTab() {
               </div>
             </div>
 
-            {/* Target Audience */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Target Audience</label>
-              <select
-                value={audience}
-                onChange={e => setAudience(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs font-semibold focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
-              >
-                <option value="all">Everyone (All Students, Parents & Sellers)</option>
-                <option value="sellers">Verified Merchants Only</option>
-                <option value="schools">Partner School Coordinators</option>
-              </select>
-            </div>
+            {channel === 'SMS' ? (
+              <div className="space-y-3 bg-amber-50/60 p-3.5 rounded-xl border border-amber-200">
+                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                  <Smartphone size={14} className="text-amber-700" />
+                  <span>Fast2SMS DLT Approved Templates</span>
+                </div>
 
-            {/* Subject */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Announcement Subject *</label>
-              <input
-                type="text"
-                required
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. Back-to-School Stock Clearance Announced"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden"
-              />
-            </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">Select DLT Content Template</label>
+                  <select
+                    value={smsTemplateType}
+                    onChange={e => setSmsTemplateType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-xs font-semibold focus:ring-2 focus:ring-amber-500 bg-white"
+                  >
+                    <option value="special_discount">Template #12 (225924): Special Discount Promo</option>
+                    <option value="back_to_school">Template #11 (225925): Back to School Shopping with URL</option>
+                  </select>
+                </div>
 
-            {/* Message Body */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Message Body *</label>
-              <textarea
-                rows="4"
-                required
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                placeholder="Type the message content that will appear on devices or inboxes..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden resize-none"
-              />
-            </div>
+                {smsTemplateType === 'back_to_school' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Store / Offer URL ({'{#VAR#}'})</label>
+                    <input
+                      type="url"
+                      value={smsStoreUrl}
+                      onChange={e => setSmsStoreUrl(e.target.value)}
+                      placeholder="https://bookvardi.in"
+                      className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-2 focus:ring-amber-500 bg-white"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">DLT Message Preview</label>
+                  <div className="p-2.5 bg-white rounded-lg border border-amber-200 text-xs text-gray-800 font-mono text-[11px] leading-relaxed shadow-xs">
+                    {smsTemplateType === 'back_to_school'
+                      ? `Back to school shopping is now easier with book vardi . Shop school uniforms and books today : ${smsStoreUrl || 'https://bookvardi.in'} -BOOK VARDI`
+                      : `Book vardi special discount is available on school uniforms and books . shop now and save more . -BOOK VARDI`
+                    }
+                  </div>
+                  <p className="text-[10px] text-amber-800 mt-1">
+                    * Sender ID: <strong>BKVRDI</strong> | Entity ID: <strong>1101532180000098761</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">Direct Phone Numbers (Optional)</label>
+                  <input
+                    type="text"
+                    value={customPhones}
+                    onChange={e => setCustomPhones(e.target.value)}
+                    placeholder="e.g. 9876543210, 9123456780 (leave blank to send to selected audience)"
+                    className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-xs focus:ring-2 focus:ring-amber-500 bg-white"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    If blank, will broadcast to: <strong>{audience === 'sellers' ? 'All Verified Merchants' : 'All Registered Users & Merchants'}</strong>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Target Audience */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Target Audience</label>
+                  <select
+                    value={audience}
+                    onChange={e => setAudience(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs font-semibold focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
+                  >
+                    <option value="all">Everyone (All Students, Parents & Sellers)</option>
+                    <option value="sellers">Verified Merchants Only</option>
+                    <option value="schools">Partner School Coordinators</option>
+                  </select>
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Announcement Subject *</label>
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="e.g. Back-to-School Stock Clearance Announced"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden"
+                  />
+                </div>
+
+                {/* Message Body */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Message Body *</label>
+                  <textarea
+                    rows="4"
+                    required
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    placeholder="Type the message content that will appear on devices or inboxes..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:ring-2 focus:ring-brand-yellow outline-hidden resize-none"
+                  />
+                </div>
+              </>
+            )}
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              disabled={isSending}
+              className={`w-full py-2.5 ${channel === 'SMS' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark'} font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50`}
             >
-              <Send size={14} /> Send Broadcast Now
+              <Send size={14} /> {isSending ? 'Dispatching Broadcast...' : (channel === 'SMS' ? 'Dispatch Approved DLT SMS' : 'Send Broadcast Now')}
             </button>
           </form>
         </div>
