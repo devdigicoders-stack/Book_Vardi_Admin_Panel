@@ -19,9 +19,11 @@ import {
   Receipt,
   ChevronRight,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
+import { reconcileAllSellersApi, fetchAdminSellersApi } from '../../utils/api';
 import SellerFinanceModal from '../modals/SellerFinanceModal';
 import TaxInvoiceModal from '../modals/TaxInvoiceModal';
 
@@ -32,8 +34,26 @@ export default function FinanceTab() {
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [vendorFilter, setVendorFilter] = useState('all'); // 'all' | 'pending' | 'settled'
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const canEdit = isEditor ? isEditor('finance') : true;
+
+  const handleReconcileAll = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await reconcileAllSellersApi();
+      if (res?.success) {
+        setPayoutSuccessMsg(`Successfully synchronized all seller settlements with Return Window + 1 day holding rules.`);
+        setTimeout(() => setPayoutSuccessMsg(''), 5000);
+        // Refresh sellers list
+        window.location.reload();
+      }
+    } catch (err) {
+      console.warn('Reconcile error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Real aggregate financial calculations (100% dynamic, ZERO hardcoded offsets)
   const financeKPIs = useMemo(() => {
@@ -142,7 +162,8 @@ export default function FinanceTab() {
       });
 
       const netEarnings = Math.max(0, Math.round((realSales - realPlatformCut) * 100) / 100);
-      const payableBalance = Number(s.walletBalance ?? s.payoutBalance ?? 0);
+      const payableBalance = Math.max(0, Number(s.walletBalance ?? 0));
+      const pendingBalance = Math.max(0, Number(s.pendingSettlementBalance ?? 0));
 
       return {
         ...s,
@@ -153,6 +174,7 @@ export default function FinanceTab() {
         codCount,
         upiCount,
         payableBalance,
+        pendingBalance,
         commissionRate: commRate
       };
     });
@@ -161,8 +183,8 @@ export default function FinanceTab() {
   // Filter sellers by query & status
   const filteredSellers = useMemo(() => {
     return enrichedSellers.filter(s => {
-      if (vendorFilter === 'pending' && s.payableBalance <= 0) return false;
-      if (vendorFilter === 'settled' && s.payableBalance > 0) return false;
+      if (vendorFilter === 'pending' && s.payableBalance <= 0 && s.pendingBalance <= 0) return false;
+      if (vendorFilter === 'settled' && (s.payableBalance > 0 || s.pendingBalance > 0)) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -209,10 +231,19 @@ export default function FinanceTab() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleReconcileAll}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            title="Reconcile return windows and mature eligible settlements"
+          >
+            <RefreshCw size={13} className={isSyncing ? 'animate-spin text-teal-700' : 'text-teal-700'} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Settlements'}</span>
+          </button>
+          <button
             onClick={handleReleaseAllPayouts}
             disabled={financeKPIs.totalSellerPending === 0 || !canEdit}
             title={!canEdit ? "View-Only: Payout releases are restricted" : undefined}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-yellow hover:bg-brand-yellow-hover disabled:opacity-50 text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover disabled:opacity-50 text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
           >
             <Landmark size={15} /> Disburse All Pending Payouts (₹{financeKPIs.totalSellerPending.toLocaleString('en-IN')})
           </button>
@@ -388,7 +419,7 @@ export default function FinanceTab() {
                 <th className="px-4 py-3.5 text-center">Commission Cut</th>
                 <th className="px-4 py-3.5">Payment Split</th>
                 <th className="px-4 py-3.5 text-right">Gross Sales</th>
-                <th className="px-4 py-3.5 text-right">Payable Balance</th>
+                <th className="px-4 py-3.5 text-right">Settlement Balance</th>
                 <th className="px-4 py-3.5 text-right">Action</th>
               </tr>
             </thead>
@@ -462,13 +493,23 @@ export default function FinanceTab() {
                       ₹{s.realSales.toLocaleString('en-IN')}
                     </td>
 
-                    {/* Payable Balance */}
+                    {/* Settlement Balance (Matured vs Return Window) */}
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                      <span className={`font-display font-extrabold text-sm ${
-                        s.payableBalance > 0 ? 'text-amber-950 font-black' : 'text-gray-400'
-                      }`}>
-                        ₹{s.payableBalance.toLocaleString('en-IN')}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className={`font-display font-extrabold text-sm ${
+                          s.payableBalance > 0 ? 'text-emerald-700 font-black' : 'text-gray-400'
+                        }`}>
+                          ₹{s.payableBalance.toLocaleString('en-IN')}
+                        </span>
+                        {s.pendingBalance > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5" title="Funds locked until return/exchange window + 1 day completes">
+                            <Clock size={10} className="text-amber-600" />
+                            <span>₹{s.pendingBalance.toLocaleString('en-IN')} held (in window)</span>
+                          </span>
+                        ) : s.payableBalance === 0 ? (
+                          <span className="text-[10px] text-gray-400 font-medium">No pending payout</span>
+                        ) : null}
+                      </div>
                     </td>
 
                     {/* Action */}
@@ -487,7 +528,7 @@ export default function FinanceTab() {
                           <button
                             onClick={() => {
                               if (!canEdit) return;
-                              if (window.confirm(`Release payout of ₹${s.payableBalance.toLocaleString()} to ${s.storeName}?`)) {
+                              if (window.confirm(`Release matured settlement payout of ₹${s.payableBalance.toLocaleString()} to ${s.storeName}?`)) {
                                 releaseSellerPayout(s.id || s._id, s.payableBalance);
                               }
                             }}
@@ -496,6 +537,10 @@ export default function FinanceTab() {
                           >
                             Disburse
                           </button>
+                        ) : s.pendingBalance > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl font-extrabold border border-amber-200" title="Order is currently inside the return window + 1 day buffer. Settlement will unlock once return window completes.">
+                            <Clock size={12} className="text-amber-700 shrink-0" /> In Return Window
+                          </span>
                         ) : (
                           <span className="text-[11px] text-gray-400 font-semibold flex items-center gap-1 pl-1">
                             <CheckCircle size={13} className="text-emerald-500" /> Settled

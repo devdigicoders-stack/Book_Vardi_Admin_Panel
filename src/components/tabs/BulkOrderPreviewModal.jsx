@@ -840,17 +840,35 @@ export default function BulkOrderPreviewModal({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
-              order.status === 'quote_accepted'
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
-                : order.status === 'published' || order.status === 'assigned'
-                ? 'bg-blue-500/20 text-blue-300 border-blue-400/40'
-                : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-            }`}>
-              {order.status === 'quote_accepted' ? 'Quote Accepted & Finalized' :
-               order.status === 'published' ? 'Marketplace RFQ Published' :
-               order.status === 'assigned' ? 'Assigned to Vendor' : 'Pending Distribution'}
-            </span>
+            {(() => {
+              const modalStatusNorm = String(order.deliveryStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+              const isDeliveredModal = ['delivered', 'received', 'completed', 'fulfilled'].includes(modalStatusNorm) || order.remainingPaymentStatus === 'paid' || Boolean(order.deliveryDetails?.deliveredAt);
+              const isOutModal = !isDeliveredModal && (modalStatusNorm === 'out for delivery' || Boolean(order.deliveryDetails?.dispatchedAt));
+              const isPackedModal = !isDeliveredModal && !isOutModal && modalStatusNorm === 'packed';
+
+              return (
+                <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
+                  isDeliveredModal
+                    ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                    : isOutModal
+                    ? 'bg-amber-500/25 text-amber-200 border-amber-400/50'
+                    : isPackedModal
+                    ? 'bg-cyan-500/25 text-cyan-200 border-cyan-400/50'
+                    : order.status === 'quote_accepted'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                    : order.status === 'published' || order.status === 'assigned'
+                    ? 'bg-blue-500/20 text-blue-300 border-blue-400/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                }`}>
+                  {isDeliveredModal ? '✅ Consignment Delivered & Received' :
+                   isOutModal ? '🚚 Out for Delivery (Store Fleet)' :
+                   isPackedModal ? '📦 Consignment Packed & Ready' :
+                   order.status === 'quote_accepted' ? 'Quote Accepted & Finalized' :
+                   order.status === 'published' ? 'Marketplace RFQ Published' :
+                   order.status === 'assigned' ? 'Assigned to Vendor' : 'Pending Distribution'}
+                </span>
+              );
+            })()}
 
             <button
               onClick={onClose}

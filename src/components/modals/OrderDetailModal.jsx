@@ -97,6 +97,10 @@ export default function OrderDetailModal({
   const [isResendingWhatsApp, setIsResendingWhatsApp] = useState(false);
   const [whatsappSentRef, setWhatsappSentRef] = useState(null);
 
+  // Workflow action loading and feedback state
+  const [actionLoadingKey, setActionLoadingKey] = useState(null);
+  const [actionFeedback, setActionFeedback] = useState(null); // { type: 'success' | 'error', message: string }
+
   const [returnActionState, setReturnActionState] = useState({
     showRejectInput: false,
     rejectionReason: '',
@@ -109,39 +113,74 @@ export default function OrderDetailModal({
     exchangeCourier: ''
   });
 
-  const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}) => {
+  const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}, actionKey = 'workflow') => {
     const orderIdentifier = order?._id || order?.id || order?.orderId;
-    if (onUpdateReturnExchangeStatus && orderIdentifier) {
-      try {
-        const res = await onUpdateReturnExchangeStatus(orderIdentifier, {
+    if (!orderIdentifier) {
+      if (toast?.error) toast.error('Order identifier missing');
+      return;
+    }
+
+    setActionLoadingKey(actionKey);
+    setActionFeedback(null);
+
+    try {
+      let res;
+      if (onUpdateReturnExchangeStatus) {
+        res = await onUpdateReturnExchangeStatus(orderIdentifier, {
           status: newStatus,
           ...extraPayload
         });
-        if (res && res.success === false) {
-          if (toast?.error) {
-            toast.error(res.message || 'Failed to update Return/Exchange status');
-          }
-          return;
-        }
-        if (toast?.success) {
-          toast.success(`Return/Exchange status updated to ${newStatus.replace(/_/g, ' ')}`);
-        }
-        setReturnActionState({
-          showRejectInput: false,
-          rejectionReason: '',
-          showPickupInput: false,
-          pickupDate: '',
-          showRefundInput: false,
-          refundTxnId: '',
-          showDispatchInput: false,
-          exchangeAwb: '',
-          exchangeCourier: ''
-        });
-      } catch (err) {
-        if (toast?.error) {
-          toast.error(err.message || 'Failed to update Return/Exchange status');
-        }
       }
+
+      if (res && res.success === false) {
+        const errorMsg = res.message || 'Failed to update Return/Exchange status';
+        setActionFeedback({ type: 'error', message: errorMsg });
+        if (toast?.error) {
+          toast.error(errorMsg);
+        }
+        return;
+      }
+
+      // Optimistically / immediately update local currentOrder so the UI steps advance right away!
+      const updatedOrder = res?.order || {};
+      setCurrentOrder(prev => ({
+        ...(prev || order),
+        ...updatedOrder,
+        status: updatedOrder.status || (prev || order).status,
+        overallStatus: updatedOrder.overallStatus || (prev || order).overallStatus,
+        returnRequest: updatedOrder.returnRequest || {
+          ...((prev || order).returnRequest || {}),
+          status: newStatus,
+          ...extraPayload
+        }
+      }));
+
+      const readableStatus = String(newStatus).replace(/_/g, ' ');
+      const successMsg = `Return/Exchange status updated to ${readableStatus}`;
+      setActionFeedback({ type: 'success', message: successMsg });
+      if (toast?.success) {
+        toast.success(successMsg);
+      }
+
+      setReturnActionState({
+        showRejectInput: false,
+        rejectionReason: '',
+        showPickupInput: false,
+        pickupDate: '',
+        showRefundInput: false,
+        refundTxnId: '',
+        showDispatchInput: false,
+        exchangeAwb: '',
+        exchangeCourier: ''
+      });
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to update Return/Exchange status. Please verify server connection.';
+      setActionFeedback({ type: 'error', message: errorMsg });
+      if (toast?.error) {
+        toast.error(errorMsg);
+      }
+    } finally {
+      setActionLoadingKey(null);
     }
   };
 
@@ -359,12 +398,14 @@ export default function OrderDetailModal({
     handleSaveDeliveryDetails();
   };
 
-  const handleApplyStatusUpdate = (targetStatus) => {
+  const handleApplyStatusUpdate = async (targetStatus) => {
     const statusToApply = targetStatus || selectedStatus;
     const activeOrder = displayOrder || order;
     if (!activeOrder) return;
     const orderIdentifier = activeOrder._id || activeOrder.id || activeOrder.orderId;
     setSelectedStatus(statusToApply);
+    setActionLoadingKey('status');
+    setActionFeedback(null);
 
     // Fulfillment forward milestone ranks
     const STATUS_PROGRESSION_RANK = {
@@ -406,11 +447,25 @@ export default function OrderDetailModal({
       }));
     }
 
-    if (onUpdateStatus) {
-      onUpdateStatus(orderIdentifier, statusToApply);
+    try {
+      if (onUpdateStatus) {
+        await onUpdateStatus(orderIdentifier, statusToApply);
+      }
+      setStatusUpdatedToast(true);
+      if (toast?.success) {
+        toast.success(`Order status updated to ${statusToApply}`);
+      }
+      setActionFeedback({ type: 'success', message: `Order status successfully updated to ${statusToApply}` });
+      setTimeout(() => setStatusUpdatedToast(false), 2500);
+    } catch (err) {
+      const errMsg = err.message || 'Failed to update order status';
+      setActionFeedback({ type: 'error', message: errMsg });
+      if (toast?.error) {
+        toast.error(errMsg);
+      }
+    } finally {
+      setActionLoadingKey(null);
     }
-    setStatusUpdatedToast(true);
-    setTimeout(() => setStatusUpdatedToast(false), 2500);
   };
 
   const handleStatusChange = (status) => {
@@ -678,9 +733,43 @@ export default function OrderDetailModal({
               {/* Admin Action Workflow Buttons */}
               {!readOnly && (
                 <div className="pt-2 border-t border-amber-200/60 space-y-2">
-                  <div className="text-[11px] font-bold text-amber-900">Admin Action Workflow:</div>
+                  <div className="text-[11px] font-bold text-amber-900 flex items-center justify-between">
+                    <span>Admin Action Workflow:</span>
+                    {actionLoadingKey && (
+                      <span className="text-[10px] text-amber-700 flex items-center gap-1 font-semibold animate-pulse">
+                        <Loader2 size={12} className="animate-spin text-amber-600" /> Processing action...
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Inline Action Feedback Banner */}
+                  {actionFeedback && (
+                    <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                      actionFeedback.type === 'success' 
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs' 
+                        : 'bg-rose-50 border-rose-300 text-rose-900 shadow-xs'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {actionFeedback.type === 'success' ? (
+                          <CheckCircle size={15} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle size={15} className="text-rose-600 shrink-0" />
+                        )}
+                        <span>{actionFeedback.message}</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setActionFeedback(null)} 
+                        className="text-gray-400 hover:text-gray-700 font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                        title="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   {(() => {
-                    const retReq = order.returnRequest || {};
+                    const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
                     const retStatus = String(retReq.status || '').toLowerCase().trim();
                     const retType = String(retReq.type || retReq.requestType || (retStatus.includes('exchange') ? 'exchange' : 'return')).toLowerCase().trim();
                     const isExchange = retType === 'exchange';
@@ -698,17 +787,26 @@ export default function OrderDetailModal({
                           <>
                             <button
                               type="button"
-                              onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved')}
-                              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              disabled={Boolean(actionLoadingKey)}
+                              onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved', {}, 'approve')}
+                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                             >
-                              ✓ Approve {isExchange ? 'Exchange' : 'Return'}
+                              {actionLoadingKey === 'approve' ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin text-white" />
+                                  <span>Approving {isExchange ? 'Exchange' : 'Return'}...</span>
+                                </>
+                              ) : (
+                                <span>✓ Approve {isExchange ? 'Exchange' : 'Return'}</span>
+                              )}
                             </button>
                             <button
                               type="button"
+                              disabled={Boolean(actionLoadingKey)}
                               onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
-                              className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                             >
-                              ✕ Reject Request
+                              <span>✕ Reject Request</span>
                             </button>
                           </>
                         )}
@@ -716,50 +814,69 @@ export default function OrderDetailModal({
                         {isApproved && (
                           <button
                             type="button"
+                            disabled={Boolean(actionLoadingKey)}
                             onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
-                            className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            📅 Schedule Pickup
+                            <span>📅 Schedule Pickup</span>
                           </button>
                         )}
 
                         {isPickupScheduled && (
                           <button
                             type="button"
-                            onClick={() => handleReturnExchangeStatusUpdate('product_received')}
-                            className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            disabled={Boolean(actionLoadingKey)}
+                            onClick={() => handleReturnExchangeStatusUpdate('product_received', {}, 'received')}
+                            className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            📦 Mark Product Received & Restore Stock
+                            {actionLoadingKey === 'received' ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin text-white" />
+                                <span>Restoring Stock...</span>
+                              </>
+                            ) : (
+                              <span>📦 Mark Product Received & Restore Stock</span>
+                            )}
                           </button>
                         )}
 
                         {isProductReceived && isReturn && (
                           <button
                             type="button"
+                            disabled={Boolean(actionLoadingKey)}
                             onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            💳 Mark Refund Completed
+                            <span>💳 Mark Refund Completed</span>
                           </button>
                         )}
 
                         {isProductReceived && isExchange && (
                           <button
                             type="button"
+                            disabled={Boolean(actionLoadingKey)}
                             onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
-                            className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            🚚 Dispatch Replacement Unit
+                            <span>🚚 Dispatch Replacement Unit</span>
                           </button>
                         )}
 
                         {isExchangeDispatched && (
                           <button
                             type="button"
-                            onClick={() => handleReturnExchangeStatusUpdate('exchanged')}
-                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            disabled={Boolean(actionLoadingKey)}
+                            onClick={() => handleReturnExchangeStatusUpdate('exchanged', {}, 'complete')}
+                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            ✓ Complete Exchange
+                            {actionLoadingKey === 'complete' ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin text-white" />
+                                <span>Completing Exchange...</span>
+                              </>
+                            ) : (
+                              <span>✓ Complete Exchange</span>
+                            )}
                           </button>
                         )}
                       </div>
@@ -777,10 +894,18 @@ export default function OrderDetailModal({
                       />
                       <button
                         type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('rejected', { rejectionReason: returnActionState.rejectionReason })}
-                        className="px-3 py-1 bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                        disabled={Boolean(actionLoadingKey) || !returnActionState.rejectionReason.trim()}
+                        onClick={() => handleReturnExchangeStatusUpdate('rejected', { rejectionReason: returnActionState.rejectionReason }, 'reject')}
+                        className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
-                        Confirm Rejection
+                        {actionLoadingKey === 'reject' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-white" />
+                            <span>Rejecting...</span>
+                          </>
+                        ) : (
+                          <span>Confirm Rejection</span>
+                        )}
                       </button>
                     </div>
                   )}
@@ -796,10 +921,18 @@ export default function OrderDetailModal({
                       />
                       <button
                         type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('pickup_scheduled', { pickupDate: returnActionState.pickupDate })}
-                        className="ml-2 px-3 py-1 bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                        disabled={Boolean(actionLoadingKey)}
+                        onClick={() => handleReturnExchangeStatusUpdate('pickup_scheduled', { pickupDate: returnActionState.pickupDate }, 'pickup')}
+                        className="ml-2 px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
-                        Confirm Pickup Date
+                        {actionLoadingKey === 'pickup' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-white" />
+                            <span>Scheduling Pickup...</span>
+                          </>
+                        ) : (
+                          <span>Confirm Pickup Date</span>
+                        )}
                       </button>
                     </div>
                   )}
@@ -815,10 +948,18 @@ export default function OrderDetailModal({
                       />
                       <button
                         type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('refund_completed', { refundTxnId: returnActionState.refundTxnId })}
-                        className="px-3 py-1 bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                        disabled={Boolean(actionLoadingKey)}
+                        onClick={() => handleReturnExchangeStatusUpdate('refund_completed', { refundTxnId: returnActionState.refundTxnId }, 'refund')}
+                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
-                        Confirm Refund Completed
+                        {actionLoadingKey === 'refund' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-white" />
+                            <span>Confirming Refund...</span>
+                          </>
+                        ) : (
+                          <span>Confirm Refund Completed</span>
+                        )}
                       </button>
                     </div>
                   )}
@@ -843,10 +984,18 @@ export default function OrderDetailModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleReturnExchangeStatusUpdate('exchange_dispatched', { exchangeAwb: returnActionState.exchangeAwb, exchangeCourier: returnActionState.exchangeCourier })}
-                        className="px-3 py-1 bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                        disabled={Boolean(actionLoadingKey)}
+                        onClick={() => handleReturnExchangeStatusUpdate('exchange_dispatched', { exchangeAwb: returnActionState.exchangeAwb, exchangeCourier: returnActionState.exchangeCourier }, 'dispatch')}
+                        className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
                       >
-                        Confirm Replacement Dispatched
+                        {actionLoadingKey === 'dispatch' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-white" />
+                            <span>Dispatching Replacement...</span>
+                          </>
+                        ) : (
+                          <span>Confirm Replacement Dispatched</span>
+                        )}
                       </button>
                     </div>
                   )}
@@ -901,10 +1050,18 @@ export default function OrderDetailModal({
 
                 <button
                   type="button"
+                  disabled={Boolean(actionLoadingKey)}
                   onClick={() => handleApplyStatusUpdate(selectedStatus)}
-                  className="px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                  className={`px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    actionLoadingKey === 'status' ? 'opacity-70 cursor-not-allowed' : ''
+                  }`}
                 >
-                  {statusUpdatedToast ? (
+                  {actionLoadingKey === 'status' ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin text-white" />
+                      <span>Updating Status...</span>
+                    </>
+                  ) : statusUpdatedToast ? (
                     <>
                       <Check size={14} className="text-emerald-300" />
                       <span>Updated Status!</span>
@@ -941,32 +1098,43 @@ export default function OrderDetailModal({
                 >
                   <FileText size={13} /> Tax Invoice & Settlement
                 </button>
-                {(order.paymentStatus?.toLowerCase() === 'refunded' ||
-                  order.status?.toLowerCase().includes('refund') ||
-                  order.returnRequest?.status?.toLowerCase().includes('refund') ||
-                  order.status === 'product_received' ||
-                  order.status === 'cancelled') && (
-                  <a
-                    href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
-                  >
-                    <FileText size={13} /> GST Credit Note
-                  </a>
-                )}
-                {(order.returnRequest?.type === 'exchange' ||
-                  order.returnRequest?.requestType === 'exchange' ||
-                  String(order.status).toLowerCase().includes('exchange')) && (
-                  <a
-                    href={`${SERVER_URL}/orders/${order.id || order._id}/exchange-invoice`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-indigo-200"
-                  >
-                    <FileText size={13} /> Exchange Invoice
-                  </a>
-                )}
+                {/* Statutory Invoicing: Exchange gets Exchange Tax Invoice ONLY; Returns/Refunds get Credit Note */}
+                {(() => {
+                  const retType = String(order.returnRequest?.type || order.returnRequest?.requestType || '').toLowerCase();
+                  const isOrderExchange = retType === 'exchange' || String(order.status).toLowerCase().includes('exchange');
+                  const isReturnOrRefund = !isOrderExchange && (
+                    order.paymentStatus?.toLowerCase() === 'refunded' ||
+                    order.status?.toLowerCase().includes('refund') ||
+                    order.returnRequest?.status?.toLowerCase().includes('refund') ||
+                    (order.status === 'product_received' && retType === 'return') ||
+                    order.status === 'cancelled'
+                  );
+
+                  return (
+                    <>
+                      {isReturnOrRefund && (
+                        <a
+                          href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
+                        >
+                          <FileText size={13} /> GST Credit Note
+                        </a>
+                      )}
+                      {isOrderExchange && (
+                        <a
+                          href={`${SERVER_URL}/orders/${order.id || order._id}/exchange-invoice`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-indigo-200"
+                        >
+                          <FileText size={13} /> Exchange Tax Invoice
+                        </a>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

@@ -261,6 +261,15 @@ export default function SellerFinanceModal({
           paymentLabel,
           isCancelled,
           isDelivered,
+          returnWindowDays: Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7),
+          holdingDays: Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1,
+          settlementDueDate: order.settlementDueDate 
+            ? new Date(order.settlementDueDate) 
+            : new Date((order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || Date.now()))).getTime() + (Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1) * 24 * 60 * 60 * 1000),
+          isMatured: Boolean(isDelivered && (order.isSettlementMatured || (order.settlementDueDate ? Date.now() >= new Date(order.settlementDueDate).getTime() : false))),
+          daysRemaining: isDelivered 
+            ? Math.max(0, Math.ceil(((order.settlementDueDate ? new Date(order.settlementDueDate).getTime() : ((order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || Date.now()))).getTime() + (Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1) * 24 * 60 * 60 * 1000)) - Date.now()) / (24 * 60 * 60 * 1000)))
+            : null,
           dateStr: order.createdAt 
             ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
             : (order.date || 'Recent'),
@@ -941,9 +950,16 @@ export default function SellerFinanceModal({
                               <div className="text-[9px] text-rose-600 font-sans font-bold">Payable to Portal (COD)</div>
                             </div>
                           ) : (
-                            <span className="text-emerald-700">
-                              ₹{Number(o.finalSellerSettlement ?? o.netSellerShare ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
+                            <div>
+                              <span className="text-emerald-700">
+                                ₹{Number(o.finalSellerSettlement ?? o.netSellerShare ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              {o.isDelivered && (
+                                <div className={`text-[9px] font-sans font-bold mt-0.5 ${o.isMatured ? 'text-emerald-700' : 'text-amber-800'}`}>
+                                  {o.isMatured ? '✅ Matured & Payable' : `⏳ Held in window (${o.daysRemaining}d left)`}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
 
@@ -956,6 +972,11 @@ export default function SellerFinanceModal({
                           }`}>
                             {o.overallStatus || o.status || 'Processing'}
                           </span>
+                          {o.isDelivered && o.settlementDueDate && (
+                            <div className="text-[9px] text-gray-500 font-mono mt-0.5" title={`Unlocks after Return Window (${o.returnWindowDays}d) + 1 buffer day`}>
+                              Due: {new Date(o.settlementDueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))

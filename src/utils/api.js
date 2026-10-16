@@ -458,7 +458,7 @@ export const fetchAdminInventoryApi = async (params = {}) => {
     console.warn('fetchAdminInventoryApi error response:', errData);
     return null;
   } catch (error) {
-    console.error('fetchAdminInventoryApi request failed:', error);
+    console.warn('fetchAdminInventoryApi (offline/reconnecting):', error?.message || error);
     return null;
   }
 };
@@ -503,6 +503,18 @@ export const fetchAdminSellersApi = async () => {
     return data.sellers || data;
   } catch (error) {
     return null;
+  }
+};
+
+export const reconcileAllSellersApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/reconcile-all`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
   }
 };
 
@@ -1157,7 +1169,7 @@ export const fetchAdminCategoriesApi = async () => {
     if (!res.ok) throw new Error('Failed to fetch categories');
     return await res.json();
   } catch (error) {
-    console.error('fetchAdminCategoriesApi error:', error);
+    console.warn('fetchAdminCategoriesApi (offline/reconnecting):', error?.message || error);
     return null;
   }
 };

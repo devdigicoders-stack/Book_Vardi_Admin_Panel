@@ -315,11 +315,31 @@ export default function OrdersTab() {
                         <div className="text-[11px] text-gray-500">{sch.contactPerson} • {sch.contactPhone}</div>
                       </div>
                     </div>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                      hasWinningQuote ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {hasWinningQuote ? 'Quote Accepted' : sch.status}
-                    </span>
+                    {(() => {
+                      const schStatusNorm = String(sch.deliveryStatus || sch.status || '').toLowerCase().replace(/_/g, ' ');
+                      const isSchDelivered = ['delivered', 'received', 'completed', 'fulfilled'].includes(schStatusNorm) || sch.remainingPaymentStatus === 'paid' || Boolean(sch.deliveryDetails?.deliveredAt);
+                      const isSchOut = !isSchDelivered && (schStatusNorm === 'out for delivery' || Boolean(sch.deliveryDetails?.dispatchedAt));
+                      const isSchPacked = !isSchDelivered && !isSchOut && schStatusNorm === 'packed';
+
+                      return (
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          isSchDelivered
+                            ? 'bg-emerald-100 text-emerald-950 border border-emerald-400 font-black'
+                            : isSchOut
+                            ? 'bg-amber-100 text-amber-950 border border-amber-300 font-extrabold'
+                            : isSchPacked
+                            ? 'bg-cyan-100 text-cyan-900 border border-cyan-300'
+                            : hasWinningQuote
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {isSchDelivered ? '✅ Consignment Delivered' :
+                           isSchOut ? '🚚 Out for Delivery' :
+                           isSchPacked ? '📦 Consignment Packed' :
+                           hasWinningQuote ? 'Quote Accepted' : sch.status}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Winning Quote Banner */}
@@ -775,7 +795,13 @@ export default function OrdersTab() {
         }}
         onCancelOrder={cancelOrder}
         onRefundOrder={refundOrder}
-        onUpdateReturnExchangeStatus={updateReturnExchangeStatus}
+        onUpdateReturnExchangeStatus={async (ordId, payload) => {
+          const res = await updateReturnExchangeStatus(ordId, payload);
+          if (res?.order) {
+            setSelectedOrder(res.order);
+          }
+          return res;
+        }}
         readOnly={!canEdit}
       />
 

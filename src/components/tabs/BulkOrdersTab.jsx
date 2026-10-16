@@ -69,12 +69,16 @@ export default function BulkOrdersTab() {
   // Filtered Bulk Orders
   const filteredOrders = useMemo(() => {
     return (schoolOrders || []).filter(order => {
+      const statusNorm = String(order.deliveryStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+      const isDelivered = ['delivered', 'received', 'completed', 'fulfilled'].includes(statusNorm) || order.remainingPaymentStatus === 'paid' || Boolean(order.deliveryDetails?.deliveredAt);
+
       const statusMatch = 
         statusFilter === 'All' ||
+        (statusFilter === 'Delivered' && isDelivered) ||
         (statusFilter === 'Pending' && (order.status === 'pending' || order.status === 'under_review')) ||
         (statusFilter === 'Distributed' && (order.status === 'published' || order.status === 'assigned')) ||
         (statusFilter === 'Quoted' && (order.status === 'quoted' || (order.quotations && order.quotations.length > 0))) ||
-        (statusFilter === 'Accepted' && order.status === 'quote_accepted');
+        (statusFilter === 'Accepted' && (order.status === 'quote_accepted' || order.status === 'accepted' || isDelivered || statusNorm === 'packed' || statusNorm === 'out for delivery'));
 
       const q = searchTerm.toLowerCase();
       const nameMatch = 
@@ -197,7 +201,7 @@ export default function BulkOrdersTab() {
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
-          {['All', 'Pending', 'Distributed', 'Quoted', 'Accepted'].map((st) => (
+          {['All', 'Pending', 'Distributed', 'Quoted', 'Accepted', 'Delivered'].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -295,22 +299,39 @@ export default function BulkOrdersTab() {
                       <span className="px-3 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-900 border-amber-300 flex items-center gap-1">
                         <AlertCircle size={12} /> Awaiting Prepayment (₹{Number(order.sellerAdvanceAmount).toLocaleString()})
                       </span>
-                    ) : (
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                        order.status === 'quote_accepted' || order.status === 'accepted'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : order.status === 'quoted' || hasQuotes
-                          ? 'bg-purple-50 text-purple-800 border-purple-200'
-                          : order.status === 'published' || order.status === 'assigned'
-                          ? 'bg-blue-50 text-blue-800 border-blue-200'
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}>
-                        {order.status === 'quote_accepted' || order.status === 'accepted' ? 'Quote Accepted & Assigned' :
-                         order.status === 'quoted' || hasQuotes ? `${quoteCount} Quotation(s) Received` :
-                         order.status === 'published' ? 'Published for Bidding' :
-                         order.status === 'assigned' ? 'Assigned to Seller' : 'Pending Distribution'}
-                      </span>
-                    )}
+                    ) : (() => {
+                      const statusNorm = String(order.deliveryStatus || order.status || '').toLowerCase().replace(/_/g, ' ');
+                      const isDelivered = ['delivered', 'received', 'completed', 'fulfilled'].includes(statusNorm) || order.remainingPaymentStatus === 'paid' || Boolean(order.deliveryDetails?.deliveredAt);
+                      const isOut = !isDelivered && (statusNorm === 'out for delivery' || Boolean(order.deliveryDetails?.dispatchedAt));
+                      const isPacked = !isDelivered && !isOut && statusNorm === 'packed';
+                      const isAccepted = !isDelivered && !isOut && !isPacked && (order.status === 'quote_accepted' || order.status === 'accepted' || order.acceptedQuoteId);
+
+                      return (
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                          isDelivered
+                            ? 'bg-emerald-100 text-emerald-950 border-emerald-400 font-black flex items-center gap-1'
+                            : isOut
+                            ? 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold flex items-center gap-1'
+                            : isPacked
+                            ? 'bg-cyan-50 text-cyan-900 border-cyan-200 font-bold flex items-center gap-1'
+                            : isAccepted
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-bold'
+                            : order.status === 'quoted' || hasQuotes
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : order.status === 'published' || order.status === 'assigned'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {isDelivered ? '🎉 Consignment Delivered & Received' :
+                           isOut ? '🚚 Out for Delivery (Store Fleet)' :
+                           isPacked ? '📦 Consignment Packed & Ready' :
+                           isAccepted ? 'Quote Accepted & Assigned' :
+                           order.status === 'quoted' || hasQuotes ? `${quoteCount} Quotation(s) Received` :
+                           order.status === 'published' ? 'Published for Bidding' :
+                           order.status === 'assigned' ? 'Assigned to Seller' : 'Pending Distribution'}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 

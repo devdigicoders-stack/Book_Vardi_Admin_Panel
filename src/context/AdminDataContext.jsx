@@ -863,7 +863,7 @@ export const AdminDataProvider = ({ children }) => {
       // Also sync school bulk orders
       fetchAdminSchoolBulkOrdersApi().then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          setSchoolOrders(data.map(o => ({
+          const mapped = data.map(o => ({
             ...o,
             id: o._id || o.id,
             referenceId: o.referenceId || `SCH-${o.id}`,
@@ -874,7 +874,11 @@ export const AdminDataProvider = ({ children }) => {
               : (o.additionalNotes || 'Bulk Supplies'),
             estimatedBudget: o.targetBudgetPerKit || 0,
             quoteAmount: o.targetBudgetPerKit || 0
-          })));
+          }));
+          setSchoolOrders(mapped);
+          try {
+            localStorage.setItem('admin_school_orders', JSON.stringify(mapped));
+          } catch {}
         }
       }).catch(() => {});
     };
@@ -893,6 +897,22 @@ export const AdminDataProvider = ({ children }) => {
           try {
             const data = JSON.parse(event.data);
             if (data && (data.type === 'ORDER_CREATED' || data.type === 'ORDER_UPDATED' || data.type === 'SCHOOL_ORDER_UPDATED')) {
+              if (data.type === 'SCHOOL_ORDER_UPDATED' && (data.orderId || data.referenceId || data.id)) {
+                const targetId = String(data.orderId || data.referenceId || data.id);
+                const nextStatus = String(data.status || 'delivered').toLowerCase();
+                setSchoolOrders(prev => prev.map(o => {
+                  if (String(o.referenceId) === targetId || String(o.id || o._id) === targetId) {
+                    return {
+                      ...o,
+                      status: nextStatus,
+                      deliveryStatus: nextStatus,
+                      overallStatus: 'Delivered',
+                      remainingPaymentStatus: nextStatus === 'delivered' ? 'paid' : o.remainingPaymentStatus
+                    };
+                  }
+                  return o;
+                }));
+              }
               isOrderSyncingRef.current = false;
               handleOrderSync(false);
             }
@@ -922,11 +942,12 @@ export const AdminDataProvider = ({ children }) => {
     };
 
     window.addEventListener('bv_orders_updated', onOrderEvent);
+    window.addEventListener('bv_school_orders_updated', onOrderEvent);
     window.addEventListener('focus', onOrderEvent);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     const storageHandler = (e) => {
-      if (e.key === 'bv_order_sync_timestamp') {
+      if (e.key === 'bv_order_sync_timestamp' || e.key === 'bv_school_sync_timestamp' || e.key === 'admin_school_orders' || e.key === 'bv_sync_school_orders') {
         handleOrderSync(false);
       }
     };
