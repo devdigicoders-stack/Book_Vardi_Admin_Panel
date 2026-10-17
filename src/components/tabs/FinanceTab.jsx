@@ -68,7 +68,7 @@ export default function FinanceTab() {
       const orderTotal = Number(o.total || o.totalAmount || 0);
       const statusRaw = String(o.overallStatus || o.status || '').toLowerCase();
       const isCancelled = statusRaw.includes('cancel') || statusRaw.includes('refund');
-      const isDelivered = statusRaw.includes('delivered');
+      const isDelivered = statusRaw.includes('delivered') || statusRaw.includes('exchanged');
       const isCod = String(o.paymentMethod || '').toUpperCase().includes('COD');
 
       if (isCancelled || String(o.paymentStatus).toLowerCase() === 'refunded') {

@@ -232,9 +232,44 @@ export default function SellerFinanceModal({
         const platformCutAmount = portalCommission;
         const netSellerShare = finalSellerSettlement;
 
-        const statusRaw = String(order.overallStatus || order.status || 'Pending').trim();
-        const isCancelled = statusRaw.toLowerCase().includes('cancel');
-        const isDelivered = statusRaw.toLowerCase().includes('delivered');
+        const statusRaw = String(order.overallStatus || order.status || 'Pending').trim().toLowerCase();
+        const retReqStatus = String(order.returnRequest?.status || '').toLowerCase().trim();
+        const isCancelled = statusRaw.includes('cancel');
+        const isDelivered = statusRaw.includes('delivered');
+        const isExchanged = statusRaw === 'exchanged' || retReqStatus === 'exchanged';
+        const isRefunded = ['refunded', 'refund_completed', 'refund_processed'].includes(statusRaw) || 
+                           ['refunded', 'refund_completed', 'refund_processed'].includes(retReqStatus);
+
+        // Calculate maturity & settlement due date
+        let isMatured = false;
+        let daysRemaining = null;
+        let settlementDueDate = null;
+        let returnWindowDays = 0;
+        let holdingDays = 0;
+
+        if (isRefunded) {
+          isMatured = false;
+          daysRemaining = null;
+          settlementDueDate = null;
+        } else if (isExchanged) {
+          const exchangeDateRaw = order.exchangedAt || order.returnRequest?.exchangedAt || order.updatedAt || order.createdAt;
+          const exchangeDate = exchangeDateRaw ? new Date(exchangeDateRaw) : new Date();
+          // Strictly 1 day after exchange date
+          settlementDueDate = order.settlementDueDate ? new Date(order.settlementDueDate) : new Date(exchangeDate.getTime() + 1 * 24 * 60 * 60 * 1000);
+          holdingDays = 1;
+          returnWindowDays = 0;
+          isMatured = Boolean(order.isSettlementMatured || (Date.now() >= settlementDueDate.getTime()));
+          daysRemaining = Math.max(0, Math.ceil((settlementDueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+        } else if (isDelivered) {
+          const isNonReturnable = order.isReturnable === false || String(order.returnPolicy || '').toLowerCase().includes('non_returnable');
+          const isNonExchangeable = order.isExchangeable === false || String(order.returnPolicy || '').toLowerCase().includes('non_exchangeable');
+          returnWindowDays = (isNonReturnable && isNonExchangeable) ? 0 : Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7);
+          holdingDays = returnWindowDays + 1; // Return window + 1 buffer day
+          const deliveredDate = order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || Date.now()));
+          settlementDueDate = order.settlementDueDate ? new Date(order.settlementDueDate) : new Date(deliveredDate.getTime() + holdingDays * 24 * 60 * 60 * 1000);
+          isMatured = Boolean(order.isSettlementMatured || (Date.now() >= settlementDueDate.getTime()));
+          daysRemaining = Math.max(0, Math.ceil((settlementDueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+        }
 
         list.push({
           ...order,
@@ -267,16 +302,15 @@ export default function SellerFinanceModal({
           isCod,
           paymentLabel,
           isCancelled,
-          isDelivered,
-          returnWindowDays: Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7),
-          holdingDays: Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1,
-          settlementDueDate: order.settlementDueDate 
-            ? new Date(order.settlementDueDate) 
-            : new Date((order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || Date.now()))).getTime() + (Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1) * 24 * 60 * 60 * 1000),
-          isMatured: Boolean(isDelivered && (order.isSettlementMatured || (order.settlementDueDate ? Date.now() >= new Date(order.settlementDueDate).getTime() : false))),
-          daysRemaining: isDelivered 
-            ? Math.max(0, Math.ceil(((order.settlementDueDate ? new Date(order.settlementDueDate).getTime() : ((order.deliveredAt ? new Date(order.deliveredAt) : (order.updatedAt ? new Date(order.updatedAt) : new Date(order.createdAt || Date.now()))).getTime() + (Number(relevantItems[0]?.returnWindowDays || order.returnWindowDays || 7) + 1) * 24 * 60 * 60 * 1000)) - Date.now()) / (24 * 60 * 60 * 1000)))
-            : null,
+          isDelivered: Boolean(isDelivered || isExchanged),
+          isExchanged,
+          isRefunded,
+          creditNoteNumber: order.creditNoteNumber || (isRefunded ? (`CN-${order.orderId || order.id || String(order._id).slice(-8).toUpperCase()}`) : null),
+          returnWindowDays,
+          holdingDays,
+          settlementDueDate,
+          isMatured,
+          daysRemaining,
           dateStr: order.createdAt 
             ? new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
             : (order.date || 'Recent'),
@@ -1159,8 +1193,12 @@ export default function SellerFinanceModal({
                                 ₹{Number(o.finalSellerSettlement ?? o.netSellerShare ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                               {o.isDelivered && (
-                                <div className={`text-[9px] font-sans font-bold mt-0.5 ${o.isMatured ? 'text-emerald-700' : 'text-amber-800'}`}>
-                                  {o.isMatured ? '✅ Matured & Payable' : `⏳ Held in window (${o.daysRemaining}d left)`}
+                                <div className={`text-[9px] font-sans font-bold mt-0.5 ${o.isRefunded ? 'text-rose-600' : (o.isMatured ? 'text-emerald-700' : 'text-amber-800')}`}>
+                                  {o.isRefunded 
+                                    ? '❌ Reversed (Credit Note)' 
+                                    : (o.isMatured 
+                                        ? (o.isExchanged ? '✅ Matured (Exchanged)' : '✅ Matured & Payable') 
+                                        : (o.isExchanged ? `⏳ Exchange Buffer (${o.daysRemaining || 1}d left)` : `⏳ Held in window (${o.daysRemaining}d left)`))}
                                 </div>
                               )}
                             </div>
@@ -1170,15 +1208,22 @@ export default function SellerFinanceModal({
                         {/* Fulfillment Status */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            o.isRefunded ? 'bg-rose-100 text-rose-800' :
+                            o.isExchanged ? 'bg-purple-100 text-purple-900 border border-purple-200' :
                             o.isDelivered ? 'bg-emerald-100 text-emerald-800' :
                             o.isCancelled ? 'bg-rose-100 text-rose-800' :
                             'bg-teal-50 text-teal-800'
                           }`}>
-                            {o.overallStatus || o.status || 'Processing'}
+                            {o.isRefunded ? 'Refunded' : (o.isExchanged ? 'Exchanged' : (o.overallStatus || o.status || 'Processing'))}
                           </span>
-                          {o.isDelivered && o.settlementDueDate && (
-                            <div className="text-[9px] text-gray-500 font-mono mt-0.5" title={`Unlocks after Return Window (${o.returnWindowDays}d) + 1 buffer day`}>
+                          {o.isDelivered && o.settlementDueDate && !o.isRefunded && (
+                            <div className="text-[9px] text-gray-500 font-mono mt-0.5" title={o.isExchanged ? 'Unlocks 1 day after exchange completion' : `Unlocks after Return Window (${o.returnWindowDays}d) + 1 buffer day`}>
                               Due: {new Date(o.settlementDueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </div>
+                          )}
+                          {o.isRefunded && (
+                            <div className="text-[9px] text-rose-700 font-mono font-bold mt-0.5" title="Section 34 Statutory Credit Note Auto-Recognized">
+                              {o.creditNoteNumber || 'Auto CN'}
                             </div>
                           )}
                         </td>
