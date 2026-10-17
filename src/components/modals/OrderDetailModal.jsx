@@ -1092,12 +1092,25 @@ export default function OrderDetailModal({
                     <RotateCcw size={13} /> Issue Refund
                   </button>
                 )}
-                <button
-                  onClick={() => setIsInvoiceOpen(true)}
-                  className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-teal-200"
-                >
-                  <FileText size={13} /> Tax Invoice & Settlement
-                </button>
+                {(() => {
+                  const modalStatus = String(order.status || order.overallStatus || '').toLowerCase().trim();
+                  const isConfirmedOrder = modalStatus && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(modalStatus);
+                  const isLocked = !isConfirmedOrder;
+                  return (
+                    <button
+                      onClick={() => setIsInvoiceOpen(true)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${
+                        isLocked
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                          : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-200'
+                      }`}
+                      title={isLocked ? "Invoice locked while order status is pending confirmation" : "View & Print GST Tax Invoice & Settlement"}
+                    >
+                      {isLocked ? <Lock size={13} /> : <FileText size={13} />}
+                      <span>{isLocked ? 'Invoice Locked (Pending)' : 'Tax Invoice & Settlement'}</span>
+                    </button>
+                  );
+                })()}
                 {/* Statutory Invoicing: Exchange gets Exchange Tax Invoice ONLY; Returns/Refunds get Credit Note */}
                 {(() => {
                   const retType = String(order.returnRequest?.type || order.returnRequest?.requestType || '').toLowerCase();
@@ -1283,15 +1296,22 @@ export default function OrderDetailModal({
 
                 let totalTaxable = 0;
                 let totalTax = 0;
+                const itemsRawSum = (order.items || []).reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+                const hasPerItemDiscount = (order.items || []).some(it => Number(it.offerDiscount || it.discount || 0) > 0);
+
                 (order.items || []).forEach(item => {
                   const qty = Number(item.quantity || 1);
                   const unitPrice = Number(item.price || 0);
-                  const grossPrice = unitPrice * qty;
+                  const itemDiscount = Number(item.offerDiscount || item.discount || 0) > 0
+                    ? Number(item.offerDiscount || item.discount)
+                    : (!hasPerItemDiscount && couponVal > 0 && itemsRawSum > 0 ? (couponVal * ((unitPrice * qty) / itemsRawSum)) : 0);
+                  const grossPrice = Math.max(0, (unitPrice * qty) - itemDiscount);
                   const gstRate = Number(item.gstPercent ?? item.gstPercentage ?? item.gstRate ?? item.gst ?? 5);
                   if (gstRate > 0) {
-                    const taxable = grossPrice / (1 + gstRate / 100);
+                    const taxable = Math.round((grossPrice / (1 + gstRate / 100)) * 100) / 100;
+                    const tax = Math.round((grossPrice - taxable) * 100) / 100;
                     totalTaxable += taxable;
-                    totalTax += (grossPrice - taxable);
+                    totalTax += tax;
                   } else {
                     totalTaxable += grossPrice;
                   }
@@ -1313,45 +1333,53 @@ export default function OrderDetailModal({
                 const sellerStateStr = sellerStateInfo.name || 'Uttar Pradesh';
                 const customerStateStr = customerStateInfo.name || 'Uttar Pradesh';
 
-                // Aggregate shipping tax into total tax calculation for full order grand total breakdown
-                const shipTaxable = shipVal > 0 ? (shipVal / 1.18) : 0;
-                const shipTax = shipVal > 0 ? (shipVal - shipTaxable) : 0;
-                const combinedTaxable = totalTaxable + shipTaxable;
-                const combinedTax = totalTax + shipTax;
+                // Dynamic Product GST Rate for Delivery (Composite Supply under Section 8 of CGST Act: Principal supply rate governs freight/delivery)
+                // Delivery charge GST strictly matches the product's GST rate (e.g., 5% product -> 5% delivery, 0% product -> 0% delivery)
+                const defaultProductGstRate = (() => {
+                  const itemRates = (order.items || []).map(it => {
+                    const cat = String(it.category || '').toLowerCase();
+                    const isBook = cat.includes('book') || cat.includes('textbook') || String(it.name || '').toLowerCase().includes('book');
+                    return Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? (isBook ? 0 : 5));
+                  }).filter(r => !isNaN(r));
+                  if (itemRates.length > 0) {
+                    return Math.max(...itemRates);
+                  }
+                  if (order.shippingGstRate !== undefined && order.shippingGstRate !== null && !isNaN(Number(order.shippingGstRate))) {
+                    return Number(order.shippingGstRate);
+                  }
+                  return 5;
+                })();
+
+                const shippingGstRate = defaultProductGstRate;
+                const shipTaxable = shipVal > 0 ? (shippingGstRate > 0 ? Math.round((shipVal / (1 + shippingGstRate / 100)) * 100) / 100 : shipVal) : 0;
+                const shipTax = shipVal > 0 ? Math.round((shipVal - shipTaxable) * 100) / 100 : 0;
+                let combinedTaxable = Math.round((totalTaxable + shipTaxable) * 100) / 100;
+                let combinedTax = Math.round((totalTax + shipTax) * 100) / 100;
+
+                if (grandVal > 0 && Math.abs((combinedTaxable + combinedTax) - grandVal) > 0 && Math.abs((combinedTaxable + combinedTax) - grandVal) <= 0.05) {
+                  combinedTaxable = Math.round((grandVal - combinedTax) * 100) / 100;
+                }
+
+                const cgst = Math.round((combinedTax / 2) * 100) / 100;
+                const sgst = Math.round((combinedTax - cgst) * 100) / 100;
 
                 return (
                   <div className="p-3.5 bg-gray-50 border-t border-gray-200 space-y-2 text-xs">
+                    {/* 1. Items Subtotal */}
                     <div className="flex justify-between text-gray-700">
                       <span>Items Subtotal:</span>
                       <span className="font-mono font-bold">₹{subtotalVal.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-gray-500 text-[11px]">
-                      <span>Base Taxable Value (Excl. GST):</span>
-                      <span className="font-mono">₹{combinedTaxable.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-emerald-800 text-[11px] bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                      <div>
-                        <span className="font-bold block">GST Tax Breakdown ({isSameState ? 'Intra-State Same State' : 'Inter-State Different State'}):</span>
-                        {isSameState ? (
-                          <span className="text-[10px]">CGST (50%): ₹{(combinedTax / 2).toFixed(2)} • SGST (50%): ₹{(combinedTax / 2).toFixed(2)}</span>
-                        ) : (
-                          <span className="text-[10px]">IGST (Integrated 100%): ₹{combinedTax.toFixed(2)} • Supply ({sellerStateStr} ➔ {customerStateStr})</span>
-                        )}
-                      </div>
-                      <span className="font-mono font-bold self-center">₹{combinedTax.toFixed(2)}</span>
-                    </div>
+
+                    {/* 2. Delivery Charges (Added directly to Subtotal before GST calculation) */}
                     <div className="flex justify-between text-gray-700">
                       <span>Delivery Charges:</span>
                       <span className="font-mono font-bold text-emerald-700">
-                        {shipVal === 0 ? 'Not Applied (FREE)' : `₹${shipVal.toFixed(2)}`}
+                        {shipVal === 0 ? 'Not Applied (FREE)' : `+₹${shipVal.toFixed(2)}`}
                       </span>
                     </div>
-                    {codFeeVal > 0 && (
-                      <div className="flex justify-between text-gray-700">
-                        <span>COD / Convenience Fee:</span>
-                        <span className="font-mono font-bold text-emerald-700">₹{codFeeVal.toFixed(2)}</span>
-                      </div>
-                    )}
+
+                    {/* 3. Offer / Coupon */}
                     {couponVal > 0 ? (
                       <div className="flex justify-between text-emerald-700 font-bold">
                         <span>Offer / Coupon Applied:</span>
@@ -1363,9 +1391,211 @@ export default function OrderDetailModal({
                         <span className="font-mono">Not Applied (₹0.00)</span>
                       </div>
                     )}
+
+                    {/* 4. COD / Convenience Fee */}
+                    {codFeeVal > 0 && (
+                      <div className="flex justify-between text-gray-700">
+                        <span>COD / Convenience Fee:</span>
+                        <span className="font-mono font-bold text-emerald-700">+₹{codFeeVal.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {/* 5. Base Taxable Value (Excl. GST) - after adding delivery charges */}
+                    <div className="flex justify-between text-gray-600 text-[11px] pt-1.5 border-t border-dashed border-gray-300">
+                      <span>Base Taxable Value (Excl. GST):</span>
+                      <span className="font-mono font-semibold">₹{combinedTaxable.toFixed(2)}</span>
+                    </div>
+
+                    {/* 6. GST Tax Breakdown */}
+                    <div className="flex justify-between text-emerald-800 text-[11px] bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                      <div>
+                        <span className="font-bold block">GST Tax Breakdown ({isSameState ? 'Intra-State Same State' : 'Inter-State Different State'}):</span>
+                        {isSameState ? (
+                          <span className="text-[10px]">
+                            CGST ({(shippingGstRate / 2).toFixed(1).replace(/\.0$/, '')}%): ₹{cgst.toFixed(2)} • SGST ({(shippingGstRate / 2).toFixed(1).replace(/\.0$/, '')}%): ₹{sgst.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-[10px]">IGST (Integrated 100%): ₹{combinedTax.toFixed(2)} • Supply ({sellerStateStr} ➔ {customerStateStr})</span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold self-center">₹{combinedTax.toFixed(2)}</span>
+                    </div>
+
+                    {/* 7. Total Order Amount */}
                     <div className="pt-2 border-t border-gray-300 flex items-center justify-between font-black text-gray-900">
                       <span className="text-xs">Total Order Amount</span>
                       <span className="font-display font-black text-base text-teal-900 font-mono">₹{grandVal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Dynamic Seller Settlement Breakdown (Rule 2 / Rules 1, 3 & 4) */}
+              {(() => {
+                const isCod = String(order.paymentMethod || '').toUpperCase().includes('COD') || String(order.paymentMethod || '').toUpperCase().includes('CASH');
+                const rawDeliveryMode = String(order.deliveryMode || order.deliveryType || '').toLowerCase();
+                const hasCourier = Boolean(order.courierName && order.courierName !== 'N/A' && order.courierName !== '');
+                const isThirdParty = order.isThirdParty === true || 
+                                     rawDeliveryMode.includes('third') || 
+                                     rawDeliveryMode.includes('courier') || 
+                                     (hasCourier && !rawDeliveryMode.includes('self')) ||
+                                     (order.items || []).some(it => String(it.deliveryType || '').toLowerCase().includes('third') || Boolean(it.thirdPartyDetails?.courierName));
+                const isSelf = !isThirdParty;
+
+                let ruleNum = 1;
+                let ruleTitleHi = 'नियम 1: ऑनलाइन भुगतान + सेलर डिलीवरी';
+                let ruleTitleEn = 'Rule 1: Online Payment + Self Delivery';
+                let ruleColor = 'bg-teal-100 text-teal-900 border-teal-300';
+
+                if (!isCod && isThirdParty) {
+                  ruleNum = 2;
+                  ruleTitleHi = 'नियम 2: ऑनलाइन भुगतान + कूरियर से डिलीवरी';
+                  ruleTitleEn = 'Rule 2: Online Payment + Third-Party Delivery';
+                  ruleColor = 'bg-amber-100 text-amber-950 border-amber-300';
+                } else if (isCod && isSelf) {
+                  ruleNum = 3;
+                  ruleTitleHi = 'नियम 3: कैश भुगतान + सेलर डिलीवरी';
+                  ruleTitleEn = 'Rule 3: COD + Self Delivery';
+                  ruleColor = 'bg-rose-100 text-rose-950 border-rose-300';
+                } else if (isCod && isThirdParty) {
+                  ruleNum = 4;
+                  ruleTitleHi = 'नियम 4: कैश भुगतान + कूरियर डिलीवरी (रेमिटेड)';
+                  ruleTitleEn = 'Rule 4: COD + Third-Party Courier';
+                  ruleColor = 'bg-purple-100 text-purple-950 border-purple-300';
+                }
+
+                const grossSale = Number(order.sellerSubtotal || order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
+                const commRate = Number(order.commissionRate ?? order.sellerCommissionRate ?? order.items?.[0]?.commissionRate ?? 10);
+                
+                // 1. Portal Commission
+                const portalComm = Math.round(((grossSale * commRate) / 100) * 100) / 100;
+                // 2. GST on Commission (18%)
+                const gstOnComm = Math.round(((portalComm * 18) / 100) * 100) / 100;
+                // 3. TDS (0.1% Sec 194-O)
+                const tdsAmt = Math.round(((grossSale * 0.1) / 100) * 100) / 100;
+
+                // 4. GST TCS (0.5% Sec 52): 0% for Rule 3 COD Self or Tax-Free (books)
+                const isTaxFreeOrder = (order.items || []).every(it => {
+                  const r = Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? 5);
+                  const cat = String(it.category || '').toLowerCase();
+                  return r === 0 || cat.includes('book');
+                });
+                const tcsRate = (ruleNum === 3 || isTaxFreeOrder) ? 0 : 0.5;
+                const tcsAmt = (ruleNum === 3 || isTaxFreeOrder) ? 0 : Math.round(((grossSale * tcsRate) / 100) * 100) / 100;
+
+                // 5. Delivery Charges + 18% GST (Rule 2 & Rule 4: Client Norms)
+                const isAbove400 = (grossSale > 400 || Number(order.total || order.totalAmount || 0) > 400);
+                let delivBorneBy = order.deliveryChargeBorneBy;
+                if (!delivBorneBy) {
+                  if (isAbove400) delivBorneBy = 'admin';
+                  else if (order.isDeliveryBorneBySeller || order.deliveryBorneBy === 'seller') delivBorneBy = 'seller';
+                  else if (Number(order.shippingFee ?? order.shippingCost ?? 0) > 0) delivBorneBy = 'customer';
+                  else delivBorneBy = isThirdParty ? 'seller' : 'admin';
+                }
+
+                let delivFeeAmt = 0;
+                let delivGstAmt = 0;
+                let totalDelivDed = 0;
+                let delivStatusNote = '';
+
+                const itemGstRates = (order.items || []).map(it => {
+                  const cat = String(it.category || '').toLowerCase();
+                  const isBook = cat.includes('book') || cat.includes('textbook') || String(it.name || '').toLowerCase().includes('book');
+                  return Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? (isBook ? 0 : 5));
+                }).filter(r => !isNaN(r));
+                const orderProductGstRate = itemGstRates.length > 0 ? Math.max(...itemGstRates) : 5;
+
+                if (isThirdParty && delivBorneBy === 'seller' && !isAbove400) {
+                  const rawDeliv = Math.max(0, Number(order.deliveryCharge ?? order.shippingFee ?? order.shippingCost ?? 40));
+                  delivFeeAmt = Math.round(rawDeliv * 100) / 100;
+                  delivGstAmt = Math.round(((delivFeeAmt * orderProductGstRate) / 100) * 100) / 100;
+                  totalDelivDed = Math.round((delivFeeAmt + delivGstAmt) * 100) / 100;
+                  delivStatusNote = `सेलर वहन (कूरियर ₹${delivFeeAmt.toFixed(2)} + ${orderProductGstRate}% GST ₹${delivGstAmt.toFixed(2)})`;
+                } else if (isAbove400) {
+                  delivStatusNote = '₹400+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती';
+                } else if (delivBorneBy === 'customer') {
+                  delivStatusNote = 'ग्राहक द्वारा वहन — सेलर से ₹0 कटौती';
+                } else {
+                  delivStatusNote = 'सेलर सेल्फ डिलीवरी — ₹0 कूरियर कटौती';
+                }
+
+                const totalDeductions = Math.round((portalComm + gstOnComm + tdsAmt + tcsAmt + totalDelivDed) * 100) / 100;
+                
+                let finalNet;
+                if (ruleNum === 3) {
+                  finalNet = -totalDeductions;
+                } else {
+                  finalNet = Math.max(0, Math.round((grossSale - totalDeductions) * 100) / 100);
+                }
+
+                return (
+                  <div className="p-3.5 bg-gradient-to-br from-amber-50/80 via-orange-50/30 to-amber-50/80 rounded-xl border border-amber-300 space-y-2 text-xs">
+                    {/* Header */}
+                    <div className="flex items-center justify-between flex-wrap gap-1.5 pb-2 border-b border-amber-200">
+                      <div>
+                        <span className="font-extrabold text-amber-950 flex items-center gap-1.5 text-xs sm:text-[13px]">
+                          📋 {ruleTitleHi}
+                        </span>
+                        <span className="text-[10px] text-amber-800 font-medium block">
+                          {ruleTitleEn}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border shadow-2xs ${ruleColor}`}>
+                        Rule {ruleNum} Active
+                      </span>
+                    </div>
+
+                    {/* All Client Rule Points Breakdown */}
+                    <div className="space-y-1.5 text-[11px]">
+                      <div className="flex justify-between text-gray-800">
+                        <span>• Gross Sale (ग्राहक से प्राप्त कुल बिक्री राशि):</span>
+                        <span className="font-mono font-bold text-gray-950">₹{grossSale.toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-gray-700">
+                        <span>• Portal Commission ({commRate}% पोर्टल कमीशन):</span>
+                        <span className="font-mono font-semibold text-amber-900">−₹{portalComm.toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-gray-700">
+                        <span>• GST on Commission (कमीशन पर 18% GST):</span>
+                        <span className="font-mono font-semibold text-indigo-900">−₹{gstOnComm.toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-gray-700">
+                        <span>• TDS (आयकर Sec 194-O लागू 0.1% TDS):</span>
+                        <span className="font-mono font-semibold text-purple-900">−₹{tdsAmt.toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-gray-700">
+                        <span>• GST TCS (जहाँ कानून अनुसार लागू हो 0.5% TCS):</span>
+                        <span className="font-mono font-semibold text-sky-900">−₹{tcsAmt.toFixed(2)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-gray-700 pt-1 border-t border-amber-200/70">
+                        <div>
+                          <span>• Delivery Charges + 18% GST:</span>
+                          <span className="text-[10px] text-amber-800 block font-medium">({delivStatusNote})</span>
+                        </div>
+                        <span className="font-mono font-bold text-rose-800 self-center">
+                          {totalDelivDed > 0 ? `−₹${totalDelivDed.toFixed(2)}` : '₹0.00'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Formula & Final Settlement */}
+                    <div className="pt-2 border-t border-amber-300 flex items-center justify-between">
+                      <div>
+                        <div className="font-extrabold text-amber-950 text-xs">
+                          {ruleNum === 3 ? 'Portal Due / Settlement (माइनस)' : 'Final Seller Settlement (शुद्ध सेलर भुगतान)'}
+                        </div>
+                        <div className="text-[9.5px] text-amber-800">
+                          Gross (₹{grossSale.toFixed(2)}) − Deductions (₹{totalDeductions.toFixed(2)})
+                        </div>
+                      </div>
+                      <div className={`text-base font-black font-mono ${ruleNum === 3 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                        {ruleNum === 3 ? `−₹${Math.abs(finalNet).toFixed(2)}` : `₹${finalNet.toFixed(2)}`}
+                      </div>
                     </div>
                   </div>
                 );

@@ -62,6 +62,7 @@ export default function OrdersTab() {
     approveSellerQuotation,
     updateSchoolOrderStatusAndTracking,
     sellers,
+    isLoadingOrders,
     isEditor 
   } = useAdminData();
 
@@ -463,10 +464,23 @@ export default function OrdersTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-medium">
-                {filteredReturnOrders.map((order) => {
-                  const req = order.returnRequest;
-                  const isExchange = req?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange');
-                  const statusKey = String(req?.status || order.status || '').toLowerCase().replace(/ /g, '_');
+                {isLoadingOrders && orders.length === 0 ? (
+                  [...Array(5)].map((_, i) => (
+                    <tr key={`return-skel-${i}`} className="animate-pulse border-b border-gray-100">
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-20 mb-1"></div><div className="h-3 bg-gray-100 rounded w-16"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-28 mb-1"></div><div className="h-3 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-5 bg-amber-100/60 rounded-full w-24 mb-1"></div><div className="h-3 bg-gray-200 rounded w-12"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-5 bg-gray-200 rounded-full w-24"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                      <td className="px-4 py-3.5 text-right"><div className="h-7 bg-amber-100/70 rounded-lg w-28 ml-auto"></div></td>
+                    </tr>
+                  ))
+                ) : (
+                  filteredReturnOrders.map((order) => {
+                    const req = order.returnRequest;
+                    const isExchange = req?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange');
+                    const statusKey = String(req?.status || order.status || '').toLowerCase().replace(/ /g, '_');
                   
                   return (
                     <tr key={order.id} className="hover:bg-amber-50/30 transition-colors">
@@ -579,9 +593,9 @@ export default function OrdersTab() {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
 
-                {filteredReturnOrders.length === 0 && (
+                {!isLoadingOrders && filteredReturnOrders.length === 0 && (
                   <tr>
                     <td colSpan="7" className="px-4 py-12 text-center text-gray-400 text-xs">
                       <div className="max-w-xs mx-auto space-y-2">
@@ -616,7 +630,21 @@ export default function OrdersTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-medium">
-                {filteredRetailOrders.map((order) => {
+                {isLoadingOrders && orders.length === 0 ? (
+                  [...Array(6)].map((_, i) => (
+                    <tr key={`retail-skel-${i}`} className="animate-pulse border-b border-gray-100">
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-20 mb-1"></div><div className="h-3 bg-gray-100 rounded w-16"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-28 mb-1"></div><div className="h-3 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-5 bg-teal-50 rounded-md w-24 border border-teal-100"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-4 bg-gray-200 rounded w-16 mb-1"></div><div className="h-3 bg-gray-100 rounded w-12"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-5 bg-gray-200 rounded-full w-20"></div></td>
+                      <td className="px-4 py-3.5"><div className="h-3 bg-gray-100 rounded w-16"></div></td>
+                      <td className="px-4 py-3.5 text-right"><div className="h-7 bg-gray-200 rounded-lg w-24 ml-auto"></div></td>
+                    </tr>
+                  ))
+                ) : (
+                  filteredRetailOrders.map((order) => {
                   const displaySellerName = order.sellerStoreName || order.storeName || order.sellerDetails?.storeName || order.sellerName || (order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName) || 'National School Dress';
 
                   return (
@@ -754,11 +782,11 @@ export default function OrdersTab() {
 
                   </tr>
                   );
-                })}
+                }))}
 
-                {filteredRetailOrders.length === 0 && (
+                {!isLoadingOrders && filteredRetailOrders.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="px-4 py-12 text-center text-gray-400 text-xs">
+                    <td colSpan="8" className="px-4 py-12 text-center text-gray-400 text-xs">
                       <div className="max-w-xs mx-auto space-y-2">
                         <ShoppingBag size={28} className="mx-auto text-gray-300" />
                         <div className="font-bold text-gray-600">No retail orders found</div>

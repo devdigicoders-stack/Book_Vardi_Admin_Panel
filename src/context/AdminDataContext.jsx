@@ -175,8 +175,15 @@ export const AdminDataProvider = ({ children }) => {
     }
   }, []);
 
-  // 2. Orders (Purely dynamic from MongoDB database via API)
-  const [orders, setOrders] = useState([]);
+  // 2. Orders (Purely dynamic from MongoDB database via API, hydrated from sessionStorage to prevent flicker)
+  const [orders, setOrders] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('bv_admin_orders_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
 
   // 3. School Bulk Orders
@@ -853,6 +860,9 @@ export const AdminDataProvider = ({ children }) => {
           });
 
           setOrders(normalized);
+          try {
+            sessionStorage.setItem('bv_admin_orders_cache', JSON.stringify(normalized));
+          } catch {}
         }).catch((err) => {
           console.error('Failed to sync retail orders from DB:', err);
         }).finally(() => {
