@@ -495,11 +495,11 @@ export default function CategoriesTab() {
                   onChange={(e) => setCategoryForm({ ...categoryForm, gstPercentage: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
                 >
-                  <option value="0">0% (Tax Free / Books)</option>
-                  <option value="5">5% (Apparel / Uniforms)</option>
-                  <option value="12">12% (Footwear & Stationery)</option>
-                  <option value="18">18% (School Bags & Kits)</option>
-                  <option value="28">28% (Luxury Goods)</option>
+                  <option value="0">0%</option>
+                  <option value="5">5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
                 </select>
               </div>
 

@@ -1335,21 +1335,6 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                           <option value="28">28%</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">GST Included in Price?</label>
-                        <button
-                          type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, isGstInclusive: !prev.isGstInclusive }))}
-                          className={`w-full px-3 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs ${
-                            formData.isGstInclusive
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                              : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
-                          }`}
-                        >
-                          <span className={`w-2.5 h-2.5 rounded-full ${formData.isGstInclusive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                          <span>{formData.isGstInclusive ? 'GST Included' : 'GST Extra (+ Tax)'}</span>
-                        </button>
-                      </div>
                     </div>
 
                     <div>
