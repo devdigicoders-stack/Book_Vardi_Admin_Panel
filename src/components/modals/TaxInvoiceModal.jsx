@@ -492,8 +492,23 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
     ? (isConfirmedAndOnward || (normStatus && !isPendingUnconfirmed))
     : (isCancelled || (activeSellerGroup ? isSellerConfirmed : (isSellerConfirmed && isConfirmedAndOnward)));
 
-  // The active items to display and calculate strictly belong to the active seller
   const items = activeSellerGroup ? activeSellerGroup.items : allOrderItems;
+
+  const activeSellerStatusRaw = (
+    items.find(i => {
+      const s = String(i.status || '').toLowerCase().trim();
+      return s && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(s);
+    })?.status ||
+    items[0]?.status ||
+    order.overallStatus ||
+    order.status ||
+    'Confirmed'
+  );
+  const activeSellerStatusLabel = String(activeSellerStatusRaw)
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
 
   const allOrderItemsSum = allOrderItems.reduce((acc, it) => acc + (Number(it.originalPrice ?? it.price ?? it.finalPrice ?? 0) * Number(it.quantity || 1)), 0);
   const itemsSum = items.reduce((acc, it) => acc + (Number(it.originalPrice ?? it.price ?? it.finalPrice ?? 0) * Number(it.quantity || 1)), 0);
@@ -1340,15 +1355,29 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                     }`}
                   >
                     <span>{grp.storeName}</span>
-                    {grp.hasConfirmedItems ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        Confirmed ({grp.items.length})
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
-                        <Lock size={9} /> Pending ({grp.items.length})
-                      </span>
-                    )}
+                    {(() => {
+                      const grpStatusRaw = (
+                        grp.items.find(i => {
+                          const s = String(i.status || '').toLowerCase().trim();
+                          return s && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(s);
+                        })?.status ||
+                        grp.items[0]?.status ||
+                        (grp.hasConfirmedItems ? 'Confirmed' : 'Pending')
+                      );
+                      const grpStatusLabel = grpStatusRaw
+                        ? String(grpStatusRaw).replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+                        : (grp.hasConfirmedItems ? 'Confirmed' : 'Pending');
+
+                      return grp.hasConfirmedItems ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          {grpStatusLabel} ({grp.items.length})
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                          <Lock size={9} /> Pending ({grp.items.length})
+                        </span>
+                      );
+                    })()}
                   </button>
                 );
               })}
@@ -1471,6 +1500,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
               <p className="text-gray-700">Order ID: <strong className="font-mono text-gray-900">#{order.id}</strong></p>
               <p className="text-gray-700">Invoice No: <strong className="font-mono text-brand-teal">INV-{order.id}</strong></p>
               <p className="text-gray-700">Invoice Date: <strong className="text-gray-900">{order.date || new Date().toLocaleDateString('en-GB')}</strong></p>
+              <p className="text-gray-700">Status: <strong className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px]">{activeSellerStatusLabel}</strong></p>
               <p className="text-gray-700">Payment: <strong className="text-gray-900">{order.paymentMethod || 'Online UPI'}</strong> ({order.paymentStatus || 'Paid'})</p>
               <p className="text-gray-700">School / Entity: <strong className="text-gray-900">{order.school || 'General Retail'}</strong></p>
             </div>
@@ -1502,7 +1532,17 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                     <tr key={idx} className="hover:bg-gray-50/50">
                       <td className="py-2.5 px-3">
                         <p className="font-bold text-gray-900">{item.name}</p>
-                        <p className="text-[10px] text-gray-400">{item.category || 'School Supply'}</p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap">
+                          <span>{item.category || 'School Supply'}</span>
+                          {item.status && (
+                            <>
+                              <span>•</span>
+                              <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px]">
+                                {String(item.status).replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="font-semibold text-gray-800 bg-gray-100 px-2 py-0.5 rounded text-[11px] border border-gray-200 block truncate max-w-[130px]" title={sellerName}>
@@ -1761,6 +1801,10 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                 </div>
 
                 <div className="space-y-1.5 text-gray-600">
+                  <div className="flex justify-between items-center">
+                    <span>Order / Fulfillment Status:</span>
+                    <strong className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">{activeSellerStatusLabel}</strong>
+                  </div>
                   <div className="flex justify-between items-center">
                     <span>Payment Mode:</span>
                     <strong className="text-gray-900 font-sans">{order.paymentMethod || 'Cash on Delivery (COD)'} ({order.paymentStatus || 'Pending'})</strong>
