@@ -131,7 +131,7 @@ export default function SellerFinanceModal({
         }, 0);
 
         const effectiveTotal = computedSubtotal > 0 ? computedSubtotal : Number(order.totalAmount || order.total || 0);
-        const ordRate = Number(order.commissionRate || commissionRate || 10);
+        const ordRate = Number(commissionRate ?? order.commissionRate ?? 10);
 
         // Determine delivery mode and Rule 2 applicability
         const rawDeliveryMode = String(order.deliveryMode || order.deliveryType || '').toLowerCase();
@@ -143,7 +143,7 @@ export default function SellerFinanceModal({
                              relevantItems.some(it => String(it.deliveryType || '').toLowerCase().includes('third') || Boolean(it.thirdPartyDetails?.courierName));
 
         const ordTotalVal = Number(order.totalAmount || order.total || effectiveTotal);
-        const isAbove400 = ordTotalVal > 400;
+        const isAbove400 = ordTotalVal >= 301;
 
         let deliveryChargeBorneBy = order.deliveryChargeBorneBy;
         if (!deliveryChargeBorneBy) {
@@ -162,8 +162,9 @@ export default function SellerFinanceModal({
         const isRule3 = isCod && !isThirdParty;
         const isRule4 = isCod && isThirdParty;
 
-        // Check if items already have calculated settlement from backend
-        const hasItemSettlement = relevantItems.some(it => it.commissionAmount !== undefined || it.netSettlementAmount !== undefined);
+        // Check if items already have calculated settlement from backend matching current commission
+        const itemCommRateMismatched = Boolean(commissionRate && relevantItems.some(it => it.commissionRate !== undefined && it.commissionRate !== null && Number(it.commissionRate) !== commissionRate));
+        const hasItemSettlement = !itemCommRateMismatched && relevantItems.some(it => it.commissionAmount !== undefined || it.netSettlementAmount !== undefined);
         let portalCommission = 0;
         let gstOnCommission = 0;
         let tdsAmount = 0;
@@ -206,7 +207,7 @@ export default function SellerFinanceModal({
           // Rule 3: 0% GST TCS when portal does not collect customer cash
           gstTcsAmount = isRule3 ? 0 : Math.round(effectiveTotal * 0.005 * 100) / 100;
 
-          // Rule 2: Delivery Charges + Product GST (only if 3rd party, seller-borne, and order <= ₹400)
+          // Rule 2: Delivery Charges + Product GST (only if 3rd party, seller-borne, and order < ₹301)
           if (isThirdParty && deliveryChargeBorneBy === 'seller' && !isAbove400) {
             const rawDeliveryFee = Math.max(0, Number(order.deliveryCharge ?? order.shippingAmount ?? order.shippingFee ?? 40));
             deliveryChargeAmount = Math.round(rawDeliveryFee * 100) / 100;
@@ -772,9 +773,9 @@ export default function SellerFinanceModal({
             {/* 5 Deduction Waterfall Badges */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
               <div className="p-2.5 bg-white rounded-xl border border-gray-200 space-y-0.5">
-                <div className="text-[10px] font-extrabold text-amber-800 uppercase">Portal Comm (10%)</div>
+                <div className="text-[10px] font-extrabold text-amber-800 uppercase">Portal Comm ({commissionRate}%)</div>
                 <div className="font-extrabold text-sm text-gray-900">₹{(metrics.portalCommission || 0).toLocaleString('en-IN')}</div>
-                <p className="text-[9px] text-gray-500 font-medium">10% Platform fee</p>
+                <p className="text-[9px] text-gray-500 font-medium">{commissionRate}% Platform fee</p>
               </div>
 
               <div className="p-2.5 bg-white rounded-xl border border-gray-200 space-y-0.5">
@@ -798,7 +799,7 @@ export default function SellerFinanceModal({
               <div className="p-2.5 bg-white rounded-xl border border-gray-200 space-y-0.5 col-span-2 sm:col-span-1">
                 <div className="text-[10px] font-extrabold text-rose-800 uppercase">Deliv. Ded. (Rule 2)</div>
                 <div className="font-extrabold text-sm text-rose-700">₹{(metrics.deliveryDeduction || 0).toLocaleString('en-IN')}</div>
-                <p className="text-[9px] text-gray-500 font-medium">Courier + 18% GST (&gt;₹400 Admin free)</p>
+                <p className="text-[9px] text-gray-500 font-medium">Courier + 18% GST (≥₹301 Admin free)</p>
               </div>
             </div>
 
@@ -826,7 +827,7 @@ export default function SellerFinanceModal({
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="text-amber-800 font-bold">•</span>
-                    <span><strong>Portal Commission:</strong> 10% (या निर्धारित दर) — पोर्टल का कमीशन।</span>
+                    <span><strong>Portal Commission:</strong> {commissionRate}% (या निर्धारित दर) — पोर्टल का कमीशन।</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="text-amber-800 font-bold">•</span>
@@ -845,7 +846,7 @@ export default function SellerFinanceModal({
                     <span><strong>Delivery Charges + 18% GST:</strong> डिलीवरी का खर्च और उस पर GST तभी काटें, जब यह खर्च सेलर के जिम्मे हो।</span>
                   </div>
                   <div className="flex items-start gap-1.5 md:col-span-2 bg-amber-100/80 p-2.5 rounded-lg border border-amber-300 text-amber-950 font-medium">
-                    <span className="font-extrabold text-amber-900 shrink-0">✨ ₹400 से अधिक के ऑर्डर पर:</span>
+                    <span className="font-extrabold text-amber-900 shrink-0">✨ ₹301 या अधिक के ऑर्डर पर:</span>
                     <span>यदि डिलीवरी का खर्च एडमिन उठाता है, तो सेलर से डिलीवरी चार्ज और उसका GST नहीं काटना है (सेलर से ₹0 डिलीवरी कटौती)।</span>
                   </div>
                   <div className="flex items-start gap-1.5 md:col-span-2">
@@ -888,7 +889,7 @@ export default function SellerFinanceModal({
                 </div>
                 <div className="text-[11px] text-gray-800 space-y-1">
                   <p>• <strong>Gross Sale:</strong> ग्राहक से प्राप्त कुल बिक्री राशि।</p>
-                  <p>• <strong>Portal Commission (10%) + 18% GST + TDS (0.1%) + GST TCS (0.5%):</strong> लागू पोर्टल कटौती।</p>
+                  <p>• <strong>Portal Commission ({commissionRate}%) + 18% GST + TDS (0.1%) + GST TCS (0.5%):</strong> लागू पोर्टल कटौती।</p>
                   <p>• <strong>Delivery Deduction:</strong> ₹0 (सेलर स्वयं डिलीवरी करता है, कोई कूरियर कटौती नहीं)।</p>
                   <p>• <strong>Final Settlement:</strong> Gross − Deductions = सेलर को देय राशि।</p>
                 </div>
@@ -908,7 +909,7 @@ export default function SellerFinanceModal({
                 <div className="text-[11px] text-gray-800 space-y-1">
                   <p>• <strong>Cash Collection:</strong> ग्राहक पूरा पैसा सीधे सेलर को कैश में देता है। पोर्टल को ₹0 प्राप्त होता है।</p>
                   <p>• <strong>TCS (0%):</strong> पोर्टल पैसे एकत्रित नहीं करता, इसलिए Rule 3 में 0% TCS लागू होता है।</p>
-                  <p>• <strong>Portal Deductions Owed:</strong> 10% Comm + 18% GST + 0.1% TDS सेलर पर पोर्टल का बकाया बनता है।</p>
+                  <p>• <strong>Portal Deductions Owed:</strong> {commissionRate}% Comm + 18% GST + 0.1% TDS सेलर पर पोर्टल का बकाया बनता है।</p>
                   <p>• <strong>Final Settlement:</strong> माइनस (−Total Deductions) के रूप में दिखेगा जो आगामी भुगतानों से समायोजित होगा।</p>
                 </div>
               </div>
@@ -926,8 +927,8 @@ export default function SellerFinanceModal({
                 </div>
                 <div className="text-[11px] text-gray-800 space-y-1">
                   <p>• <strong>Courier Remittance:</strong> कूरियर ग्राहक से कैश कलेक्ट कर पोर्टल को रेमिट करता है।</p>
-                  <p>• <strong>Deductions:</strong> 10% Comm + 18% GST + 0.1% TDS + 0.5% TCS।</p>
-                  <p>• <strong>₹400+ पर डिलीवरी फ्री:</strong> ₹400 से अधिक ऑर्डर पर डिलीवरी खर्च ₹0, बची शुद्ध राशि सेलर को दी जाएगी।</p>
+                  <p>• <strong>Deductions:</strong> {commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS।</p>
+                  <p>• <strong>₹301+ पर डिलीवरी फ्री:</strong> ₹301 या अधिक ऑर्डर पर डिलीवरी खर्च ₹0, बची शुद्ध राशि सेलर को दी जाएगी।</p>
                 </div>
               </div>
             )}
@@ -937,19 +938,19 @@ export default function SellerFinanceModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-[10px]">
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-teal-800 shrink-0">Rule 1 (Online Self):</span>
-                    <span>Gross − [10% Comm + 18% GST + 0.1% TDS + 0.5% TCS] = Net. (डिलीवरी ₹0)</span>
+                    <span>Gross − [{commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS] = Net. (डिलीवरी ₹0)</span>
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-amber-800 shrink-0">Rule 2 (Online Courier):</span>
-                    <span>10% Comm + 18% GST + 0.1% TDS + 0.5% TCS। डिलीवरी खर्च+GST तभी जब सेलर वहन करे। <strong>₹400+ एडमिन फ्री (₹0)</strong>।</span>
+                    <span>{commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। डिलीवरी खर्च+GST तभी जब सेलर वहन करे। <strong>₹301+ एडमिन फ्री (₹0)</strong>।</span>
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-rose-800 shrink-0">Rule 3 (COD Self):</span>
-                    <span>कैश सेलर को प्राप्त। पोर्टल 10% Comm + 18% GST + 0.1% TDS लेगा। <strong>सेटलमेंट माइनस (-)</strong> दिखेगा।</span>
+                    <span>कैश सेलर को प्राप्त। पोर्टल {commissionRate}% Comm + 18% GST + 0.1% TDS लेगा। <strong>सेटलमेंट माइनस (-)</strong> दिखेगा।</span>
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-purple-800 shrink-0">Rule 4 (COD Courier):</span>
-                    <span>कूरियर कैश पोर्टल को भेजेगा। 10% Comm + 18% GST + 0.1% TDS + 0.5% TCS। <strong>₹400+ डिलीवरी ₹0</strong>।</span>
+                    <span>कूरियर कैश पोर्टल को भेजेगा। {commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। <strong>₹301+ डिलीवरी ₹0</strong>।</span>
                   </div>
                 </div>
 
@@ -1055,7 +1056,7 @@ export default function SellerFinanceModal({
                     <th className="py-3 px-3">Products & Qty</th>
                     <th className="py-3 px-3">Payment Mode</th>
                     <th className="py-3 px-3 text-right">Gross Sale</th>
-                    <th className="py-3 px-3 text-right">Comm (10%)</th>
+                    <th className="py-3 px-3 text-right">Comm ({commissionRate}%)</th>
                     <th className="py-3 px-3 text-right">GST (18%)</th>
                     <th className="py-3 px-3 text-right">Tax (0.6%)</th>
                     <th className="py-3 px-3 text-right">Deliv. Ded.</th>
@@ -1166,8 +1167,8 @@ export default function SellerFinanceModal({
                               <div className="text-[9px] text-gray-400">₹{o.deliveryChargeAmount || 0} + ₹{o.gstOnDeliveryAmount || 0} GST</div>
                             </div>
                           ) : o.isThirdParty && o.isAbove400 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title="Order > ₹400: Free delivery borne by Admin">
-                              ₹0 (Admin &gt;₹400)
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title="Order >= ₹301: Free delivery borne by Admin">
+                              ₹0 (Admin ≥₹301)
                             </span>
                           ) : o.isThirdParty && o.deliveryChargeBorneBy === 'customer' ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-800 border border-sky-200" title="Delivery fee paid by customer">

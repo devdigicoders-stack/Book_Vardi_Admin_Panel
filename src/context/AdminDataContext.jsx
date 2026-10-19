@@ -1860,8 +1860,48 @@ export const AdminDataProvider = ({ children }) => {
     const numRate = Number(rate);
     setSellers(prev => {
       const updated = prev.map(s => (s.id === sellerId || s._id === sellerId) ? { ...s, commissionRate: numRate, commissionPercentage: numRate } : s);
+      safeSetLocalStorage('admin_sellers', updated);
       return updated;
     });
+
+    // Also sync all existing orders for this seller in real-time
+    setOrders(prevOrders => {
+      if (!Array.isArray(prevOrders)) return prevOrders;
+      return prevOrders.map(ord => {
+        const isMatchingSeller = 
+          String(ord.sellerId?._id || ord.sellerId || '').trim() === String(sellerId).trim() ||
+          (ord.items && ord.items.some(it => String(it.sellerId?._id || it.sellerId || '').trim() === String(sellerId).trim()));
+        if (!isMatchingSeller) return ord;
+
+        return {
+          ...ord,
+          commissionRate: numRate,
+          sellerCommissionRate: numRate,
+          commissionPercentage: numRate,
+          sellerDetails: {
+            ...(ord.sellerDetails || {}),
+            commissionRate: numRate,
+            commissionPercentage: numRate
+          },
+          items: (ord.items || []).map(it => {
+            const itMatches = String(it.sellerId?._id || it.sellerId || '').trim() === String(sellerId).trim();
+            if (!itMatches && !isMatchingSeller) return it;
+            return {
+              ...it,
+              commissionRate: numRate,
+              sellerCommissionRate: numRate,
+              commissionPercentage: numRate,
+              sellerDetails: {
+                ...(it.sellerDetails || {}),
+                commissionRate: numRate,
+                commissionPercentage: numRate
+              }
+            };
+          })
+        };
+      });
+    });
+
     try {
       await updateSellerCommissionApi(sellerId, numRate);
     } catch (err) {

@@ -26,6 +26,7 @@ import TaxInvoiceModal, { parseStateInfo } from './TaxInvoiceModal';
 import { resendRiderWhatsAppApi, SERVER_URL } from '../../utils/api';
 import { generateRiderWhatsAppMessage, buildRiderWhatsAppUrl } from '../../utils/whatsappRiderHelper';
 import { useToast } from '../../context/ToastContext';
+import { useAdminData } from '../../context/AdminDataContext';
 
 // Helper to generate dynamic tracking ID based on courier name
 export const generateDynamicTrackingId = (courierName) => {
@@ -74,6 +75,8 @@ export default function OrderDetailModal({
 }) {
   const [currentOrder, setCurrentOrder] = useState(order);
   const toast = useToast();
+  const adminCtx = typeof useAdminData === 'function' ? useAdminData() : {};
+  const sellers = adminCtx?.sellers || [];
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [newTracking, setNewTracking] = useState('');
   const [selectedStatus, setSelectedStatus] = useState(order?.overallStatus || order?.status || 'Pending');
@@ -1094,7 +1097,11 @@ export default function OrderDetailModal({
                 )}
                 {(() => {
                   const modalStatus = String(order.status || order.overallStatus || '').toLowerCase().trim();
-                  const isConfirmedOrder = modalStatus && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(modalStatus);
+                  const hasPendingItems = Array.isArray(order.items) && order.items.length > 0 && order.items.some(it => {
+                    const itStatus = String(it.status || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+                    return !itStatus || ['pending', 'placed', 'unconfirmed', 'draft'].includes(itStatus);
+                  });
+                  const isConfirmedOrder = modalStatus && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(modalStatus) && !hasPendingItems;
                   const isLocked = !isConfirmedOrder;
                   return (
                     <button
@@ -1465,7 +1472,17 @@ export default function OrderDetailModal({
                 }
 
                 const grossSale = Number(order.sellerSubtotal || order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
-                const commRate = Number(order.commissionRate ?? order.sellerCommissionRate ?? order.items?.[0]?.commissionRate ?? 10);
+                const targetSellerName = String(order.sellerStoreName || order.storeName || order.sellerName || order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName || '').toLowerCase().trim();
+                const cleanTargetName = targetSellerName.replace(/[^a-z0-9]/g, '');
+                const matchedSeller = sellers.find(s => {
+                  const sId = String(s.id || s._id || '');
+                  const ordSellerId = String(order.sellerId?._id || order.sellerId || order.items?.[0]?.sellerId?._id || order.items?.[0]?.sellerId || '');
+                  if (sId && ordSellerId && sId === ordSellerId) return true;
+                  const cleanStore = String(s.storeName || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  return cleanTargetName && cleanStore && (cleanTargetName === cleanStore || cleanTargetName.includes(cleanStore) || cleanStore.includes(cleanTargetName));
+                });
+                const sellerRate = matchedSeller?.commissionRate ?? matchedSeller?.commissionPercentage;
+                const commRate = Number(sellerRate ?? order.commissionRate ?? order.sellerCommissionRate ?? order.items?.[0]?.commissionRate ?? 10);
                 
                 // 1. Portal Commission
                 const portalComm = Math.round(((grossSale * commRate) / 100) * 100) / 100;
@@ -1484,7 +1501,7 @@ export default function OrderDetailModal({
                 const tcsAmt = (ruleNum === 3 || isTaxFreeOrder) ? 0 : Math.round(((grossSale * tcsRate) / 100) * 100) / 100;
 
                 // 5. Delivery Charges + 18% GST (Rule 2 & Rule 4: Client Norms)
-                const isAbove400 = (grossSale > 400 || Number(order.total || order.totalAmount || 0) > 400);
+                const isAbove400 = (grossSale >= 301 || Number(order.total || order.totalAmount || 0) >= 301);
                 let delivBorneBy = order.deliveryChargeBorneBy;
                 if (!delivBorneBy) {
                   if (isAbove400) delivBorneBy = 'admin';
@@ -1512,7 +1529,7 @@ export default function OrderDetailModal({
                   totalDelivDed = Math.round((delivFeeAmt + delivGstAmt) * 100) / 100;
                   delivStatusNote = `सेलर वहन (कूरियर ₹${delivFeeAmt.toFixed(2)} + ${orderProductGstRate}% GST ₹${delivGstAmt.toFixed(2)})`;
                 } else if (isAbove400) {
-                  delivStatusNote = '₹400+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती';
+                  delivStatusNote = '₹301+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती';
                 } else if (delivBorneBy === 'customer') {
                   delivStatusNote = 'ग्राहक द्वारा वहन — सेलर से ₹0 कटौती';
                 } else {
@@ -2015,6 +2032,7 @@ export default function OrderDetailModal({
       <TaxInvoiceModal
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
+        sellers={sellers}
         order={(() => {
           const currentBase = displayOrder || order;
           const isSelf = deliveryModeInput === 'self_delivery';

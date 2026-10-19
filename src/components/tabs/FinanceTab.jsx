@@ -87,9 +87,12 @@ export default function FinanceTab() {
         const sMatch = sellers.find(s => {
           const sId = String(s.id || s._id || '');
           const oSellerId = String(o.sellerId?._id || o.sellerId || o.items?.[0]?.sellerId?._id || o.items?.[0]?.sellerId || '');
-          return sId && sId === oSellerId;
+          const sStore = String(s.storeName || s.name || '').toLowerCase().trim();
+          const oStore = String(o.sellerStoreName || o.storeName || o.items?.[0]?.sellerStoreName || o.items?.[0]?.storeName || '').toLowerCase().trim();
+          return (sId && sId === oSellerId) || (sStore && oStore && sStore === oStore);
         });
-        const rate = Number(o.commissionRate ?? o.items?.[0]?.commissionRate ?? sMatch?.commissionRate ?? sMatch?.commissionPercentage ?? 5);
+        const sellerRate = sMatch?.commissionRate ?? sMatch?.commissionPercentage;
+        const rate = Number(sellerRate ?? o.commissionRate ?? o.items?.[0]?.commissionRate ?? 5);
         totalPlatformRevenue += Math.round(orderTotal * (rate / 100) * 100) / 100;
       }
     });
@@ -149,7 +152,7 @@ export default function FinanceTab() {
             : Number(o.total || o.totalAmount || 0);
 
           realSales += subtotal;
-          const itemCommRate = Number(o.commissionRate ?? sItems[0]?.commissionRate ?? commRate);
+          const itemCommRate = Number(commRate ?? sItems[0]?.commissionRate ?? o.commissionRate ?? 5);
           const orderCut = Math.round(subtotal * (itemCommRate / 100) * 100) / 100;
           realPlatformCut += orderCut;
 
@@ -579,6 +582,7 @@ export default function FinanceTab() {
           isOpen={Boolean(selectedOrderForInvoice)}
           onClose={() => setSelectedOrderForInvoice(null)}
           order={selectedOrderForInvoice}
+          sellers={sellers}
         />
       )}
 
