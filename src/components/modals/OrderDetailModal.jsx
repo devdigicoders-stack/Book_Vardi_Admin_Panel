@@ -204,16 +204,12 @@ export default function OrderDetailModal({
       setNewTracking(order.trackingNumber || '');
       setSelectedStatus(order.overallStatus || order.status || 'Pending');
 
-      const hasExplicitCourier = Boolean(
-        (order.courierName && order.courierName !== 'N/A' && order.courierName !== 'Delhivery' && order.trackingNumber) ||
-        (order.thirdPartyDetails?.courierName && order.thirdPartyDetails?.trackingNumber)
-      );
-      const isSelf = order.deliveryMode === 'self_delivery' ||
-        order.deliveryType === 'self_delivery' ||
-        order.deliveryType === 'self' ||
-        !hasExplicitCourier;
+      const mode = String(order.deliveryMode || order.deliveryType || '').toLowerCase();
+      const courierPartner = String(order.courierName || order.thirdPartyDetails?.courierName || '').trim();
+      const hasCourier = mode.includes('third') || mode.includes('courier') || Boolean(courierPartner && courierPartner !== 'N/A' && courierPartner !== 'null');
+      const hasSelf = mode.includes('self') || Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
 
-      setDeliveryModeInput(isSelf ? 'self_delivery' : 'third_party');
+      setDeliveryModeInput(hasSelf && !hasCourier ? 'self_delivery' : (hasCourier ? 'third_party' : (mode === 'self_delivery' ? 'self_delivery' : 'third_party')));
       setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || '');
       setDriverNameInput(order.selfDeliveryDetails?.deliveryPersonName || '');
       setDriverPhoneInput(order.selfDeliveryDetails?.deliveryPersonPhone || '');
@@ -346,9 +342,21 @@ export default function OrderDetailModal({
         trackingUrl: selfTrackingLink
       } : undefined;
 
+      const updatedItems = (order.items || []).map(it => ({
+        ...it,
+        deliveryType: isSelf ? 'self_delivery' : 'third_party',
+        thirdPartyDetails: isSelf ? undefined : {
+          courierName: courierInput.trim(),
+          trackingNumber: assignedTrackingNumber,
+          trackingUrl: carrierUrl
+        },
+        selfDeliveryDetails: isSelf ? updatedSelfDetails : undefined
+      }));
+
       setCurrentOrder(prev => ({
         ...(prev || order),
         ...payload,
+        items: updatedItems,
         courierName: isSelf ? '' : courierInput.trim(),
         selfDeliveryDetails: updatedSelfDetails,
         trackingNumber: payload.trackingNumber,
@@ -624,7 +632,13 @@ export default function OrderDetailModal({
                 </span>
               </div>
 
-              {Boolean(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange')) && (
+              {Boolean(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange')) && (() => {
+                const targetReturnItem = (order.items || []).find(it => 
+                  (order.returnRequest?.itemId && String(it._id || it.id || it.productId) === String(order.returnRequest.itemId)) ||
+                  (order.returnRequest?.itemName && it.name === order.returnRequest.itemName)
+                ) || order.items?.[0] || {};
+
+                return (
                 <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-teal-50 border border-purple-200 rounded-xl space-y-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="font-extrabold text-xs uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
@@ -650,17 +664,17 @@ export default function OrderDetailModal({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="bg-white p-2.5 rounded-lg border border-purple-100">
                       <span className="text-[10px] font-bold uppercase text-purple-600 block">Original Item to Collect:</span>
-                      <strong className="text-gray-900">{order.returnRequest?.itemName || order.items?.[0]?.name}</strong>
+                      <strong className="text-gray-900">{order.returnRequest?.itemName || targetReturnItem?.name}</strong>
                       <div className="text-[11px] text-gray-600 mt-0.5 font-mono">
-                        Spec: {order.items?.[0]?.size ? `Size ${order.items?.[0]?.size}` : (order.returnRequest?.isMeterBased ? `${order.items?.[0]?.quantity}m` : 'Base Item')} • Price: ₹{order.returnRequest?.originalItemPrice || order.items?.[0]?.price}
+                        Spec: {targetReturnItem?.size ? `Size ${targetReturnItem.size}` : (order.returnRequest?.isMeterBased ? `${targetReturnItem?.quantity}m` : 'Base Item')} • Price: ₹{order.returnRequest?.originalItemPrice || targetReturnItem?.finalPrice || targetReturnItem?.price || 0}
                       </div>
                     </div>
 
                     <div className="bg-white p-2.5 rounded-lg border border-purple-100">
                       <span className="text-[10px] font-bold uppercase text-indigo-600 block">Replacement Item to Send:</span>
-                      <strong className="text-gray-900">{order.returnRequest?.itemName || order.items?.[0]?.name}</strong>
+                      <strong className="text-gray-900">{order.returnRequest?.itemName || targetReturnItem?.name}</strong>
                       <div className="text-[11px] text-indigo-900 font-extrabold mt-0.5 font-mono">
-                        Requested: {order.returnRequest?.exchangeLength ? `${order.returnRequest.exchangeLength} Meter(s)` : (order.returnRequest?.exchangeSize || order.returnRequest?.targetSize || 'Replacement')} • Price: ₹{order.returnRequest?.replacementItemPrice || order.returnRequest?.originalItemPrice || order.items?.[0]?.price}
+                        Requested: {order.returnRequest?.exchangeLength ? `${order.returnRequest.exchangeLength} Meter(s)` : (order.returnRequest?.exchangeSize || order.returnRequest?.targetSize || 'Replacement')} • Price: ₹{order.returnRequest?.replacementItemPrice || order.returnRequest?.originalItemPrice || targetReturnItem?.finalPrice || targetReturnItem?.price || 0}
                       </div>
                     </div>
                   </div>
@@ -675,7 +689,8 @@ export default function OrderDetailModal({
                     )}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3 bg-white rounded-xl border border-amber-100 space-y-1">
@@ -736,8 +751,15 @@ export default function OrderDetailModal({
               {/* Admin Action Workflow Buttons */}
               {!readOnly && (
                 <div className="pt-2 border-t border-amber-200/60 space-y-2">
-                  <div className="text-[11px] font-bold text-amber-900 flex items-center justify-between">
-                    <span>Admin Action Workflow:</span>
+                  <div className="text-[11px] font-bold text-amber-900 flex items-center justify-between flex-wrap gap-1">
+                    <span>
+                      Admin Action Workflow for: <strong className="text-amber-950 underline">{order.returnRequest?.itemName || (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId))?.name || 'Item'}</strong>
+                      {(() => {
+                        const tgt = (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId));
+                        const sName = tgt?.storeName || tgt?.sellerName || tgt?.sellerDetails?.storeName;
+                        return sName ? <span className="text-[10px] font-normal text-amber-700 ml-1.5">(Sold by: {sName})</span> : null;
+                      })()}
+                    </span>
                     {actionLoadingKey && (
                       <span className="text-[10px] text-amber-700 flex items-center gap-1 font-semibold animate-pulse">
                         <Loader2 size={12} className="animate-spin text-amber-600" /> Processing action...
@@ -1195,7 +1217,47 @@ export default function OrderDetailModal({
               Ordered Items ({displayOrder?.items?.length || 0})
             </h4>
             <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
-              {displayOrder?.items?.map((item, idx) => (
+              {displayOrder?.items?.map((item, idx) => {
+                const itemQty = Number(item.quantity || 1);
+                const itemUnitPrice = Number(item.originalPrice ?? item.price ?? item.finalPrice ?? 0);
+                const grossItemPrice = Math.round((itemUnitPrice * itemQty) * 100) / 100;
+
+                const anyItemHasSpecificDiscount = (displayOrder?.items || []).some(
+                  it => (it.offerDiscount !== undefined && it.offerDiscount !== null && !isNaN(Number(it.offerDiscount)) && Number(it.offerDiscount) > 0) ||
+                        (it.discount !== undefined && it.discount !== null && !isNaN(Number(it.discount)) && Number(it.discount) > 0) ||
+                        Boolean(it.couponCode) ||
+                        (Number(it.finalPrice) > 0 && Number(it.price) > Number(it.finalPrice))
+                );
+                const isProductSpecificCoupon = Boolean(
+                  displayOrder?.couponDetails?.applicableScope === 'specific_product' ||
+                  (Array.isArray(displayOrder?.couponDetails?.applicableProducts) && displayOrder.couponDetails.applicableProducts.length > 0)
+                );
+                const eligibleProductIds = new Set(
+                  (displayOrder?.couponDetails?.applicableProducts || [displayOrder?.couponDetails?.specificProductId])
+                    .filter(Boolean)
+                    .map(id => String(id))
+                );
+                const isEligible = !isProductSpecificCoupon || eligibleProductIds.has(String(item.productId || item.id || item._id || ''));
+
+                const orderCouponDiscount = Number(displayOrder?.discountAmount ?? displayOrder?.discount ?? 0);
+                const rawItemsSubtotal = (displayOrder?.items || []).reduce(
+                  (acc, it) => acc + (Number(it.originalPrice ?? it.price ?? 0) * Number(it.quantity || 1)), 0
+                );
+
+                let itemDiscount = 0;
+                if (anyItemHasSpecificDiscount) {
+                  itemDiscount = Number(item.offerDiscount || item.discount || 0);
+                  if (itemDiscount === 0 && Number(item.finalPrice) > 0 && Number(item.price) > Number(item.finalPrice)) {
+                    itemDiscount = Math.round((Number(item.price) - Number(item.finalPrice)) * Number(item.quantity || 1) * 100) / 100;
+                  }
+                } else if (orderCouponDiscount > 0 && rawItemsSubtotal > 0 && isEligible) {
+                  itemDiscount = Math.round((orderCouponDiscount * (grossItemPrice / rawItemsSubtotal)) * 100) / 100;
+                }
+                itemDiscount = Math.min(grossItemPrice, Math.max(0, itemDiscount));
+                const netItemPrice = Math.max(0, Math.round((grossItemPrice - itemDiscount) * 100) / 100);
+                const itemCouponCode = (itemDiscount > 0) ? (item.couponCode || item.appliedCouponCode || displayOrder?.couponCode || displayOrder?.appliedCouponCode || '') : '';
+
+                return (
                 <div key={idx} className="p-3 flex items-center justify-between gap-3 bg-white">
                   <div className="flex items-center gap-3">
                     <img 
@@ -1232,11 +1294,26 @@ export default function OrderDetailModal({
                           <span className="text-gray-500">({item.sellerPhone || item.sellerDetails?.phone})</span>
                         )}
                       </div>
+                      {itemDiscount > 0 && (
+                        <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                          <span>🏷️ Coupon {itemCouponCode ? `(${itemCouponCode})` : 'Applied'}: -₹{itemDiscount.toFixed(2)} off</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="text-right space-y-1">
-                    <div className="font-bold text-xs text-gray-900">₹{item.price * item.quantity}</div>
-                    <div className="text-[10px] text-gray-400">₹{item.price} each</div>
+                    {itemDiscount > 0 ? (
+                      <>
+                        <div className="font-bold text-xs text-emerald-700">₹{netItemPrice.toFixed(2)}</div>
+                        <div className="text-[10px] text-gray-400 line-through">₹{grossItemPrice.toFixed(2)}</div>
+                        <div className="text-[9px] text-emerald-600 font-semibold">(-₹{itemDiscount.toFixed(2)} off)</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-bold text-xs text-gray-900">₹{grossItemPrice.toFixed(2)}</div>
+                        <div className="text-[10px] text-gray-400">₹{itemUnitPrice} each</div>
+                      </>
+                    )}
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
                       <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
                         item.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
@@ -1284,34 +1361,86 @@ export default function OrderDetailModal({
                           <option value="Shipped">Shipped</option>
                           <option value="Out for Delivery">Out for Delivery</option>
                           <option value="Delivered">Delivered</option>
+                          <option value="Exchange Requested">Exchange Requested</option>
+                          <option value="Return Requested">Return Requested</option>
+                          <option value="Exchange Approved">Exchange Approved</option>
+                          <option value="Return Approved">Return Approved</option>
+                          <option value="Exchanged">Exchanged</option>
+                          <option value="Refunded">Refunded</option>
                           <option value="Cancelled">Cancelled</option>
                         </select>
                       )}
                     </div>
-                    <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 ${(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'}`}>
-                      {(item.deliveryType === 'self' || item.deliveryType === 'self_delivery' || order.deliveryMode === 'self_delivery') ? '🛵 Self-Delivery' : `🚚 ${item.thirdPartyDetails?.courierName || order.courierName || 'Courier'}`}
-                    </span>
+                    {(() => {
+                      const itMode = String(item.deliveryType || order.deliveryMode || '').toLowerCase();
+                      const courierNameVal = item.thirdPartyDetails?.courierName || order.courierName;
+                      const isItemSelf = itMode === 'self' || itMode === 'self_delivery' || Boolean(item.selfDeliveryDetails?.deliveryPersonName || item.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName || order.selfDeliveryDetails?.deliveryPartnerToken);
+                      const isItemCourier = itMode === 'third_party' || itMode === 'courier' || Boolean(courierNameVal && courierNameVal !== 'N/A' && courierNameVal !== '');
+
+                      if (isItemSelf) {
+                        return (
+                          <span className="inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 bg-teal-100 text-teal-800">
+                            🛵 Self-Delivery
+                          </span>
+                        );
+                      }
+                      if (isItemCourier) {
+                        return (
+                          <span className="inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 bg-blue-100 text-blue-800">
+                            🚚 {courierNameVal || 'Courier'}
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded mt-0.5 bg-amber-100 text-amber-800">
+                          ⏳ Delivery Pending
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
-              ))}
+              );
+            })}
               {(() => {
                 const subtotalVal = Number(order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
                 const shipVal = Number(order.shippingFee ?? order.shippingCost ?? 0);
                 const couponVal = Number(order.discountAmount ?? order.discount ?? 0);
                 const codFeeVal = Number(order.codFee ?? order.codCharges ?? 0);
-                const grandVal = Number(order.total || order.totalAmount || (subtotalVal + shipVal + codFeeVal - couponVal));
+                const grandVal = Math.max(0, Math.round((subtotalVal + shipVal + codFeeVal - couponVal) * 100) / 100);
 
                 let totalTaxable = 0;
                 let totalTax = 0;
                 const itemsRawSum = (order.items || []).reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
-                const hasPerItemDiscount = (order.items || []).some(it => Number(it.offerDiscount || it.discount || 0) > 0);
+                const hasPerItemDiscount = (order.items || []).some(
+                  it => (it.offerDiscount !== undefined && it.offerDiscount !== null && !isNaN(Number(it.offerDiscount)) && Number(it.offerDiscount) > 0) ||
+                        (it.discount !== undefined && it.discount !== null && !isNaN(Number(it.discount)) && Number(it.discount) > 0) ||
+                        Boolean(it.couponCode) ||
+                        (Number(it.finalPrice) > 0 && Number(it.price) > Number(it.finalPrice))
+                );
+                const isProductSpecificCouponCalc = Boolean(
+                  order.couponDetails?.applicableScope === 'specific_product' ||
+                  (Array.isArray(order.couponDetails?.applicableProducts) && order.couponDetails.applicableProducts.length > 0)
+                );
+                const eligibleProductIdsCalc = new Set(
+                  (order.couponDetails?.applicableProducts || [order.couponDetails?.specificProductId])
+                    .filter(Boolean)
+                    .map(id => String(id))
+                );
 
                 (order.items || []).forEach(item => {
                   const qty = Number(item.quantity || 1);
                   const unitPrice = Number(item.price || 0);
-                  const itemDiscount = Number(item.offerDiscount || item.discount || 0) > 0
-                    ? Number(item.offerDiscount || item.discount)
-                    : (!hasPerItemDiscount && couponVal > 0 && itemsRawSum > 0 ? (couponVal * ((unitPrice * qty) / itemsRawSum)) : 0);
+                  const isEligible = !isProductSpecificCouponCalc || eligibleProductIdsCalc.has(String(item.productId || item.id || item._id || ''));
+                  let itemDiscount = 0;
+                  if (hasPerItemDiscount) {
+                    itemDiscount = Number(item.offerDiscount || item.discount || 0);
+                    if (itemDiscount === 0 && Number(item.finalPrice) > 0 && Number(item.price) > Number(item.finalPrice)) {
+                      itemDiscount = Math.round((Number(item.price) - Number(item.finalPrice)) * qty * 100) / 100;
+                    }
+                  } else if (couponVal > 0 && itemsRawSum > 0 && isEligible) {
+                    itemDiscount = Math.round((couponVal * ((unitPrice * qty) / itemsRawSum)) * 100) / 100;
+                  }
+                  itemDiscount = Math.min(unitPrice * qty, Math.max(0, itemDiscount));
                   const grossPrice = Math.max(0, (unitPrice * qty) - itemDiscount);
                   const gstRate = Number(item.gstPercent ?? item.gstPercentage ?? item.gstRate ?? item.gst ?? 5);
                   if (gstRate > 0) {
@@ -1428,10 +1557,59 @@ export default function OrderDetailModal({
                       <span className="font-mono font-bold self-center">₹{combinedTax.toFixed(2)}</span>
                     </div>
 
-                    {/* 7. Total Order Amount */}
+                    {/* 7. Exchange Price Adjustment (if applicable) */}
+                    {(() => {
+                      const isExchangeReq = Boolean(
+                        order.returnRequest?.type === 'exchange' ||
+                        order.returnRequest?.requestType === 'exchange' ||
+                        String(order.overallStatus || order.status || '').toLowerCase().includes('exchange')
+                      );
+                      const exchangePriceDiff = Number(order.returnRequest?.priceDifference || 0);
+                      const exchangePriceAdjType = order.returnRequest?.priceAdjustmentType || (exchangePriceDiff > 0 ? 'extra_payment' : exchangePriceDiff < 0 ? 'partial_refund' : 'none');
+
+                      if (!isExchangeReq) return null;
+
+                      return (
+                        <div className="flex justify-between text-purple-900 bg-purple-50 p-2 rounded-lg border border-purple-200 text-[11px]">
+                          <div>
+                            <span className="font-bold flex items-center gap-1.5">
+                              <span>🔄</span> Exchange Adjustment ({order.returnRequest?.itemName || 'Item'}):
+                            </span>
+                            <span className="text-[10px] text-purple-700 block">
+                              Replacement: {order.returnRequest?.exchangeLength ? `${order.returnRequest.exchangeLength} Meter(s)` : (order.returnRequest?.exchangeSize || order.returnRequest?.targetSize || 'Equal Value Variant')}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold self-center">
+                            {exchangePriceAdjType === 'extra_payment' && exchangePriceDiff !== 0 ? (
+                              <span className="text-amber-800 font-extrabold">+₹{Math.abs(exchangePriceDiff).toFixed(2)} (Extra to Collect)</span>
+                            ) : exchangePriceAdjType === 'partial_refund' && exchangePriceDiff !== 0 ? (
+                              <span className="text-emerald-800 font-extrabold">-₹{Math.abs(exchangePriceDiff).toFixed(2)} (Partial Refund)</span>
+                            ) : (
+                              <span className="text-blue-700">₹0.00 (Equal Value Replacement)</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* 8. Total Order Amount */}
                     <div className="pt-2 border-t border-gray-300 flex items-center justify-between font-black text-gray-900">
                       <span className="text-xs">Total Order Amount</span>
-                      <span className="font-display font-black text-base text-teal-900 font-mono">₹{grandVal.toFixed(2)}</span>
+                      <span className="font-display font-black text-base text-teal-900 font-mono">
+                        ₹{(() => {
+                          const isExchangeReq = Boolean(
+                            order.returnRequest?.type === 'exchange' ||
+                            order.returnRequest?.requestType === 'exchange' ||
+                            String(order.overallStatus || order.status || '').toLowerCase().includes('exchange')
+                          );
+                          const exchangePriceDiff = Number(order.returnRequest?.priceDifference || 0);
+                          const exchangePriceAdjType = order.returnRequest?.priceAdjustmentType || (exchangePriceDiff > 0 ? 'extra_payment' : exchangePriceDiff < 0 ? 'partial_refund' : 'none');
+                          const adj = isExchangeReq
+                            ? (exchangePriceAdjType === 'extra_payment' ? Math.abs(exchangePriceDiff) : (exchangePriceAdjType === 'partial_refund' ? -Math.abs(exchangePriceDiff) : 0))
+                            : 0;
+                          return (grandVal + adj).toFixed(2);
+                        })()}
+                      </span>
                     </div>
                   </div>
                 );
@@ -1471,21 +1649,53 @@ export default function OrderDetailModal({
                   ruleColor = 'bg-purple-100 text-purple-950 border-purple-300';
                 }
 
-                const grossSale = Number(order.sellerSubtotal || order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
-                const targetSellerName = String(order.sellerStoreName || order.storeName || order.sellerName || order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName || '').toLowerCase().trim();
-                const cleanTargetName = targetSellerName.replace(/[^a-z0-9]/g, '');
-                const matchedSeller = sellers.find(s => {
-                  const sId = String(s.id || s._id || '');
-                  const ordSellerId = String(order.sellerId?._id || order.sellerId || order.items?.[0]?.sellerId?._id || order.items?.[0]?.sellerId || '');
-                  if (sId && ordSellerId && sId === ordSellerId) return true;
-                  const cleanStore = String(s.storeName || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                  return cleanTargetName && cleanStore && (cleanTargetName === cleanStore || cleanTargetName.includes(cleanStore) || cleanStore.includes(cleanTargetName));
+                const isExchangeReq = Boolean(
+                  order.returnRequest?.type === 'exchange' ||
+                  order.returnRequest?.requestType === 'exchange' ||
+                  String(order.overallStatus || order.status || '').toLowerCase().includes('exchange')
+                );
+                const exchangePriceDiff = Number(order.returnRequest?.priceDifference || 0);
+                const exchangePriceAdjType = order.returnRequest?.priceAdjustmentType || (exchangePriceDiff > 0 ? 'extra_payment' : exchangePriceDiff < 0 ? 'partial_refund' : 'none');
+                const exchangeAdjustmentVal = isExchangeReq
+                  ? (exchangePriceAdjType === 'extra_payment' ? Math.abs(exchangePriceDiff) : (exchangePriceAdjType === 'partial_refund' ? -Math.abs(exchangePriceDiff) : 0))
+                  : 0;
+
+                const orderDiscountVal = Number(order.discountAmount ?? order.discount ?? 0);
+                const itemSpecificDiscounts = (order.items || []).reduce((acc, it) => acc + (Number(it.offerDiscount || it.discount) || (Number(it.finalPrice) > 0 && Number(it.price) > Number(it.finalPrice) ? Math.round((Number(it.price) - Number(it.finalPrice)) * Number(it.quantity || 1) * 100) / 100 : 0)), 0);
+                const effectiveOrderDiscount = itemSpecificDiscounts > 0 ? itemSpecificDiscounts : orderDiscountVal;
+                const rawSubtotalAmount = Number(order.sellerSubtotal || order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
+                const baseGross = Math.max(0, Math.round((rawSubtotalAmount - effectiveOrderDiscount) * 100) / 100);
+                const grossSale = Math.max(0, Math.round((baseGross + exchangeAdjustmentVal) * 100) / 100);
+
+                // Multi-item exact commission calculation (supports different seller commission rates)
+                let totalItemCommission = 0;
+                (order.items || []).forEach(it => {
+                  const itQty = Number(it.quantity || 1);
+                  const itPrice = Number(it.finalPrice ?? it.price ?? 0);
+                  const itTotal = Math.round(itPrice * itQty * 100) / 100;
+                  
+                  const itSellerId = String(it.sellerId?._id || it.sellerId || '');
+                  const itStore = String(it.sellerStoreName || it.storeName || it.sellerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const itMatchedSeller = sellers.find(s => {
+                    const sId = String(s.id || s._id || '');
+                    if (sId && itSellerId && sId === itSellerId) return true;
+                    const cleanStore = String(s.storeName || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return itStore && cleanStore && (itStore === cleanStore || itStore.includes(cleanStore) || cleanStore.includes(itStore));
+                  });
+                  const itRate = Number(itMatchedSeller?.commissionRate ?? itMatchedSeller?.commissionPercentage ?? it.commissionRate ?? it.sellerCommissionRate ?? 7);
+                  const itCommAmt = (it.commissionAmount !== undefined && it.commissionAmount !== null && !isNaN(Number(it.commissionAmount)) && Number(it.commissionAmount) > 0)
+                    ? Number(it.commissionAmount)
+                    : Math.round(((itTotal * itRate) / 100) * 100) / 100;
+                  totalItemCommission += itCommAmt;
                 });
-                const sellerRate = matchedSeller?.commissionRate ?? matchedSeller?.commissionPercentage;
-                const commRate = Number(sellerRate ?? order.commissionRate ?? order.sellerCommissionRate ?? order.items?.[0]?.commissionRate ?? 10);
+
+                const portalComm = totalItemCommission > 0
+                  ? Math.round(totalItemCommission * 100) / 100
+                  : Math.round(((grossSale * 7) / 100) * 100) / 100;
+                const effectiveCommRate = grossSale > 0
+                  ? Math.round((portalComm / grossSale) * 100 * 10) / 10
+                  : 7;
                 
-                // 1. Portal Commission
-                const portalComm = Math.round(((grossSale * commRate) / 100) * 100) / 100;
                 // 2. GST on Commission (18%)
                 const gstOnComm = Math.round(((portalComm * 18) / 100) * 100) / 100;
                 // 3. TDS (0.1% Sec 194-O)
@@ -1501,10 +1711,11 @@ export default function OrderDetailModal({
                 const tcsAmt = (ruleNum === 3 || isTaxFreeOrder) ? 0 : Math.round(((grossSale * tcsRate) / 100) * 100) / 100;
 
                 // 5. Delivery Charges + 18% GST (Rule 2 & Rule 4: Client Norms)
-                const isAbove400 = (grossSale >= 301 || Number(order.total || order.totalAmount || 0) >= 301);
+                const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
+                const isAboveThreshold = (grossSale >= orderThreshold || Number(order.total || order.totalAmount || 0) >= orderThreshold || Number(order.subtotal || 0) >= orderThreshold);
                 let delivBorneBy = order.deliveryChargeBorneBy;
                 if (!delivBorneBy) {
-                  if (isAbove400) delivBorneBy = 'admin';
+                  if (isAboveThreshold) delivBorneBy = 'admin';
                   else if (order.isDeliveryBorneBySeller || order.deliveryBorneBy === 'seller') delivBorneBy = 'seller';
                   else if (Number(order.shippingFee ?? order.shippingCost ?? 0) > 0) delivBorneBy = 'customer';
                   else delivBorneBy = isThirdParty ? 'seller' : 'admin';
@@ -1522,14 +1733,14 @@ export default function OrderDetailModal({
                 }).filter(r => !isNaN(r));
                 const orderProductGstRate = itemGstRates.length > 0 ? Math.max(...itemGstRates) : 5;
 
-                if (isThirdParty && delivBorneBy === 'seller' && !isAbove400) {
+                if (isThirdParty && delivBorneBy === 'seller' && !isAboveThreshold) {
                   const rawDeliv = Math.max(0, Number(order.deliveryCharge ?? order.shippingFee ?? order.shippingCost ?? 40));
                   delivFeeAmt = Math.round(rawDeliv * 100) / 100;
                   delivGstAmt = Math.round(((delivFeeAmt * orderProductGstRate) / 100) * 100) / 100;
                   totalDelivDed = Math.round((delivFeeAmt + delivGstAmt) * 100) / 100;
                   delivStatusNote = `सेलर वहन (कूरियर ₹${delivFeeAmt.toFixed(2)} + ${orderProductGstRate}% GST ₹${delivGstAmt.toFixed(2)})`;
-                } else if (isAbove400) {
-                  delivStatusNote = '₹301+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती';
+                } else if (isAboveThreshold) {
+                  delivStatusNote = `₹${orderThreshold}+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती`;
                 } else if (delivBorneBy === 'customer') {
                   delivStatusNote = 'ग्राहक द्वारा वहन — सेलर से ₹0 कटौती';
                 } else {
@@ -1569,8 +1780,25 @@ export default function OrderDetailModal({
                         <span className="font-mono font-bold text-gray-950">₹{grossSale.toFixed(2)}</span>
                       </div>
 
+                      {isExchangeReq && (
+                        <div className="flex justify-between text-purple-900 bg-purple-100/60 p-1.5 rounded border border-purple-200">
+                          <span className="flex items-center gap-1">
+                            <span>🔄</span> Exchange Adjustment ({order.returnRequest?.itemName || 'Item'}):
+                          </span>
+                          <span className="font-mono font-bold">
+                            {exchangeAdjustmentVal > 0 ? (
+                              <span className="text-amber-800">+₹{exchangeAdjustmentVal.toFixed(2)} (अतिरिक्त कैश)</span>
+                            ) : exchangeAdjustmentVal < 0 ? (
+                              <span className="text-emerald-800">−₹{Math.abs(exchangeAdjustmentVal).toFixed(2)} (आंशिक रिफंड)</span>
+                            ) : (
+                              <span className="text-blue-800">मूल्य बराबर (₹0 Diff)</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex justify-between text-gray-700">
-                        <span>• Portal Commission ({commRate}% पोर्टल कमीशन):</span>
+                        <span>• Portal Commission (औसत {effectiveCommRate}% पोर्टल कमीशन):</span>
                         <span className="font-mono font-semibold text-amber-900">−₹{portalComm.toFixed(2)}</span>
                       </div>
 
@@ -1601,17 +1829,28 @@ export default function OrderDetailModal({
                     </div>
 
                     {/* Formula & Final Settlement */}
-                    <div className="pt-2 border-t border-amber-300 flex items-center justify-between">
+                    <div className="pt-2 border-t border-amber-300 flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <div className="font-extrabold text-amber-950 text-xs">
-                          {ruleNum === 3 ? 'Portal Due / Settlement (माइनस)' : 'Final Seller Settlement (शुद्ध सेलर भुगतान)'}
+                          {ruleNum === 3 ? '⚠️ पोर्टल को देय कमीशन/टैक्स (Payable to Portal)' : 'Final Seller Settlement (शुद्ध सेलर भुगतान)'}
                         </div>
-                        <div className="text-[9.5px] text-amber-800">
-                          Gross (₹{grossSale.toFixed(2)}) − Deductions (₹{totalDeductions.toFixed(2)})
+                        <div className="text-[10px] text-amber-900 mt-0.5">
+                          {ruleNum === 3 ? (
+                            <span>सेलर के पास कुल कैश: ₹{grossSale.toFixed(2)} • <strong>सेलर की शुद्ध बचत: ₹{(grossSale - totalDeductions).toFixed(2)}</strong></span>
+                          ) : (
+                            <span>Gross (₹{grossSale.toFixed(2)}) − Deductions (₹{totalDeductions.toFixed(2)})</span>
+                          )}
                         </div>
                       </div>
-                      <div className={`text-base font-black font-mono ${ruleNum === 3 ? 'text-rose-700' : 'text-emerald-800'}`}>
-                        {ruleNum === 3 ? `−₹${Math.abs(finalNet).toFixed(2)}` : `₹${finalNet.toFixed(2)}`}
+                      <div className="text-right">
+                        <div className={`text-base font-black font-mono ${ruleNum === 3 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                          {ruleNum === 3 ? `−₹${Math.abs(finalNet).toFixed(2)}` : `₹${finalNet.toFixed(2)}`}
+                        </div>
+                        {ruleNum === 3 && (
+                          <div className="text-[10px] font-bold text-emerald-800 font-mono">
+                            (सेलर शुद्ध बचत: ₹{(grossSale - totalDeductions).toFixed(2)})
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

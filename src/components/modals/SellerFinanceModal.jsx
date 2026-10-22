@@ -143,7 +143,8 @@ export default function SellerFinanceModal({
                              relevantItems.some(it => String(it.deliveryType || '').toLowerCase().includes('third') || Boolean(it.thirdPartyDetails?.courierName));
 
         const ordTotalVal = Number(order.totalAmount || order.total || effectiveTotal);
-        const isAbove400 = ordTotalVal >= 301;
+        const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
+        const isAbove400 = ordTotalVal >= orderThreshold;
 
         let deliveryChargeBorneBy = order.deliveryChargeBorneBy;
         if (!deliveryChargeBorneBy) {
@@ -475,8 +476,8 @@ export default function SellerFinanceModal({
       setIsDownloadingPdf(true);
       await downloadSellerFinancialStatementPdfApi(sellerId, storeName);
     } catch (err) {
-      console.warn('Backend PDF download error, switching to browser print view:', err);
-      window.print();
+      console.error('Backend financial statement PDF download error:', err);
+      alert(`Could not download financial statement PDF: ${err.message || 'Please try again later'}`);
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -1167,8 +1168,8 @@ export default function SellerFinanceModal({
                               <div className="text-[9px] text-gray-400">₹{o.deliveryChargeAmount || 0} + ₹{o.gstOnDeliveryAmount || 0} GST</div>
                             </div>
                           ) : o.isThirdParty && o.isAbove400 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title="Order >= ₹301: Free delivery borne by Admin">
-                              ₹0 (Admin ≥₹301)
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title={`Order >= ₹${o.freeDeliveryThreshold || 401}: Free delivery borne by Admin`}>
+                              ₹0 (Admin ≥₹{o.freeDeliveryThreshold || 401})
                             </span>
                           ) : o.isThirdParty && o.deliveryChargeBorneBy === 'customer' ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-800 border border-sky-200" title="Delivery fee paid by customer">
