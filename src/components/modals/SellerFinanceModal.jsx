@@ -146,14 +146,15 @@ export default function SellerFinanceModal({
         const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
         const isAbove400 = ordTotalVal >= orderThreshold;
 
+        const customerShippingFee = Number(order.shippingFee ?? order.shippingCost ?? order.shippingAmount ?? 0);
         let deliveryChargeBorneBy = order.deliveryChargeBorneBy;
-        if (!deliveryChargeBorneBy) {
+        if (!deliveryChargeBorneBy || customerShippingFee > 0) {
           if (isAbove400) {
             deliveryChargeBorneBy = 'admin';
+          } else if (customerShippingFee > 0) {
+            deliveryChargeBorneBy = 'customer';
           } else if (order.isDeliveryBorneBySeller || order.deliveryBorneBy === 'seller') {
             deliveryChargeBorneBy = 'seller';
-          } else if (Number(order.shippingAmount || order.shippingFee || 0) > 0) {
-            deliveryChargeBorneBy = 'customer';
           } else {
             deliveryChargeBorneBy = isThirdParty ? 'seller' : 'admin';
           }
@@ -187,7 +188,13 @@ export default function SellerFinanceModal({
             const itDelivTotal = Number(it.totalDeliveryDeduction || (itDeliv + itDelivGst) || 0);
             const itDed = Number(it.totalDeductions || (itComm + itGst + itTds + itTcs + itDelivTotal) || 0);
             const itGross = Number(it.total) || Math.round(((Number(it.finalPrice || it.price || 0)) * (Number(it.quantity) || 1)) * 100) / 100;
-            const itNet = Number(it.netSettlementAmount !== undefined ? it.netSettlementAmount : (isRule3 ? -itDed : (itGross - itDed)));
+            let itNet = Number(it.netSettlementAmount !== undefined ? it.netSettlementAmount : (isRule3 ? -itDed : (itGross - itDed)));
+            // Safety: if order is Rule 4 Courier or Rule 1/2 Online (not Rule 3 COD Self), settlement can never be negative
+            if (!isRule3 && itNet < 0) {
+              itNet = Math.max(0, Math.round((itGross - itDed) * 100) / 100);
+            } else if (isRule3 && itNet > 0) {
+              itNet = Math.round(-itDed * 100) / 100;
+            }
 
             portalCommission += itComm;
             gstOnCommission += itGst;
@@ -200,7 +207,7 @@ export default function SellerFinanceModal({
             finalSellerSettlement += itNet;
           });
         } else {
-          // Dynamic calculation according to Rule 1, Rule 2 & Rule 3
+          // Dynamic calculation according to Rule 1, Rule 2, Rule 3 & Rule 4
           portalCommission = Math.round(effectiveTotal * (ordRate / 100) * 100) / 100;
           gstOnCommission = Math.round(portalCommission * 0.18 * 100) / 100;
           tdsAmount = Math.round(effectiveTotal * 0.001 * 100) / 100;
@@ -208,18 +215,19 @@ export default function SellerFinanceModal({
           // Rule 3: 0% GST TCS when portal does not collect customer cash
           gstTcsAmount = isRule3 ? 0 : Math.round(effectiveTotal * 0.005 * 100) / 100;
 
-          // Rule 2: Delivery Charges + Product GST (only if 3rd party, seller-borne, and order < ₹301)
+          // Rule 2 & Rule 4: Delivery Charges (only if 3rd party, seller-borne, and order < threshold)
           if (isThirdParty && deliveryChargeBorneBy === 'seller' && !isAbove400) {
-            const rawDeliveryFee = Math.max(0, Number(order.deliveryCharge ?? order.shippingAmount ?? order.shippingFee ?? 40));
-            deliveryChargeAmount = Math.round(rawDeliveryFee * 100) / 100;
+            const rawDeliveryFee = Math.max(0, Number(order.deliveryCharge ?? order.shippingAmount ?? order.shippingFee ?? order.shippingCost ?? 49));
+            // Delivery charges are GST INCLUSIVE
+            totalDeliveryDeduction = Math.round(rawDeliveryFee * 100) / 100;
             const itemRates = relevantItems.map(it => {
               const cat = String(it.category || '').toLowerCase();
               const isBook = cat.includes('book') || cat.includes('textbook') || String(it.name || '').toLowerCase().includes('book');
               return Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? (isBook ? 0 : 5));
             }).filter(r => !isNaN(r));
             const ordProdGstRate = itemRates.length > 0 ? Math.max(...itemRates) : 5;
-            gstOnDeliveryAmount = Math.round(((deliveryChargeAmount * ordProdGstRate) / 100) * 100) / 100;
-            totalDeliveryDeduction = Math.round((deliveryChargeAmount + gstOnDeliveryAmount) * 100) / 100;
+            deliveryChargeAmount = Math.round((totalDeliveryDeduction / (1 + (ordProdGstRate / 100))) * 100) / 100;
+            gstOnDeliveryAmount = Math.round((totalDeliveryDeduction - deliveryChargeAmount) * 100) / 100;
           }
 
           totalDeductions = Math.round((portalCommission + gstOnCommission + tdsAmount + gstTcsAmount + totalDeliveryDeduction) * 100) / 100;
@@ -844,7 +852,7 @@ export default function SellerFinanceModal({
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="text-amber-800 font-bold">•</span>
-                    <span><strong>Delivery Charges + 18% GST:</strong> डिलीवरी का खर्च और उस पर GST तभी काटें, जब यह खर्च सेलर के जिम्मे हो।</span>
+                    <span><strong>Delivery Charges (कूरियर डिलीवरी खर्च - GST सहित):</strong> डिलीवरी का खर्च (GST सहित) तभी काटें, जब यह खर्च सेलर के जिम्मे हो।</span>
                   </div>
                   <div className="flex items-start gap-1.5 md:col-span-2 bg-amber-100/80 p-2.5 rounded-lg border border-amber-300 text-amber-950 font-medium">
                     <span className="font-extrabold text-amber-900 shrink-0">✨ ₹301 या अधिक के ऑर्डर पर:</span>
