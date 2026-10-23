@@ -136,11 +136,24 @@ export default function SellerFinanceModal({
         // Determine delivery mode and Rule 2 applicability
         const rawDeliveryMode = String(order.deliveryMode || order.deliveryType || '').toLowerCase();
         const hasCourier = Boolean(order.courierName && order.courierName !== 'N/A' && order.courierName !== '');
-        const isThirdParty = order.isThirdParty === true || 
-                             rawDeliveryMode.includes('third') || 
-                             rawDeliveryMode.includes('courier') || 
-                             (hasCourier && !rawDeliveryMode.includes('self')) ||
-                             relevantItems.some(it => String(it.deliveryType || '').toLowerCase().includes('third') || Boolean(it.thirdPartyDetails?.courierName));
+        const hasSelfDeliveryDetails = Boolean(
+          order.selfDeliveryDetails?.deliveryPartnerToken || 
+          order.selfDeliveryDetails?.deliveryPersonName ||
+          order.deliveryOtp ||
+          relevantItems.some(it => it.selfDeliveryDetails?.deliveryPartnerToken || it.selfDeliveryDetails?.deliveryPersonName || it.deliveryOtp)
+        );
+        const isExplicitSelf = rawDeliveryMode.includes('self') || 
+                               order.settlementRule === 'COD_SELF_DELIVERY' || 
+                               relevantItems.some(it => it.settlementRule === 'COD_SELF_DELIVERY') || 
+                               Boolean((order.deliveryOtp || hasSelfDeliveryDetails) && !hasCourier);
+        const isExplicitThirdParty = order.settlementRule === 'COD_THIRD_PARTY_DELIVERY' ||
+                                     order.settlementRule === 'ONLINE_THIRD_PARTY_DELIVERY' ||
+                                     relevantItems.some(it => it.settlementRule === 'COD_THIRD_PARTY_DELIVERY' || it.settlementRule === 'ONLINE_THIRD_PARTY_DELIVERY') ||
+                                     rawDeliveryMode.includes('third') || 
+                                     rawDeliveryMode.includes('courier') || 
+                                     hasCourier ||
+                                     relevantItems.some(it => String(it.deliveryType || '').toLowerCase().includes('third') || Boolean(it.thirdPartyDetails?.courierName));
+        const isThirdParty = isExplicitThirdParty || !isExplicitSelf;
 
         const ordTotalVal = Number(order.totalAmount || order.total || effectiveTotal);
         const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
