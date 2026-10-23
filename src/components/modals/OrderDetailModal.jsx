@@ -88,9 +88,21 @@ export default function OrderDetailModal({
 
   const displayOrder = currentOrder || order;
 
+  // Helper to reliably resolve initial delivery mode from order data
+  const resolveOrderDeliveryMode = (ord) => {
+    if (!ord) return 'third_party';
+    const m = String(ord.deliveryMode || ord.deliveryType || '').toLowerCase();
+    const c = String(ord.courierName || ord.carrier || ord.thirdPartyDetails?.courierName || '').trim();
+    const hasCourier = m.includes('third') || m.includes('courier') || Boolean(c && c !== 'N/A' && c !== 'null');
+    const hasSelf = m.includes('self') || ord.settlementRule === 'COD_SELF_DELIVERY' || Boolean(ord.selfDeliveryDetails?.deliveryPartnerToken || ord.selfDeliveryDetails?.deliveryPersonName || ord.deliveryOtp);
+    if (hasSelf && !hasCourier) return 'self_delivery';
+    if (hasCourier) return 'third_party';
+    return m === 'self_delivery' ? 'self_delivery' : 'third_party';
+  };
+
   // Delivery Partner Decision State
-  const [deliveryModeInput, setDeliveryModeInput] = useState('third_party'); // 'third_party' or 'self_delivery'
-  const [courierInput, setCourierInput] = useState('Delhivery');
+  const [deliveryModeInput, setDeliveryModeInput] = useState(() => resolveOrderDeliveryMode(order));
+  const [courierInput, setCourierInput] = useState(() => order?.courierName || order?.thirdPartyDetails?.courierName || '');
   const [driverNameInput, setDriverNameInput] = useState('');
   const [driverPhoneInput, setDriverPhoneInput] = useState('');
   const [vehicleNumberInput, setVehicleNumberInput] = useState('');
@@ -204,13 +216,9 @@ export default function OrderDetailModal({
       setNewTracking(order.trackingNumber || '');
       setSelectedStatus(order.overallStatus || order.status || 'Pending');
 
-      const mode = String(order.deliveryMode || order.deliveryType || '').toLowerCase();
-      const courierPartner = String(order.courierName || order.thirdPartyDetails?.courierName || '').trim();
-      const hasCourier = mode.includes('third') || mode.includes('courier') || Boolean(courierPartner && courierPartner !== 'N/A' && courierPartner !== 'null');
-      const hasSelf = mode.includes('self') || Boolean(order.selfDeliveryDetails?.deliveryPartnerToken || order.selfDeliveryDetails?.deliveryPersonName);
-
-      setDeliveryModeInput(hasSelf && !hasCourier ? 'self_delivery' : (hasCourier ? 'third_party' : (mode === 'self_delivery' ? 'self_delivery' : 'third_party')));
-      setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || '');
+      const resolvedMode = resolveOrderDeliveryMode(order);
+      setDeliveryModeInput(resolvedMode);
+      setCourierInput(order.courierName || order.thirdPartyDetails?.courierName || (resolvedMode === 'self_delivery' ? '' : 'Delhivery'));
       setDriverNameInput(order.selfDeliveryDetails?.deliveryPersonName || '');
       setDriverPhoneInput(order.selfDeliveryDetails?.deliveryPersonPhone || '');
       setVehicleNumberInput(order.selfDeliveryDetails?.vehicleNumber || '');
@@ -2312,7 +2320,12 @@ export default function OrderDetailModal({
         sellers={sellers}
         order={(() => {
           const currentBase = displayOrder || order;
-          const isSelf = deliveryModeInput === 'self_delivery';
+          const baseMode = String(currentBase.deliveryMode || currentBase.deliveryType || '').toLowerCase();
+          const hasCourierInBase = Boolean(currentBase.courierName && currentBase.courierName !== 'N/A' && currentBase.courierName !== '');
+          const isBaseExplicitSelf = baseMode.includes('self') || currentBase.settlementRule === 'COD_SELF_DELIVERY' || Boolean(currentBase.deliveryOtp && !hasCourierInBase);
+          
+          const effectiveMode = isBaseExplicitSelf ? 'self_delivery' : deliveryModeInput;
+          const isSelf = effectiveMode === 'self_delivery';
           const tokenVal = String(currentBase.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${currentBase.id}`).trim();
           const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
           const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
@@ -2331,9 +2344,11 @@ export default function OrderDetailModal({
             ...currentBase,
             status: selectedStatus || currentBase.status,
             overallStatus: selectedStatus || currentBase.overallStatus || currentBase.status,
-            deliveryMode: deliveryModeInput,
-            deliveryType: deliveryModeInput,
+            deliveryMode: effectiveMode,
+            deliveryType: effectiveMode,
+            settlementRule: isSelf ? (String(currentBase.paymentMethod || '').toUpperCase().includes('COD') || String(currentBase.paymentMethod || '').toUpperCase().includes('CASH') ? 'COD_SELF_DELIVERY' : 'ONLINE_SELF_DELIVERY') : currentBase.settlementRule,
             courierName: !isSelf ? courierInput : '',
+            carrier: !isSelf ? courierInput : '',
             trackingNumber: !isSelf ? newTracking.trim() : tokenVal,
             trackingUrl: isSelf ? selfTrackingLink : carrierUrl,
             selfDeliveryDetails: isSelf ? {
