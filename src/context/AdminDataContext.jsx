@@ -2550,7 +2550,10 @@ export const AdminDataProvider = ({ children }) => {
   const getTabPermission = useCallback((tabId) => {
     if (isSuperAdmin()) return 'editor';
     const perms = adminUser?.permissions || {};
-    return perms[tabId] || 'none';
+    const effectiveTab = (tabId === 'reports' || tabId === 'billing-reports')
+      ? (perms['reports'] ? 'reports' : 'finance')
+      : tabId;
+    return perms[effectiveTab] || perms[tabId] || 'none';
   }, [isSuperAdmin, adminUser?.permissions]);
 
   const isEditor = useCallback((tabId) => {

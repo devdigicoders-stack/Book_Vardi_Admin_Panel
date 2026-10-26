@@ -20,7 +20,8 @@ import {
   Shield,
   Truck,
   Layers,
-  Boxes
+  Boxes,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdminData } from '../context/AdminDataContext';
@@ -50,7 +51,8 @@ export const ADMIN_TABS = [
       { id: 'orders', path: '/orders', label: 'Orders', icon: <ShoppingBag size={17} />, badgeKey: 'pendingOrders' },
       { id: 'bulkOrders', path: '/bulk-orders', label: 'Bulk RFQs & B2B', icon: <Building2 size={17} />, badgeKey: 'pendingBulkOrders' },
       { id: 'logistics', path: '/logistics', label: 'Logistics', icon: <Truck size={17} /> },
-      { id: 'finance', path: '/finance', label: 'Finance', icon: <CreditCard size={17} /> }
+      { id: 'finance', path: '/finance', label: 'Finance', icon: <CreditCard size={17} /> },
+      { id: 'reports', path: '/reports', label: 'Billing & Reports', icon: <FileSpreadsheet size={17} /> }
     ]
   },
   {

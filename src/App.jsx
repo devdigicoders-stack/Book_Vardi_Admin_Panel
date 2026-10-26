@@ -33,6 +33,8 @@ const ADMIN_ROUTE_PATHS = [
   'bulk-orders',
   'logistics',
   'finance',
+  'reports',
+  'billing-reports',
   'sellers',
   'schools',
   'users',
