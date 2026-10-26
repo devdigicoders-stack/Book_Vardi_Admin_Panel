@@ -1749,7 +1749,12 @@ export default function OrderDetailModal({
                 const effectiveOrderDiscount = itemSpecificDiscounts > 0 ? itemSpecificDiscounts : orderDiscountVal;
                 const rawSubtotalAmount = Number(order.sellerSubtotal || order.subtotal || order.items?.reduce((acc, i) => acc + (Number(i.price || 0) * Number(i.quantity || 1)), 0) || order.total || 0);
                 const baseGross = Math.max(0, Math.round((rawSubtotalAmount - effectiveOrderDiscount) * 100) / 100);
-                const grossSale = Math.max(0, Math.round((baseGross + exchangeAdjustmentVal) * 100) / 100);
+                const itemsGrossSale = Math.max(0, Math.round((baseGross + exchangeAdjustmentVal) * 100) / 100);
+
+                const customerShippingPaid = Number(order.shippingFee ?? order.shippingCost ?? order.shippingAmount ?? 0);
+                // In Self Delivery, delivery fee collected from customer belongs to the seller
+                const selfDeliveryAmount = isSelf ? customerShippingPaid : 0;
+                const grossSale = Math.max(0, Math.round((itemsGrossSale + selfDeliveryAmount) * 100) / 100);
 
                 // Multi-item exact commission calculation (supports different seller commission rates)
                 let totalItemCommission = 0;
@@ -1775,14 +1780,14 @@ export default function OrderDetailModal({
 
                 const portalComm = totalItemCommission > 0
                   ? Math.round(totalItemCommission * 100) / 100
-                  : Math.round(((grossSale * 7) / 100) * 100) / 100;
-                const effectiveCommRate = grossSale > 0
-                  ? Math.round((portalComm / grossSale) * 100 * 10) / 10
+                  : Math.round(((itemsGrossSale * 7) / 100) * 100) / 100;
+                const effectiveCommRate = itemsGrossSale > 0
+                  ? Math.round((portalComm / itemsGrossSale) * 100 * 10) / 10
                   : 7;
                 
                 // 2. GST on Commission (18%)
                 const gstOnComm = Math.round(((portalComm * 18) / 100) * 100) / 100;
-                // 3. TDS (0.1% Sec 194-O)
+                // 3. TDS (0.1% Sec 194-O): Strictly on Gross Sale / Total Transaction Value
                 const tdsAmt = Math.round(((grossSale * 0.1) / 100) * 100) / 100;
 
                 // 4. GST TCS (0.5% Sec 52): Strictly on Taxable Value (Net Value of Taxable Supplies), not gross!
@@ -1798,13 +1803,12 @@ export default function OrderDetailModal({
                   const itGst = Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? 5);
                   return sum + (itGst > 0 ? Math.round((itPrice / (1 + itGst / 100)) * 100) / 100 : itPrice);
                 }, 0);
-                const taxableForTcs = orderItemsTaxable > 0 ? orderItemsTaxable : Math.round((grossSale / 1.05) * 100) / 100;
+                const taxableForTcs = orderItemsTaxable > 0 ? orderItemsTaxable : Math.round((itemsGrossSale / 1.05) * 100) / 100;
                 const tcsAmt = (ruleNum === 3 || isTaxFreeOrder) ? 0 : Math.round(((taxableForTcs * tcsRate) / 100) * 100) / 100;
 
                 // 5. Delivery Charges (Rule 2 & Rule 4: Client Norms)
                 const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
-                const isAboveThreshold = (grossSale >= orderThreshold || Number(order.total || order.totalAmount || 0) >= orderThreshold || Number(order.subtotal || 0) >= orderThreshold);
-                const customerShippingPaid = Number(order.shippingFee ?? order.shippingCost ?? order.shippingAmount ?? 0);
+                const isAboveThreshold = (itemsGrossSale >= orderThreshold || Number(order.total || order.totalAmount || 0) >= orderThreshold || Number(order.subtotal || 0) >= orderThreshold);
                 let delivBorneBy = order.deliveryChargeBorneBy;
                 if (!delivBorneBy || customerShippingPaid > 0) {
                   if (isAboveThreshold) delivBorneBy = 'admin';
@@ -1832,6 +1836,8 @@ export default function OrderDetailModal({
                   delivFeeAmt = Math.round((totalDelivDed / (1 + (orderProductGstRate / 100))) * 100) / 100;
                   delivGstAmt = Math.round((totalDelivDed - delivFeeAmt) * 100) / 100;
                   delivStatusNote = `सेलर वहन (कूरियर ₹${totalDelivDed.toFixed(2)} GST सहित / Base: ₹${delivFeeAmt.toFixed(2)} + ${orderProductGstRate}% GST ₹${delivGstAmt.toFixed(2)})`;
+                } else if (isSelf && customerShippingPaid > 0) {
+                  delivStatusNote = `सेलर सेल्फ डिलीवरी — ₹${customerShippingPaid.toFixed(2)} डिलीवरी शुल्क सेलर के पास (₹0 कटौती)`;
                 } else if (isAboveThreshold) {
                   delivStatusNote = `₹${orderThreshold}+ ऑर्डर पर एडमिन वहन करता है — सेलर से ₹0 कटौती`;
                 } else if (delivBorneBy === 'customer') {
@@ -1871,11 +1877,15 @@ export default function OrderDetailModal({
                       <div className="flex justify-between text-gray-800">
                         <div>
                           <span>• Gross Sale (ग्राहक से प्राप्त कुल बिक्री राशि):</span>
-                          {isExchangeReq && exchangeAdjustmentVal !== 0 && (
+                          {isSelf && customerShippingPaid > 0 ? (
+                            <span className="text-[10px] text-gray-500 block">
+                              (आइटम: ₹{itemsGrossSale.toFixed(2)} + सेल्फ डिलीवरी शुल्क: ₹{customerShippingPaid.toFixed(2)})
+                            </span>
+                          ) : (isExchangeReq && exchangeAdjustmentVal !== 0) ? (
                             <span className="text-[10px] text-gray-500 block">
                               (मूल बिक्री: ₹{baseGross.toFixed(2)} {exchangeAdjustmentVal > 0 ? `+ एक्सचेंज अंतर: ₹${exchangeAdjustmentVal.toFixed(2)}` : `− एक्सचेंज अंतर: ₹${Math.abs(exchangeAdjustmentVal).toFixed(2)}`})
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <span className="font-mono font-bold text-gray-950 self-center">₹{grossSale.toFixed(2)}</span>
                       </div>
@@ -1913,7 +1923,7 @@ export default function OrderDetailModal({
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• TDS (आयकर Sec 194-O लागू 0.1% TDS):</span>
+                        <span>• TDS (आयकर Sec 194-O लागू 0.1% TDS on Gross ₹{grossSale.toFixed(2)}):</span>
                         <span className="font-mono font-semibold text-purple-900">−₹{tdsAmt.toFixed(2)}</span>
                       </div>
 
@@ -1927,8 +1937,14 @@ export default function OrderDetailModal({
                           <span>• Delivery Charges (कूरियर डिलीवरी खर्च):</span>
                           <span className="text-[10px] text-amber-800 block font-medium">({delivStatusNote})</span>
                         </div>
-                        <span className="font-mono font-bold text-rose-800 self-center">
-                          {totalDelivDed > 0 ? `−₹${totalDelivDed.toFixed(2)}` : '₹0.00'}
+                        <span className="font-mono font-bold self-center">
+                          {isSelf && customerShippingPaid > 0 ? (
+                            <span className="text-emerald-800">+₹{customerShippingPaid.toFixed(2)} (सेलर के पास)</span>
+                          ) : totalDelivDed > 0 ? (
+                            <span className="text-rose-800">−₹{totalDelivDed.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-gray-700">₹0.00</span>
+                          )}
                         </span>
                       </div>
                     </div>
