@@ -67,6 +67,13 @@ export default function SellerFinanceModal({
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [disburseSuccess, setDisburseSuccess] = useState('');
 
+  const platformFreeDeliveryThreshold = Number(
+    adminCtx?.settings?.minOrderFreeShipping ??
+    adminCtx?.settings?.freeShippingThreshold ??
+    adminCtx?.settings?.freeDeliveryThreshold ??
+    401
+  );
+
   const sellerId = String(seller._id || seller.id || seller.sellerId || '').trim();
   const storeName = seller.storeName || seller.rawApplication?.storeName || seller.businessName || seller.name || 'Vendor Store';
   const sellerStoreName = storeName.toLowerCase().trim();
@@ -156,7 +163,7 @@ export default function SellerFinanceModal({
         const isThirdParty = isExplicitThirdParty || !isExplicitSelf;
 
         const ordTotalVal = Number(order.totalAmount || order.total || effectiveTotal);
-        const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
+        const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? order.freeShippingThreshold ?? platformFreeDeliveryThreshold);
         const isAbove400 = ordTotalVal >= orderThreshold;
 
         const customerShippingFee = Number(order.shippingFee ?? order.shippingCost ?? order.shippingAmount ?? 0);
@@ -226,7 +233,9 @@ export default function SellerFinanceModal({
           tdsAmount = Math.round(effectiveTotal * 0.001 * 100) / 100;
           
           // Rule 3: 0% GST TCS when portal does not collect customer cash
-          gstTcsAmount = isRule3 ? 0 : Math.round(effectiveTotal * 0.005 * 100) / 100;
+          // GST TCS under Sec 52: strictly on Taxable Value (net value of taxable supplies)
+          const fallbackTaxable = Math.round((effectiveTotal / 1.05) * 100) / 100;
+          gstTcsAmount = isRule3 ? 0 : Math.round(fallbackTaxable * 0.005 * 100) / 100;
 
           // Rule 2 & Rule 4: Delivery Charges (only if 3rd party, seller-borne, and order < threshold)
           if (isThirdParty && deliveryChargeBorneBy === 'seller' && !isAbove400) {
@@ -821,7 +830,7 @@ export default function SellerFinanceModal({
               <div className="p-2.5 bg-white rounded-xl border border-gray-200 space-y-0.5 col-span-2 sm:col-span-1">
                 <div className="text-[10px] font-extrabold text-rose-800 uppercase">Deliv. Ded. (Rule 2)</div>
                 <div className="font-extrabold text-sm text-rose-700">₹{(metrics.deliveryDeduction || 0).toLocaleString('en-IN')}</div>
-                <p className="text-[9px] text-gray-500 font-medium">Courier + 18% GST (≥₹301 Admin free)</p>
+                <p className="text-[9px] text-gray-500 font-medium">Courier + 18% GST (≥₹{platformFreeDeliveryThreshold} Admin free)</p>
               </div>
             </div>
 
@@ -868,7 +877,7 @@ export default function SellerFinanceModal({
                     <span><strong>Delivery Charges (कूरियर डिलीवरी खर्च - GST सहित):</strong> डिलीवरी का खर्च (GST सहित) तभी काटें, जब यह खर्च सेलर के जिम्मे हो।</span>
                   </div>
                   <div className="flex items-start gap-1.5 md:col-span-2 bg-amber-100/80 p-2.5 rounded-lg border border-amber-300 text-amber-950 font-medium">
-                    <span className="font-extrabold text-amber-900 shrink-0">✨ ₹301 या अधिक के ऑर्डर पर:</span>
+                    <span className="font-extrabold text-amber-900 shrink-0">✨ ₹{platformFreeDeliveryThreshold} या अधिक के ऑर्डर पर:</span>
                     <span>यदि डिलीवरी का खर्च एडमिन उठाता है, तो सेलर से डिलीवरी चार्ज और उसका GST नहीं काटना है (सेलर से ₹0 डिलीवरी कटौती)।</span>
                   </div>
                   <div className="flex items-start gap-1.5 md:col-span-2">
@@ -950,7 +959,7 @@ export default function SellerFinanceModal({
                 <div className="text-[11px] text-gray-800 space-y-1">
                   <p>• <strong>Courier Remittance:</strong> कूरियर ग्राहक से कैश कलेक्ट कर पोर्टल को रेमिट करता है।</p>
                   <p>• <strong>Deductions:</strong> {commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS।</p>
-                  <p>• <strong>₹301+ पर डिलीवरी फ्री:</strong> ₹301 या अधिक ऑर्डर पर डिलीवरी खर्च ₹0, बची शुद्ध राशि सेलर को दी जाएगी।</p>
+                  <p>• <strong>₹{platformFreeDeliveryThreshold}+ पर डिलीवरी फ्री:</strong> ₹{platformFreeDeliveryThreshold} या अधिक ऑर्डर पर डिलीवरी खर्च ₹0, बची शुद्ध राशि सेलर को दी जाएगी।</p>
                 </div>
               </div>
             )}
@@ -964,7 +973,7 @@ export default function SellerFinanceModal({
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-amber-800 shrink-0">Rule 2 (Online Courier):</span>
-                    <span>{commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। डिलीवरी खर्च+GST तभी जब सेलर वहन करे। <strong>₹301+ एडमिन फ्री (₹0)</strong>।</span>
+                    <span>{commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। डिलीवरी खर्च+GST तभी जब सेलर वहन करे। <strong>₹{platformFreeDeliveryThreshold}+ एडमिन फ्री (₹0)</strong>।</span>
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-rose-800 shrink-0">Rule 3 (COD Self):</span>
@@ -972,7 +981,7 @@ export default function SellerFinanceModal({
                   </div>
                   <div className="flex items-start gap-1 text-gray-700">
                     <span className="font-bold text-purple-800 shrink-0">Rule 4 (COD Courier):</span>
-                    <span>कूरियर कैश पोर्टल को भेजेगा। {commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। <strong>₹301+ डिलीवरी ₹0</strong>।</span>
+                    <span>कूरियर कैश पोर्टल को भेजेगा। {commissionRate}% Comm + 18% GST + 0.1% TDS + 0.5% TCS। <strong>₹{platformFreeDeliveryThreshold}+ डिलीवरी ₹0</strong>।</span>
                   </div>
                 </div>
 
