@@ -1148,37 +1148,38 @@ export default function OrderDetailModal({
                     </button>
                   );
                 })()}
-                {/* Statutory Invoicing: Exchange gets Exchange Tax Invoice ONLY; Returns/Refunds get Credit Note */}
+                {/* Statutory Invoicing: Exchange gets BOTH Credit Note (returned item) & Exchange Tax Invoice (new item); Returns/Refunds get Credit Note ONLY */}
                 {(() => {
                   const retType = String(order.returnRequest?.type || order.returnRequest?.requestType || '').toLowerCase();
                   const isOrderExchange = retType === 'exchange' || String(order.status).toLowerCase().includes('exchange');
                   const retStatus = String(order.returnRequest?.status || order.overallStatus || order.status || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
                   const acceptedStatuses = [
-                    'approved', 'return_approved', 'pickup_scheduled',
-                    'product_received', 'product_return_received',
+                    'approved', 'return_approved', 'exchange_approved', 'exchange_dispatched', 'exchanged', 'completed',
+                    'pickup_scheduled', 'product_received', 'product_return_received',
                     'refund_initiated', 'refund_processed', 'refund_completed', 'refunded'
                   ];
                   const isReturnAccepted = acceptedStatuses.some(s => retStatus.includes(s));
                   const isCancelled = String(order.status).toLowerCase() === 'cancelled' || Boolean(order.cancelledAt);
-                  const isReturnOrRefund = !isOrderExchange && (isReturnAccepted || isCancelled);
-                  const isPendingReturnApproval = !isOrderExchange && !isCancelled && (retType === 'return' || retStatus.includes('return')) && !isReturnAccepted;
+                  const canShowCreditNote = isOrderExchange ? isReturnAccepted : (isReturnAccepted || isCancelled);
+                  const isPendingApproval = !isCancelled && (retType === 'return' || retType === 'exchange' || retStatus.includes('return') || retStatus.includes('exchange')) && !isReturnAccepted;
 
                   return (
                     <>
-                      {isReturnOrRefund && (
+                      {canShowCreditNote && (
                         <a
                           href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
+                          title="Download GST Credit Note under Section 34 of CGST Act (Original Returned Item)"
                         >
                           <FileText size={13} /> GST Credit Note
                         </a>
                       )}
-                      {isPendingReturnApproval && (
+                      {isPendingApproval && (
                         <span
                           className="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-lg border border-gray-200 cursor-not-allowed flex items-center gap-1 shadow-2xs"
-                          title="Credit Note will be generated after Return is Approved / Accepted"
+                          title="Credit Note will be generated after Return/Exchange is Approved / Accepted"
                         >
                           <Lock size={12} className="text-gray-400" />
                           <span>Credit Note (Pending Approval)</span>
@@ -1190,6 +1191,7 @@ export default function OrderDetailModal({
                           target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-indigo-200"
+                          title="Download GST Replacement / Exchange Tax Invoice under Section 31 of CGST Act (New Item Sold)"
                         >
                           <FileText size={13} /> Exchange Tax Invoice
                         </a>
