@@ -733,9 +733,9 @@ export default function BulkOrdersTab() {
       {/* MODAL 2: VIEW & APPROVE SELLER QUOTATIONS */}
       {/* ========================================== */}
       {viewQuotesOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 text-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 text-xs space-y-4 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 shrink-0">
               <div>
                 <h4 className="font-bold text-gray-900 text-base">Seller Quotations & Negotiations</h4>
                 <p className="text-[11px] text-purple-800 font-bold mt-0.5">
@@ -747,7 +747,7 @@ export default function BulkOrdersTab() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-3 overflow-y-auto pr-1 flex-1">
               {(!viewQuotesOrder.quotations || viewQuotesOrder.quotations.length === 0) ? (
                 <div className="text-center py-8 text-gray-400">No quotations submitted by sellers yet.</div>
               ) : (() => {
@@ -796,7 +796,7 @@ export default function BulkOrdersTab() {
                   return (
                     <div
                       key={qId}
-                      className={`p-4 rounded-xl border transition-all space-y-3 ${
+                      className={`p-3.5 sm:p-4 rounded-xl border transition-all space-y-3 ${
                         isApproved
                           ? 'bg-emerald-50/70 border-emerald-300'
                           : isRejected
@@ -804,9 +804,9 @@ export default function BulkOrdersTab() {
                           : 'bg-white border-gray-200 hover:border-purple-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-extrabold text-sm text-gray-900 flex items-center gap-2 flex-wrap">
                             <span>{quote.sellerStoreName || quote.sellerName}</span>
                             {isApproved && (
                               <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
@@ -819,12 +819,12 @@ export default function BulkOrdersTab() {
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-gray-500">
+                          <div className="text-[11px] text-gray-500 mt-0.5">
                             {quote.sellerPhone} • {quote.sellerCity}
                           </div>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-left sm:text-right shrink-0">
                           <div className="font-extrabold text-base text-teal-800">
                             ₹{Number(quote.quoteAmount).toLocaleString()}
                           </div>
@@ -852,22 +852,27 @@ export default function BulkOrdersTab() {
                       {/* Descriptive Item Breakdown Table */}
                       {Array.isArray(quote.itemPrices) && quote.itemPrices.length > 0 && (
                         <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                          <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between text-[11px] font-extrabold text-gray-700">
-                            <span className="flex items-center gap-1.5">
+                          <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between gap-2 text-[11px] font-extrabold text-gray-700 flex-wrap">
+                            <span className="flex items-center gap-1.5 shrink-0">
                               <Package size={13} className="text-teal-700" /> Itemized Pricing & Scale Breakdown
                             </span>
-                            <span className="text-[10px] text-gray-400 font-medium">{quote.itemPrices.length} Items</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 sm:hidden font-semibold">
+                                ↔ Swipe to scroll
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-medium">{quote.itemPrices.length} Items</span>
+                            </div>
                           </div>
                           <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse text-xs">
+                            <table className="min-w-[560px] w-full text-left border-collapse text-xs">
                               <thead>
-                                <tr className="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-200">
-                                  <th className="py-2 px-3">Product Demand</th>
-                                  <th className="py-2 px-2 text-center">Qty</th>
-                                  <th className="py-2 px-2 text-right">User Budget</th>
-                                  <th className={`py-2 px-2 text-right ${isRejected ? 'bg-gray-100 text-gray-700' : 'bg-emerald-50 text-emerald-950'}`}>Seller Price</th>
-                                  <th className="py-2 px-3 text-right">Line Total</th>
-                                  <th className="py-2 px-3">Scale Note</th>
+                                <tr className="bg-gray-50/70 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-200">
+                                  <th className="py-2.5 px-3 min-w-[140px] whitespace-nowrap">Product Demand</th>
+                                  <th className="py-2.5 px-2.5 text-center min-w-[50px] whitespace-nowrap">Qty</th>
+                                  <th className="py-2.5 px-2.5 text-right min-w-[85px] whitespace-nowrap">User Budget</th>
+                                  <th className={`py-2.5 px-2.5 text-right min-w-[95px] whitespace-nowrap ${isRejected ? 'bg-gray-100 text-gray-700' : 'bg-emerald-50 text-emerald-950 font-black'}`}>Seller Price</th>
+                                  <th className="py-2.5 px-3 text-right min-w-[95px] whitespace-nowrap">Line Total</th>
+                                  <th className="py-2.5 px-3 min-w-[130px] whitespace-nowrap">Scale Note</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100">
@@ -877,22 +882,22 @@ export default function BulkOrdersTab() {
                                   const lineTotal = Number(item.totalPrice) || ((Number(item.quantity) || 1) * sellerPrice);
 
                                   return (
-                                    <tr key={ipIdx} className="hover:bg-teal-50/20">
-                                      <td className="py-2 px-3">
-                                        <div className="font-bold text-gray-900 line-clamp-1">{item.itemName}</div>
-                                        <div className="text-[10px] text-gray-400">{item.category}</div>
+                                    <tr key={ipIdx} className="hover:bg-teal-50/20 transition-colors">
+                                      <td className="py-2.5 px-3">
+                                        <div className="font-bold text-gray-900 leading-snug">{item.itemName}</div>
+                                        <div className="text-[10px] text-gray-400 mt-0.5">{item.category}</div>
                                       </td>
-                                      <td className="py-2 px-2 text-center font-bold text-gray-700">{item.quantity}</td>
-                                      <td className="py-2 px-2 text-right font-medium text-gray-600">
+                                      <td className="py-2.5 px-2.5 text-center font-bold text-gray-700 whitespace-nowrap">{item.quantity}</td>
+                                      <td className="py-2.5 px-2.5 text-right font-medium text-gray-600 font-mono whitespace-nowrap">
                                         {custBudget > 0 ? `₹${custBudget.toLocaleString()}` : 'N/A'}
                                       </td>
-                                      <td className={`py-2 px-2 text-right font-black font-mono ${isRejected ? 'text-gray-600' : 'bg-emerald-50/70 text-emerald-900'}`}>
+                                      <td className={`py-2.5 px-2.5 text-right font-black font-mono whitespace-nowrap ${isRejected ? 'text-gray-600' : 'bg-emerald-50/70 text-emerald-900'}`}>
                                         ₹{sellerPrice.toLocaleString()}
                                       </td>
-                                      <td className="py-2 px-3 text-right font-black text-gray-900 font-mono">
+                                      <td className="py-2.5 px-3 text-right font-black text-gray-900 font-mono whitespace-nowrap">
                                         ₹{lineTotal.toLocaleString()}
                                       </td>
-                                      <td className="py-2 px-3">
+                                      <td className="py-2.5 px-3">
                                         {item.discountTierNote ? (
                                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold">
                                             💡 {item.discountTierNote}
