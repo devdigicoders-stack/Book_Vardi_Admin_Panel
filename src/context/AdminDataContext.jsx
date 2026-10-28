@@ -59,6 +59,7 @@ import {
   isTokenValid,
   SERVER_URL
 } from '../utils/api';
+import { resolveCityCoordinates } from '../utils/geoCoordinates';
 
 const AdminDataContext = createContext();
 
@@ -2068,6 +2069,20 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   const addSchool = (newSchool) => {
+    let latVal = newSchool.lat !== undefined && newSchool.lat !== '' ? Number(newSchool.lat) : undefined;
+    let lngVal = newSchool.lng !== undefined && newSchool.lng !== '' ? Number(newSchool.lng) : undefined;
+
+    // If coordinates are missing or mistakenly defaulted to Delhi for a non-Delhi city, resolve from city name
+    const isDelhiCoords = (Math.abs(Number(latVal) - 28.6139) < 0.001 && Math.abs(Number(lngVal) - 77.2090) < 0.001);
+    const isDelhiCity = String(newSchool.city || '').toLowerCase().includes('delhi');
+    if ((!latVal || !lngVal || (isDelhiCoords && !isDelhiCity)) && (newSchool.city || newSchool.name)) {
+      const resolved = resolveCityCoordinates(newSchool.city) || resolveCityCoordinates(newSchool.name);
+      if (resolved) {
+        latVal = resolved.lat;
+        lngVal = resolved.lng;
+      }
+    }
+
     const school = {
       status: 'Partner Active',
       partnerSince: new Date().getFullYear().toString(),
@@ -2077,8 +2092,8 @@ export const AdminDataProvider = ({ children }) => {
       pincode: newSchool.pincode || '',
       ...newSchool
     };
-    if (newSchool.lat) school.lat = Number(newSchool.lat);
-    if (newSchool.lng) school.lng = Number(newSchool.lng);
+    if (latVal !== undefined && !isNaN(latVal)) school.lat = latVal;
+    if (lngVal !== undefined && !isNaN(lngVal)) school.lng = lngVal;
     setSchools(prev => {
       const updated = [school, ...prev];
       return updated;
@@ -2094,11 +2109,27 @@ export const AdminDataProvider = ({ children }) => {
   };
 
   const updateSchool = (id, updates) => {
+    const cleanUpdates = { ...updates };
+    let latVal = cleanUpdates.lat !== undefined && cleanUpdates.lat !== '' ? Number(cleanUpdates.lat) : undefined;
+    let lngVal = cleanUpdates.lng !== undefined && cleanUpdates.lng !== '' ? Number(cleanUpdates.lng) : undefined;
+
+    const isDelhiCoords = (Math.abs(Number(latVal) - 28.6139) < 0.001 && Math.abs(Number(lngVal) - 77.2090) < 0.001);
+    const isDelhiCity = String(cleanUpdates.city || '').toLowerCase().includes('delhi');
+    if ((isDelhiCoords && !isDelhiCity) && (cleanUpdates.city || cleanUpdates.name)) {
+      const resolved = resolveCityCoordinates(cleanUpdates.city) || resolveCityCoordinates(cleanUpdates.name);
+      if (resolved) {
+        latVal = resolved.lat;
+        lngVal = resolved.lng;
+        cleanUpdates.lat = latVal;
+        cleanUpdates.lng = lngVal;
+      }
+    }
+
     setSchools(prev => {
-      const updated = prev.map(s => (s.id === id || s._id === id) ? { ...s, ...updates } : s);
+      const updated = prev.map(s => (s.id === id || s._id === id) ? { ...s, ...cleanUpdates } : s);
       return updated;
     });
-    updateSchoolApi(id, updates).catch(() => {});
+    updateSchoolApi(id, cleanUpdates).catch(() => {});
     logAudit('School Updated', `Updated school record #${id}`);
   };
 
