@@ -1,3 +1,4 @@
+import useModalBackTrap from '../../hooks/useModalBackTrap';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -74,6 +75,7 @@ export default function OrderDetailModal({
   onUpdateReturnExchangeStatus,
   readOnly = false 
 }) {
+  useModalBackTrap(isOpen, onClose);
   const [currentOrder, setCurrentOrder] = useState(order);
   const toast = useToast();
   const adminCtx = typeof useAdminData === 'function' ? useAdminData() : {};

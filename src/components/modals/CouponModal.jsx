@@ -1,8 +1,10 @@
+import useModalBackTrap from '../../hooks/useModalBackTrap';
 import React, { useState, useMemo } from 'react';
 import { X, Tag, CheckCircle2, Layers, Package, Boxes, Search } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 
 export default function CouponModal({ isOpen, onClose, onSave }) {
+  useModalBackTrap(isOpen, onClose);
   const { products = [], kits = [] } = useAdminData();
 
   const [formData, setFormData] = useState({

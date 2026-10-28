@@ -81,6 +81,50 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('adminOpenKitsTab', handleOpenKits);
   }, [navigate]);
 
+  const lastBackPressRef = React.useRef(0);
+  const activeTabRef = React.useRef(activeTab);
+  React.useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+  // Back button trap & double-back exit protection for Admin Panel
+  useEffect(() => {
+    if (!window.history.state || !window.history.state.adminPanel) {
+      try {
+        window.history.replaceState({ adminPanel: true, tab: activeTab }, '', window.location.href);
+        if (activeTab === 'dashboard') {
+          window.history.pushState({ adminPanel: true, tab: 'dashboard' }, '', window.location.href);
+        }
+      } catch {}
+    }
+
+    const handleDashboardPopState = (e) => {
+      // If an open modal handled popstate, don't navigate tab
+      if (e.state && e.state.adminModalOpen) return;
+
+      const current = activeTabRef.current;
+      if (current !== 'dashboard') {
+        // Return to main dashboard tab
+        navigate('/dashboard');
+      } else {
+        // Double-back to exit on main Dashboard
+        const now = Date.now();
+        if (now - lastBackPressRef.current < 2000) {
+          window.history.back();
+        } else {
+          lastBackPressRef.current = now;
+          window.dispatchEvent(new CustomEvent('adminShowToast', {
+            detail: { message: 'Press BACK again to exit Admin Panel 👋', type: 'info' }
+          }));
+          try {
+            window.history.pushState({ adminPanel: true, tab: 'dashboard' }, '', window.location.href);
+          } catch {}
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handleDashboardPopState);
+    return () => window.removeEventListener('popstate', handleDashboardPopState);
+  }, [navigate]);
+
   if (!isAuthenticated) {
     return <AdminLogin />;
   }

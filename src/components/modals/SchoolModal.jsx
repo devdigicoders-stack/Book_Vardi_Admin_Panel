@@ -1,8 +1,10 @@
+import useModalBackTrap from '../../hooks/useModalBackTrap';
 import React, { useState, useEffect } from 'react';
 import { X, GraduationCap, CheckCircle2, MapPin, LocateFixed, Search, AlertTriangle, RefreshCw } from 'lucide-react';
 import { resolveCityCoordinates, fetchOnlineCoordinates } from '../../utils/geoCoordinates';
 
 export default function SchoolModal({ isOpen, onClose, onSave, school = null }) {
+  useModalBackTrap(isOpen, onClose);
   const [formData, setFormData] = useState({
     name: '',
     board: 'CBSE',

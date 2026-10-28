@@ -44,6 +44,8 @@ export default function SellerDetailModal({
   onOpenFinance,
   readOnly = false 
 }) {
+  useModalBackTrap(isOpen, onClose);
+
   if (!isOpen || !seller) return null;
 
   const sellerId = seller.id || seller._id;

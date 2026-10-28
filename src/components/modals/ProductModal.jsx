@@ -1,9 +1,11 @@
+import useModalBackTrap from '../../hooks/useModalBackTrap';
 import React, { useState, useEffect } from 'react';
 import { X, Package, CheckCircle2, CreditCard } from 'lucide-react';
 import { CATEGORIES } from '../../constants/categories';
 import ImageUploadDropzone from '../common/ImageUploadDropzone';
 
 export default function ProductModal({ isOpen, onClose, onSave, product = null, sellers = [] }) {
+  useModalBackTrap(isOpen, onClose);
   const [formData, setFormData] = useState({
     name: '',
     subtitle: '',
