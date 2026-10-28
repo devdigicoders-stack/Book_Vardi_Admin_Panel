@@ -15,6 +15,7 @@ import {
   User
 } from 'lucide-react';
 import { SERVER_URL } from '../../utils/api';
+import { getSellerInvoiceNumber, getSellerCreditNoteNumber, getSellerInvoicePrefix, formatSellerInvoiceNumber } from '../../utils/invoiceHelper';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=150&auto=format&fit=crop&q=80';
 
@@ -1217,6 +1218,27 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
     ? (order.trackingUrl || order.thirdPartyDetails?.trackingUrl || '')
     : (order.selfDeliveryDetails?.trackingUrl || order.trackingUrl || '');
 
+  const platformSettings = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('bookvardi_platform_settings');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const companyName = platformSettings.companyName || 'BOOK VARDI';
+  const companyAddress = platformSettings.companyAddress || 'Lucknow, Uttar Pradesh - 226001';
+  const companyGstin = platformSettings.companyGstin || '09AAACB1234F1Z9';
+
+  const resolvedInvoiceNumber = useMemo(() => {
+    return getSellerInvoiceNumber(order, activeSellerGroup, []);
+  }, [order, activeSellerGroup]);
+
+  const resolvedCreditNoteNumber = useMemo(() => {
+    return getSellerCreditNoteNumber(order, activeSellerGroup, []);
+  }, [order, activeSellerGroup]);
+
   const handleDownloadPDF = async () => {
     if (!confirmed) {
       alert(`⚠️ Tax Invoice is locked for ${activeSellerGroup?.storeName || 'this seller'} until items are confirmed.`);
@@ -1513,18 +1535,21 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                   <ShieldCheck size={14} /> Official Verified Invoice
                 </span>
               </div>
-              <h1 className="font-display font-extrabold text-xl text-gray-900 tracking-tight">
-                BOOK VARDI
+              <h1 className="font-display font-extrabold text-xl text-gray-900 tracking-tight uppercase">
+                {companyName}
               </h1>
-              <p className="text-[11px] text-gray-500">Lucknow, Uttar Pradesh - 226001 | GSTIN: 09AAACB1234F1Z9</p>
+              <p className="text-[11px] text-gray-500">{companyAddress} | GSTIN: {companyGstin}</p>
             </div>
 
             <div className="sm:text-right border-l-2 sm:border-l-0 sm:border-r-0 border-brand-teal pl-3 sm:pl-0">
               <h2 className="font-display font-black text-lg text-gray-900 uppercase tracking-wider">
-                TAX INVOICE
+                {isCancelled ? 'CREDIT NOTE' : 'TAX INVOICE'}
               </h2>
-              <p className="text-xs font-bold text-gray-700">Invoice No: <strong className="font-mono text-brand-teal">INV-{order.id}</strong></p>
-              <p className="text-[11px] text-gray-500">Invoice Date: {order.date || new Date().toLocaleDateString('en-GB')}</p>
+              <p className="text-xs font-bold text-gray-700">
+                {isCancelled ? 'Credit Note No: ' : 'Invoice No: '}
+                <strong className="font-mono text-brand-teal">{isCancelled ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong>
+              </p>
+              <p className="text-[11px] text-gray-500">{isCancelled ? 'Reversal Date: ' : 'Invoice Date: '}{order.date || new Date().toLocaleDateString('en-GB')}</p>
             </div>
           </div>
 
@@ -1548,10 +1573,10 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                   {resolvedSeller.pincode ? ` - ${resolvedSeller.pincode}` : ''}
                 </p>
               )}
-              {resolvedSeller.phone && (
+              {!isCancelled && resolvedSeller.phone && (
                 <p className="text-gray-500 text-[11px]">Phone: <span className="font-medium text-gray-700">{resolvedSeller.phone}</span></p>
               )}
-              {resolvedSeller.email && (
+              {!isCancelled && resolvedSeller.email && (
                 <p className="text-gray-500 text-[11px]">Email: <span className="font-medium text-gray-700">{resolvedSeller.email}</span></p>
               )}
               {resolvedSeller.gstNumber && (
@@ -1573,10 +1598,10 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
               {resolvedConsumer.cityStatePin && (
                 <p className="text-gray-600 text-[11px]">{resolvedConsumer.cityStatePin}</p>
               )}
-              {resolvedConsumer.phone && (
+              {!isCancelled && resolvedConsumer.phone && (
                 <p className="text-gray-500 text-[11px]">Phone: <span className="font-medium text-gray-700">{resolvedConsumer.phone}</span></p>
               )}
-              {resolvedConsumer.email && (
+              {!isCancelled && resolvedConsumer.email && (
                 <p className="text-gray-500 text-[11px]">Email: <span className="font-medium text-gray-700">{resolvedConsumer.email}</span></p>
               )}
             </div>
@@ -1587,7 +1612,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                 <FileText size={12} className="text-gray-500" /> Order & Tax Meta
               </span>
               <p className="text-gray-700">Order ID: <strong className="font-mono text-gray-900">#{order.id}</strong></p>
-              <p className="text-gray-700">Invoice No: <strong className="font-mono text-brand-teal">INV-{order.id}</strong></p>
+              <p className="text-gray-700">{isCancelled ? 'Credit Note No: ' : 'Invoice No: '}<strong className="font-mono text-brand-teal">{isCancelled ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong></p>
               <p className="text-gray-700">Invoice Date: <strong className="text-gray-900">{order.date || new Date().toLocaleDateString('en-GB')}</strong></p>
               <p className="text-gray-700">Status: <strong className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px]">{activeSellerStatusLabel}</strong></p>
               <p className="text-gray-700">Payment: <strong className="text-gray-900">{order.paymentMethod || 'Online UPI'}</strong> ({order.paymentStatus || 'Paid'})</p>

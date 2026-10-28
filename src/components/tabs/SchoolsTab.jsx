@@ -16,8 +16,8 @@ import SchoolModal from '../modals/SchoolModal';
 import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function SchoolsTab() {
-  const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius, isEditor } = useAdminData();
-  const canEdit = isEditor ? isEditor('schools') : true;
+  const { schools, addSchool, updateSchool, deleteSchool, schoolRadiusKm, updateSchoolRadius, isEditor, isSuperAdmin } = useAdminData();
+  const canEdit = isEditor ? (isEditor('schools') || (isSuperAdmin && isSuperAdmin())) : true;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'pending'
@@ -293,45 +293,62 @@ export default function SchoolsTab() {
           />
         </div>
 
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-          {[
-            { id: 'all', label: `All Schools (${allMergedSchools.length})` },
-            {
-              id: 'active',
-              label: `Active / Approved (${allMergedSchools.filter(s => !(s.status || '').toLowerCase().includes('pending')).length})`
-            },
-            {
-              id: 'pending',
-              label: `Pending Review (${allMergedSchools.filter(s => (s.status || '').toLowerCase().includes('pending')).length})`
-            }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                statusFilter === tab.id
-                  ? 'bg-teal-900 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Schools Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {filteredSchools.length === 0 ? (
-          <div className="col-span-full bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-3">
-            <Building size={36} className="mx-auto text-gray-300" />
-            <h4 className="font-bold text-gray-800 text-sm">No Schools Found</h4>
-            <p className="text-xs text-gray-500 max-w-sm mx-auto">
-              No institutions match your search or filter criteria. Try resetting the filter.
-            </p>
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            {[
+              { id: 'all', label: `All Schools (${allMergedSchools.length})` },
+              {
+                id: 'active',
+                label: `Active / Approved (${allMergedSchools.filter(s => !(s.status || '').toLowerCase().includes('pending')).length})`
+              },
+              {
+                id: 'pending',
+                label: `Pending Review (${allMergedSchools.filter(s => (s.status || '').toLowerCase().includes('pending')).length})`
+              }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  statusFilter === tab.id
+                    ? 'bg-teal-900 text-white shadow-xs'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenAdd}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+          >
+            <Plus size={15} /> Add School
+          </button>
+        </div>
+
+        {/* Schools Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {filteredSchools.length === 0 ? (
+            <div className="col-span-full bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-3">
+              <Building size={36} className="mx-auto text-gray-300" />
+              <h4 className="font-bold text-gray-800 text-sm">No Schools Found</h4>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                No institutions match your search or filter criteria. Try resetting the filter or onboard a new partner school.
+              </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAdd}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-yellow hover:bg-brand-yellow-hover text-brand-teal-dark font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus size={16} /> Onboard New School
+                </button>
+              </div>
+            </div>
         ) : (
           filteredSchools.map((school) => {
             const isPending = (school.status || '').toLowerCase().includes('pending');

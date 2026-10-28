@@ -7,7 +7,13 @@ import {
   CreditCard, 
   ShieldCheck, 
   CheckCircle2,
-  Lock
+  Lock,
+  Building,
+  Headphones,
+  Phone,
+  Mail,
+  Clock,
+  Banknote
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 
@@ -15,9 +21,18 @@ export default function SettingsTab() {
   const { settings, setSettings, updatePlatformSettings, logAudit, schoolRadiusKm, updateSchoolRadius } = useAdminData();
   const [formData, setFormData] = useState({
     ...settings,
-    schoolRadiusKm: schoolRadiusKm || settings.schoolRadiusKm || 25,
+    companyName: settings?.companyName || 'BOOK VARDI',
+    companyAddress: settings?.companyAddress || 'Lucknow, Uttar Pradesh - 226001',
+    companyGstin: settings?.companyGstin || '09AAACB1234F1Z9',
+    customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || '+91 98765 43210',
+    customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || 'support@bookvardi.in',
+    supportPhone: settings?.supportPhone || settings?.customerCarePhone || '+91 98765 43210',
+    supportEmail: settings?.supportEmail || settings?.customerCareEmail || 'support@bookvardi.in',
+    supportHours: settings?.supportHours || 'Mon - Sat (9:00 AM - 6:00 PM)',
+    schoolRadiusKm: schoolRadiusKm || settings?.schoolRadiusKm || 25,
     shippingFee: settings?.shippingFee !== undefined ? settings.shippingFee : 49,
-    minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : 999)
+    minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : 999),
+    codFee: settings?.codFee !== undefined ? settings.codFee : 0
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -25,9 +40,18 @@ export default function SettingsTab() {
     setFormData(prev => ({
       ...prev,
       ...settings,
+      companyName: settings?.companyName || prev.companyName || 'BOOK VARDI',
+      companyAddress: settings?.companyAddress || prev.companyAddress || 'Lucknow, Uttar Pradesh - 226001',
+      companyGstin: settings?.companyGstin || prev.companyGstin || '09AAACB1234F1Z9',
+      customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || prev.customerCarePhone || '+91 98765 43210',
+      customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || prev.customerCareEmail || 'support@bookvardi.in',
+      supportPhone: settings?.supportPhone || settings?.customerCarePhone || prev.supportPhone || '+91 98765 43210',
+      supportEmail: settings?.supportEmail || settings?.customerCareEmail || prev.supportEmail || 'support@bookvardi.in',
+      supportHours: settings?.supportHours || prev.supportHours || 'Mon - Sat (9:00 AM - 6:00 PM)',
       schoolRadiusKm: schoolRadiusKm || settings?.schoolRadiusKm || 25,
       shippingFee: settings?.shippingFee !== undefined ? settings.shippingFee : (prev.shippingFee !== undefined ? prev.shippingFee : 49),
-      minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : (prev.minOrderFreeShipping || 999))
+      minOrderFreeShipping: settings?.minOrderFreeShipping !== undefined ? settings.minOrderFreeShipping : (settings?.freeShippingThreshold !== undefined ? settings.freeShippingThreshold : (prev.minOrderFreeShipping || 999)),
+      codFee: settings?.codFee !== undefined ? settings.codFee : (prev.codFee !== undefined ? prev.codFee : 0)
     }));
   }, [settings, schoolRadiusKm]);
 
@@ -41,7 +65,7 @@ export default function SettingsTab() {
     if (formData.schoolRadiusKm) {
       updateSchoolRadius(Number(formData.schoolRadiusKm));
     }
-    logAudit('Platform Settings Updated', `Updated platform settings (Delivery Charge: ₹${formData.shippingFee !== undefined ? formData.shippingFee : 49} per product, Free Shipping Threshold: ₹${formData.minOrderFreeShipping || 999}, Radius: ${formData.schoolRadiusKm}km)`);
+    logAudit('Platform Settings Updated', `Updated platform settings (Delivery Charge: ₹${formData.shippingFee !== undefined ? formData.shippingFee : 49} per product, Free Shipping Threshold: ₹${formData.minOrderFreeShipping || 999}, COD Fee: ₹${formData.codFee || 0}, Customer Care: ${formData.customerCarePhone || formData.supportPhone}, Radius: ${formData.schoolRadiusKm}km)`);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 4000);
   };
@@ -77,6 +101,118 @@ export default function SettingsTab() {
 
       <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
+        {/* Company Legal & Invoice Details */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4 lg:col-span-2">
+          <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
+            <Building size={17} className="text-teal-700" /> Platform Company & Tax Invoice Details
+          </h3>
+          <p className="text-xs text-gray-500">
+            These legal company details, registered address, and GSTIN appear on all official Tax Invoices, Credit Notes, and receipts generated by the platform.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Company / Marketplace Name
+              </label>
+              <input
+                type="text"
+                value={formData.companyName || ''}
+                onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                placeholder="e.g. BOOK VARDI"
+                className="w-full px-3.5 py-2 text-xs font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Registered Office Address (Invoice Header)
+              </label>
+              <input
+                type="text"
+                value={formData.companyAddress || ''}
+                onChange={e => setFormData({ ...formData, companyAddress: e.target.value })}
+                placeholder="e.g. Lucknow, Uttar Pradesh - 226001"
+                className="w-full px-3.5 py-2 text-xs font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Marketplace GSTIN Number
+              </label>
+              <input
+                type="text"
+                value={formData.companyGstin || ''}
+                onChange={e => setFormData({ ...formData, companyGstin: e.target.value.toUpperCase() })}
+                placeholder="e.g. 09AAACB1234F1Z9"
+                className="w-full px-3.5 py-2 text-xs font-bold font-mono uppercase border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Care & Helpdesk Support Details */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4 lg:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
+                <Headphones size={18} className="text-teal-700" /> Customer Care & Support Helpline Settings
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                These customer care contacts are dynamically displayed across customer storefront, Helpdesk, Contact Us page, footer, and tax invoices.
+              </p>
+            </div>
+            <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-xl border border-teal-200 self-start sm:self-auto flex items-center gap-1">
+              <CheckCircle2 size={13} className="text-teal-600" /> Live on Storefront
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Phone size={13} className="text-teal-700" /> Customer Care Phone / Helpline
+              </label>
+              <input
+                type="text"
+                value={formData.customerCarePhone || formData.supportPhone || ''}
+                onChange={e => setFormData({ ...formData, customerCarePhone: e.target.value, supportPhone: e.target.value })}
+                placeholder="e.g. +91 98765 43210 or 1800-XXX-XXXX"
+                className="w-full px-3.5 py-2 text-xs font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
+              />
+              <span className="text-[10px] text-gray-400 mt-1 block">Toll-free or mobile helpline for student and parent orders</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Mail size={13} className="text-teal-700" /> Customer Care Official Email
+              </label>
+              <input
+                type="email"
+                value={formData.customerCareEmail || formData.supportEmail || ''}
+                onChange={e => setFormData({ ...formData, customerCareEmail: e.target.value, supportEmail: e.target.value })}
+                placeholder="e.g. support@bookvardi.in"
+                className="w-full px-3.5 py-2 text-xs font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
+              />
+              <span className="text-[10px] text-gray-400 mt-1 block">Direct customer support & order query inbox</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Clock size={13} className="text-teal-700" /> Support Desk Timings
+              </label>
+              <input
+                type="text"
+                value={formData.supportHours || ''}
+                onChange={e => setFormData({ ...formData, supportHours: e.target.value })}
+                placeholder="e.g. Mon - Sat (9:00 AM - 6:00 PM)"
+                className="w-full px-3.5 py-2 text-xs font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
+              />
+              <span className="text-[10px] text-gray-400 mt-1 block">Helpdesk availability hours shown to customers</span>
+            </div>
+          </div>
+        </div>
+
         {/* Marketplace Commission & Fees */}
         <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
           <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
@@ -139,6 +275,52 @@ export default function SettingsTab() {
                   Minimum cart subtotal required for customer to unlock 100% Free Doorstep Shipping across all products
                 </span>
               </div>
+            </div>
+
+            {/* Dynamic Cash on Delivery (COD) Handling Fee */}
+            <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <Banknote size={15} className="text-amber-800" /> Cash on Delivery (COD) Handling Fee (₹)
+                </label>
+                <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-white border border-amber-300 text-amber-900 shadow-2xs">
+                  {Number(formData.codFee || 0) === 0 ? "Customer Sees: ₹0 (FREE COD)" : `Customer Pays: +₹${formData.codFee}`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-gray-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    value={formData.codFee !== undefined ? formData.codFee : 0}
+                    onChange={e => setFormData({ ...formData, codFee: Math.max(0, Number(e.target.value)) })}
+                    className="w-28 pl-7 pr-3 py-2 text-sm font-black border border-amber-300 rounded-xl bg-white focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[0, 29, 49, 79, 99].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, codFee: preset })}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                        Number(formData.codFee) === preset
+                          ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                          : 'bg-white hover:bg-amber-100 text-amber-900 border-amber-200'
+                      }`}
+                    >
+                      {preset === 0 ? 'Free (₹0)' : `₹${preset}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <span className="text-[11px] text-amber-900/80 block leading-tight">
+                Dynamic charge added automatically to customer order total when they choose Cash on Delivery at checkout. Set to 0 for 100% Free COD.
+              </span>
             </div>
 
             <div>

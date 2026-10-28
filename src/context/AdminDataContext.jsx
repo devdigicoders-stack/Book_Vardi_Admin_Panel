@@ -926,6 +926,9 @@ export const AdminDataProvider = ({ children }) => {
               isOrderSyncingRef.current = false;
               handleOrderSync(false);
             }
+            if (data && (data.type === 'SELLER_REGISTERED' || data.type === 'SELLER_UPDATED' || data.type === 'SELLER_STATUS_CHANGED' || data.type === 'SELLER_APPLIED')) {
+              window.dispatchEvent(new CustomEvent('bv_sellers_updated', { detail: data }));
+            }
           } catch (e) {}
         };
 
@@ -948,12 +951,17 @@ export const AdminDataProvider = ({ children }) => {
     const onVisibilityChange = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         handleOrderSync(false);
+        window.dispatchEvent(new CustomEvent('bv_sellers_updated'));
       }
+    };
+    const onFocusSync = () => {
+      handleOrderSync(false);
+      window.dispatchEvent(new CustomEvent('bv_sellers_updated'));
     };
 
     window.addEventListener('bv_orders_updated', onOrderEvent);
     window.addEventListener('bv_school_orders_updated', onOrderEvent);
-    window.addEventListener('focus', onOrderEvent);
+    window.addEventListener('focus', onFocusSync);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     const storageHandler = (e) => {
@@ -1032,14 +1040,47 @@ export const AdminDataProvider = ({ children }) => {
       }
     }, 35000);
 
-    // Sync product approval notifications & product submissions in real-time
+    // Sync product approval notifications, products & seller registrations in real-time
     const syncFromStorage = () => {
       try {
         const savedNotifs = localStorage.getItem('admin_notifications');
         if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
         const savedProds = localStorage.getItem('admin_products');
         if (savedProds) setProducts(JSON.parse(savedProds));
+        const savedSellers = localStorage.getItem('admin_sellers');
+        if (savedSellers) {
+          const parsed = JSON.parse(savedSellers);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSellers(prev => {
+              const combined = [...parsed];
+              prev.forEach(p => {
+                if (!combined.some(c => (c._id && c._id === p._id) || (c.id && c.id === p.id) || (c.phone && c.phone === p.phone))) {
+                  combined.push(p);
+                }
+              });
+              return combined;
+            });
+          }
+        }
       } catch (e) {}
+    };
+
+    const handleSellersEvent = () => {
+      fetchAdminSellersApi().then(data => {
+        const list = Array.isArray(data) ? data : (data?.sellers || []);
+        if (list.length > 0) {
+          setSellers(list.map(s => ({
+            id: s._id || s.id,
+            _id: s._id || s.id,
+            storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
+            ownerName: s.ownerName || s.name || 'Vendor',
+            status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
+            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
+            payoutBalance: s.walletBalance || s.payoutBalance || 0,
+            ...s
+          })));
+        }
+      }).catch(() => {});
     };
 
     const handleNotifEvent = (e) => {
@@ -1057,12 +1098,16 @@ export const AdminDataProvider = ({ children }) => {
     window.addEventListener('storage', syncFromStorage);
     window.addEventListener('adminNotificationReceived', handleNotifEvent);
     window.addEventListener('adminProductsUpdated', handleProdsEvent);
+    window.addEventListener('bv_sellers_updated', handleSellersEvent);
+    window.addEventListener('bv_seller_status_updated', handleSellersEvent);
 
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('storage', syncFromStorage);
       window.removeEventListener('adminNotificationReceived', handleNotifEvent);
       window.removeEventListener('adminProductsUpdated', handleProdsEvent);
+      window.removeEventListener('bv_sellers_updated', handleSellersEvent);
+      window.removeEventListener('bv_seller_status_updated', handleSellersEvent);
     };
   }, [isAuthenticated]);
 
@@ -1974,12 +2019,22 @@ export const AdminDataProvider = ({ children }) => {
   const updatePlatformSettings = async (newSettingsData) => {
     const minVal = newSettingsData.minOrderFreeShipping !== undefined ? Number(newSettingsData.minOrderFreeShipping) : (newSettingsData.freeShippingThreshold !== undefined ? Number(newSettingsData.freeShippingThreshold) : (settings.minOrderFreeShipping || 999));
     const feeVal = (newSettingsData.shippingFee !== undefined && newSettingsData.shippingFee !== null) ? Number(newSettingsData.shippingFee) : (settings.shippingFee !== undefined ? Number(settings.shippingFee) : 49);
+    const codVal = (newSettingsData.codFee !== undefined && newSettingsData.codFee !== null) ? Number(newSettingsData.codFee) : (settings.codFee !== undefined ? Number(settings.codFee) : 0);
     const updated = {
       ...settings,
       ...newSettingsData,
+      companyName: newSettingsData.companyName || settings.companyName || 'BOOK VARDI',
+      companyAddress: newSettingsData.companyAddress || settings.companyAddress || 'Lucknow, Uttar Pradesh - 226001',
+      companyGstin: newSettingsData.companyGstin || settings.companyGstin || '09AAACB1234F1Z9',
+      supportPhone: newSettingsData.supportPhone || newSettingsData.customerCarePhone || settings.supportPhone || settings.customerCarePhone || '+91 98765 43210',
+      supportEmail: newSettingsData.supportEmail || newSettingsData.customerCareEmail || settings.supportEmail || settings.customerCareEmail || 'support@bookvardi.in',
+      customerCarePhone: newSettingsData.customerCarePhone || newSettingsData.supportPhone || settings.customerCarePhone || settings.supportPhone || '+91 98765 43210',
+      customerCareEmail: newSettingsData.customerCareEmail || newSettingsData.supportEmail || settings.customerCareEmail || settings.supportEmail || 'support@bookvardi.in',
+      supportHours: newSettingsData.supportHours || settings.supportHours || 'Mon - Sat (9:00 AM - 6:00 PM)',
       shippingFee: feeVal,
       minOrderFreeShipping: minVal,
-      freeShippingThreshold: minVal
+      freeShippingThreshold: minVal,
+      codFee: codVal
     };
     setSettings(updated);
     if (!isNaN(minVal) && minVal > 0) {
@@ -1999,6 +2054,9 @@ export const AdminDataProvider = ({ children }) => {
       localStorage.setItem('admin_settings', JSON.stringify(updated));
       localStorage.setItem('bv_free_shipping_threshold', JSON.stringify(minVal));
       localStorage.setItem('bv_shipping_fee', JSON.stringify(feeVal));
+      localStorage.setItem('bv_cod_fee', JSON.stringify(codVal));
+      localStorage.setItem('bv_support_phone', updated.supportPhone);
+      localStorage.setItem('bv_support_email', updated.supportEmail);
     } catch (e) {}
     window.dispatchEvent(new CustomEvent('bv_settings_updated', { detail: updated }));
     try {

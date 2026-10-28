@@ -95,7 +95,16 @@ export default function SellerFinanceModal({
   const acctType = bank.accountType || 'Current / Savings Account';
   const branch = bank.branchName || bank.branch || `${city} Main Branch`;
 
-  const commissionRate = Number(seller.commissionRate ?? seller.commissionPercentage ?? 10);
+  const candidateSellerGst = String(
+    seller.gstNumber ||
+    seller.gstin ||
+    seller.rawApplication?.gstNumber ||
+    seller.taxDetails?.gstNumber ||
+    gstin ||
+    ''
+  ).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isExemptedSeller = candidateSellerGst === '09BLMPK2840L2ZN' || sellerStoreName.includes('national school dress');
+  const commissionRate = isExemptedSeller ? 0 : Number(seller.commissionRate ?? seller.commissionPercentage ?? 10);
 
   // Filter orders and extract items belonging strictly to this seller
   const sellerOrders = useMemo(() => {
@@ -199,16 +208,16 @@ export default function SellerFinanceModal({
 
         if (hasItemSettlement) {
           relevantItems.forEach(it => {
-            const itComm = Number(it.commissionAmount || 0);
-            const itGst = Number(it.gstOnCommissionAmount || (itComm * 0.18) || 0);
-            const itTds = Number(it.tdsAmount || 0);
-            const itTcs = Number(it.gstTcsAmount || 0);
+            const itComm = isExemptedSeller ? 0 : Number(it.commissionAmount || 0);
+            const itGst = isExemptedSeller ? 0 : Number(it.gstOnCommissionAmount || (itComm * 0.18) || 0);
+            const itTds = isExemptedSeller ? 0 : Number(it.tdsAmount || 0);
+            const itTcs = isExemptedSeller ? 0 : Number(it.gstTcsAmount || 0);
             const itDeliv = Number(it.deliveryChargeAmount || 0);
             const itDelivGst = Number(it.gstOnDeliveryAmount || 0);
             const itDelivTotal = Number(it.totalDeliveryDeduction || (itDeliv + itDelivGst) || 0);
-            const itDed = Number(it.totalDeductions || (itComm + itGst + itTds + itTcs + itDelivTotal) || 0);
+            const itDed = Number(it.totalDeductions !== undefined && !isExemptedSeller ? it.totalDeductions : (itComm + itGst + itTds + itTcs + itDelivTotal));
             const itGross = Number(it.total) || Math.round(((Number(it.finalPrice || it.price || 0)) * (Number(it.quantity) || 1)) * 100) / 100;
-            let itNet = Number(it.netSettlementAmount !== undefined ? it.netSettlementAmount : (isRule3 ? -itDed : (itGross - itDed)));
+            let itNet = Number(it.netSettlementAmount !== undefined && !isExemptedSeller ? it.netSettlementAmount : (isRule3 ? -itDed : (itGross - itDed)));
             // Safety: if order is Rule 4 Courier or Rule 1/2 Online (not Rule 3 COD Self), settlement can never be negative
             if (!isRule3 && itNet < 0) {
               itNet = Math.max(0, Math.round((itGross - itDed) * 100) / 100);
@@ -228,14 +237,14 @@ export default function SellerFinanceModal({
           });
         } else {
           // Dynamic calculation according to Rule 1, Rule 2, Rule 3 & Rule 4
-          portalCommission = Math.round(effectiveTotal * (ordRate / 100) * 100) / 100;
-          gstOnCommission = Math.round(portalCommission * 0.18 * 100) / 100;
-          tdsAmount = Math.round(effectiveTotal * 0.001 * 100) / 100;
+          portalCommission = isExemptedSeller ? 0 : Math.round(effectiveTotal * (ordRate / 100) * 100) / 100;
+          gstOnCommission = isExemptedSeller ? 0 : Math.round(portalCommission * 0.18 * 100) / 100;
+          tdsAmount = isExemptedSeller ? 0 : Math.round(effectiveTotal * 0.001 * 100) / 100;
           
           // Rule 3: 0% GST TCS when portal does not collect customer cash
           // GST TCS under Sec 52: strictly on Taxable Value (net value of taxable supplies)
           const fallbackTaxable = Math.round((effectiveTotal / 1.05) * 100) / 100;
-          gstTcsAmount = isRule3 ? 0 : Math.round(fallbackTaxable * 0.005 * 100) / 100;
+          gstTcsAmount = (isRule3 || isExemptedSeller) ? 0 : Math.round(fallbackTaxable * 0.005 * 100) / 100;
 
           // Rule 2 & Rule 4: Delivery Charges (only if 3rd party, seller-borne, and order < threshold)
           if (isThirdParty && deliveryChargeBorneBy === 'seller' && !isAbove400) {

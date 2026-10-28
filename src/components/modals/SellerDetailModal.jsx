@@ -29,6 +29,7 @@ import {
   FileCheck,
   RefreshCw
 } from 'lucide-react';
+import { resolveImageUrl } from '../../utils/api';
 
 export default function SellerDetailModal({ 
   isOpen, 
@@ -156,6 +157,18 @@ export default function SellerDetailModal({
   const submittedDate = app.submittedAt || seller.joinedDate || '9/9/2026';
   const auditRefId = `BV-KYC-${Math.abs(seller.phone?.replace(/\D/g, '') || 9876543210).toString().slice(-6)}`;
 
+  const rawAddressProof = seller.documents?.addressProofDoc || app.addressProofDoc || seller.addressProofFileUrl || seller.addressProofDoc || seller.addressProofDetails?.addressProofDoc || '';
+  const resolvedAddressProofUrl = rawAddressProof ? resolveImageUrl(rawAddressProof) : '';
+
+  const rawPassbookDoc = seller.documents?.passbookDoc || app.passbookDoc || seller.passbookDoc || seller.bankDetails?.passbookDoc || '';
+  const resolvedPassbookUrl = rawPassbookDoc ? resolveImageUrl(rawPassbookDoc) : '';
+
+  const rawPanDoc = seller.documents?.panDoc || app.panDoc || seller.panDoc || seller.taxDetails?.panDoc || '';
+  const resolvedPanUrl = rawPanDoc ? resolveImageUrl(rawPanDoc) : '';
+
+  const rawAadhaarDoc = seller.documents?.aadhaarDoc || app.aadhaarDoc || seller.aadhaarDoc || seller.signatoryDetails?.aadhaarDoc || '';
+  const resolvedAadhaarUrl = rawAadhaarDoc ? resolveImageUrl(rawAadhaarDoc) : '';
+
   // Dedicated documents list for the Document Vault
   const documentsList = [
     {
@@ -237,10 +250,12 @@ export default function SellerDetailModal({
       number: addressProofDocNumber,
       entity: legalBusinessName,
       authority: addressProofType === 'Electricity Bill' ? 'State Power Distribution Corp' : 'Municipal Land Registry',
-      status: '100% Address Match',
+      status: resolvedAddressProofUrl ? 'Uploaded & Verified' : '100% Address Match',
       statusColor: 'emerald',
       fileName: addressProofFileName,
       fileSize: '1.9 MB',
+      fileUrl: resolvedAddressProofUrl,
+      src: resolvedAddressProofUrl,
       issueDate: '10 Feb 2026',
       highlights: [
         `Verified Address: ${fullAddress}`,
@@ -255,10 +270,12 @@ export default function SellerDetailModal({
       number: `A/C: ${bankAccountNumber} (IFSC: ${bankIfscCode})`,
       entity: bankAccountHolder,
       authority: bankName,
-      status: 'Penny Drop Matched',
+      status: resolvedPassbookUrl ? 'Uploaded Leaf Verified' : 'Penny Drop Matched',
       statusColor: 'emerald',
       fileName: 'cancelled_cheque_payout_leaf.pdf',
       fileSize: '1.4 MB',
+      fileUrl: resolvedPassbookUrl,
+      src: resolvedPassbookUrl,
       issueDate: 'Live Automated Check',
       highlights: [
         `Beneficiary Account Holder: ${bankAccountHolder}`,
@@ -277,6 +294,8 @@ export default function SellerDetailModal({
       statusColor: 'emerald',
       fileName: 'signatory_kyc_dossier.pdf',
       fileSize: '2.2 MB',
+      fileUrl: resolvedPanUrl || resolvedAadhaarUrl,
+      src: resolvedPanUrl || resolvedAadhaarUrl,
       issueDate: 'Digital Token Verified',
       highlights: [
         `Authorized Signatory: ${ownerName}`,
@@ -297,6 +316,8 @@ export default function SellerDetailModal({
     statusColor: 'amber',
     fileName: addressProofFileName,
     fileSize: '1.9 MB',
+    fileUrl: resolvedAddressProofUrl,
+    src: resolvedAddressProofUrl,
     issueDate: '10 Feb 2026',
     highlights: [
       `Applicant business: ${legalBusinessName}`,
@@ -920,7 +941,19 @@ export default function SellerDetailModal({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-2">
+                      {resolvedAddressProofUrl && (
+                        <a
+                          href={resolvedAddressProofUrl}
+                          download={addressProofFileName}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download size={13} />
+                          <span>Download</span>
+                        </a>
+                      )}
                       <button
                         type="button"
                         onClick={() => setPreviewDoc(addressProofPreviewDoc)}
@@ -957,23 +990,52 @@ export default function SellerDetailModal({
                 </button>
 
                 {expandedSections[7] && (
-                  <div className="p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <span className="block text-gray-400 font-medium text-[11px]">Account Holder</span>
-                      <span className="font-bold text-gray-900">{bankAccountHolder}</span>
+                  <div className="p-5 space-y-4 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <span className="block text-gray-400 font-medium text-[11px]">Account Holder</span>
+                        <span className="font-bold text-gray-900">{bankAccountHolder}</span>
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 font-medium text-[11px]">Bank Name & Branch</span>
+                        <span className="font-bold text-gray-900">{bankName} ({bankBranch})</span>
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 font-medium text-[11px]">Account Number</span>
+                        <span className="font-bold text-gray-900 font-mono">{bankAccountNumber}</span>
+                      </div>
+                      <div>
+                        <span className="block text-gray-400 font-medium text-[11px]">IFSC & Account Type</span>
+                        <span className="font-bold text-gray-900 font-mono">{bankIfscCode} ({accountType})</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="block text-gray-400 font-medium text-[11px]">Bank Name & Branch</span>
-                      <span className="font-bold text-gray-900">{bankName} ({bankBranch})</span>
-                    </div>
-                    <div>
-                      <span className="block text-gray-400 font-medium text-[11px]">Account Number</span>
-                      <span className="font-bold text-gray-900 font-mono">{bankAccountNumber}</span>
-                    </div>
-                    <div>
-                      <span className="block text-gray-400 font-medium text-[11px]">IFSC & Account Type</span>
-                      <span className="font-bold text-gray-900 font-mono">{bankIfscCode} ({accountType})</span>
-                    </div>
+                    {resolvedPassbookUrl && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                        <span className="text-[11px] text-teal-800 font-bold flex items-center gap-1.5">
+                          <FileCheck size={14} /> Cancelled Cheque / Bank Passbook Leaf Attached
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={resolvedPassbookUrl}
+                            download="cancelled_cheque.pdf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Download size={13} />
+                            <span>Download Leaf</span>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc(documentsList.find(d => d.id === 'doc-bank'))}
+                            className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Eye size={13} />
+                            <span>Preview Cheque / Passbook</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1580,6 +1642,42 @@ export default function SellerDetailModal({
             {/* Simulated Document Preview Paper */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-gray-50">
               
+              {/* If previewDoc has an actual uploaded fileUrl, show the real Document */}
+              {previewDoc.fileUrl && (
+                <div className="bg-white rounded-2xl border-2 border-teal-500/40 p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
+                    <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
+                      <FileCheck size={16} className="text-teal-600" />
+                      Original Uploaded Attachment Preview
+                    </span>
+                    <a
+                      href={previewDoc.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-teal-700 hover:text-teal-800 font-bold flex items-center gap-1 underline"
+                    >
+                      <ExternalLink size={13} />
+                      Open Full Screen
+                    </a>
+                  </div>
+                  {previewDoc.fileUrl.toLowerCase().split('?')[0].endsWith('.pdf') ? (
+                    <iframe
+                      src={previewDoc.fileUrl}
+                      title={previewDoc.title}
+                      className="w-full h-[450px] rounded-xl border border-gray-200 bg-gray-100"
+                    />
+                  ) : (
+                    <div className="flex justify-center items-center bg-gray-100 rounded-xl p-2 min-h-[220px] max-h-[460px] overflow-auto">
+                      <img
+                        src={previewDoc.fileUrl}
+                        alt={previewDoc.title}
+                        className="max-h-[430px] max-w-full object-contain rounded-lg shadow-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Official Certificate Paper Card */}
               <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300/80 p-6 shadow-xs relative overflow-hidden">
                 
@@ -1667,14 +1765,27 @@ export default function SellerDetailModal({
                 Document verified against Government & Banking APIs
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => alert(`Downloading verified certificate copy: ${previewDoc.fileName}`)}
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download size={13} />
-                  <span>Download PDF</span>
-                </button>
+                {previewDoc.fileUrl ? (
+                  <a
+                    href={previewDoc.fileUrl}
+                    download={previewDoc.fileName || 'document'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Download size={13} />
+                    <span>Download File</span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => alert(`No attachment file URL found for ${previewDoc.title}`)}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download size={13} />
+                    <span>Download PDF</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreviewDoc(null)}

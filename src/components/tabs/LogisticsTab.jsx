@@ -23,13 +23,16 @@ export default function LogisticsTab() {
   const [platformPartner, setPlatformPartner] = useState('shiprocket');
   const [shippingFee, setShippingFee] = useState(String(settings.shippingFee ?? 49));
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(settings.minOrderFreeShipping || settings.freeShippingThreshold || '999'));
-  const [codFee, setCodFee] = useState('40');
+  const [codFee, setCodFee] = useState(String(settings.codFee ?? 0));
 
   useEffect(() => {
     if (settings) {
       if (settings.shippingFee !== undefined) setShippingFee(String(settings.shippingFee));
       if (settings.minOrderFreeShipping !== undefined || settings.freeShippingThreshold !== undefined) {
         setFreeShippingThreshold(String(settings.minOrderFreeShipping || settings.freeShippingThreshold || '999'));
+      }
+      if (settings.codFee !== undefined) {
+        setCodFee(String(settings.codFee));
       }
     }
   }, [settings]);
@@ -65,7 +68,8 @@ export default function LogisticsTab() {
       updatePlatformSettings({
         shippingFee: Number(shippingFee),
         minOrderFreeShipping: Number(freeShippingThreshold),
-        freeShippingThreshold: Number(freeShippingThreshold)
+        freeShippingThreshold: Number(freeShippingThreshold),
+        codFee: Number(codFee)
       });
     }
     setTimeout(() => {

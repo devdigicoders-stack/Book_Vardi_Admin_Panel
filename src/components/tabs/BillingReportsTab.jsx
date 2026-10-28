@@ -29,6 +29,7 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import { SERVER_URL } from '../../utils/api';
 import { exportToExcel } from '../../utils/excelExporter';
+import { getSellerInvoiceNumber } from '../../utils/invoiceHelper';
 
 // Helper to check if an order is Third-Party Courier or Direct Self-Delivery
 const isOrderThirdPartyCourier = (o) => {
@@ -93,9 +94,9 @@ export default function BillingReportsTab() {
     return (orders || []).map(o => {
       const orderDate = new Date(o.createdAt || o.date || Date.now());
       const orderIdStr = o.orderId || (o._id ? o._id.toString().substring(0, 8).toUpperCase() : 'ORD');
-      const invoiceNo = `INV-${orderIdStr}`;
-      const creditNoteNo = `CN-${orderIdStr}`;
-      const exchangeInvoiceNo = `EXCH-${orderIdStr}`;
+      const invoiceNo = getSellerInvoiceNumber(o, null, orders);
+      const creditNoteNo = `CN-${invoiceNo}`;
+      const exchangeInvoiceNo = `EXCH-${invoiceNo}`;
 
       const rawStatus = String(o.status || o.overallStatus || '').toLowerCase().trim();
       const returnReqStatus = String(o.returnRequest?.status || '').toLowerCase().trim();

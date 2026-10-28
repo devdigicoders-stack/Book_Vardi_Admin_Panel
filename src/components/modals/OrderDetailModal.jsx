@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
+  ArrowLeft,
   ShoppingBag, 
   Truck, 
   User, 
@@ -85,6 +86,27 @@ export default function OrderDetailModal({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAwb, setCopiedAwb] = useState(false);
   const [statusUpdatedToast, setStatusUpdatedToast] = useState(false);
+
+  // Handle browser back button (popstate) safely so user never gets kicked out of the portal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const modalId = 'admin_order_modal_' + Date.now();
+    window.history.pushState({ modalOpen: true, modalId }, '');
+
+    const handlePopState = () => {
+      onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (window.history.state?.modalId === modalId) {
+        window.history.back();
+      }
+    };
+  }, [isOpen, onClose]);
 
   const displayOrder = currentOrder || order;
 
@@ -525,6 +547,15 @@ export default function OrderDetailModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-5">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition-all cursor-pointer border border-gray-200"
+              title="Back to Orders List"
+            >
+              <ArrowLeft size={14} />
+              <span>Back</span>
+            </button>
             <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold">
               <ShoppingBag size={20} />
             </div>
@@ -1758,6 +1789,27 @@ export default function OrderDetailModal({
                 const selfDeliveryAmount = isSelf ? customerShippingPaid : 0;
                 const grossSale = Math.max(0, Math.round((itemsGrossSale + selfDeliveryAmount) * 100) / 100);
 
+                // Check if seller qualifies for Statutory Exemption (0% Comm, 0% GST, 0% TDS, 0% TCS for 09BLMPK2840L2ZN)
+                const candidateGstList = [
+                  order.sellerDetails?.gstNumber,
+                  order.sellerDetails?.gstin,
+                  order.sellerId?.gstNumber,
+                  order.sellerId?.gstin,
+                  order.sellerGstNumber,
+                  ...(order.items || []).map(it => it.sellerDetails?.gstNumber || it.sellerId?.gstNumber || it.sellerGstNumber),
+                  ...sellers.filter(s => {
+                    const sId = String(s.id || s._id || '');
+                    const ordSellerId = String(order.sellerId?._id || order.sellerId || '');
+                    const store = String(order.sellerStoreName || order.storeName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const sStore = String(s.storeName || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return (sId && ordSellerId && sId === ordSellerId) || (store && sStore && (store === sStore || store.includes(sStore) || sStore.includes(store)));
+                  }).map(s => s.gstNumber || s.gstin)
+                ].filter(Boolean).map(g => String(g).trim().toUpperCase().replace(/[^A-Z0-9]/g, ''));
+
+                const isExemptedSeller = candidateGstList.includes('09BLMPK2840L2ZN') ||
+                  String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('national school dress') ||
+                  (order.items || []).some(it => String(it.sellerStoreName || it.storeName || '').toLowerCase().includes('national school dress'));
+
                 // Multi-item exact commission calculation (supports different seller commission rates)
                 let totalItemCommission = 0;
                 (order.items || []).forEach(it => {
@@ -1773,40 +1825,46 @@ export default function OrderDetailModal({
                     const cleanStore = String(s.storeName || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
                     return itStore && cleanStore && (itStore === cleanStore || itStore.includes(cleanStore) || cleanStore.includes(itStore));
                   });
-                  const itRate = Number(itMatchedSeller?.commissionRate ?? itMatchedSeller?.commissionPercentage ?? it.commissionRate ?? it.sellerCommissionRate ?? 7);
-                  const itCommAmt = (it.commissionAmount !== undefined && it.commissionAmount !== null && !isNaN(Number(it.commissionAmount)) && Number(it.commissionAmount) > 0)
-                    ? Number(it.commissionAmount)
-                    : Math.round(((itTotal * itRate) / 100) * 100) / 100;
+                  const itRate = isExemptedSeller ? 0 : Number(itMatchedSeller?.commissionRate ?? itMatchedSeller?.commissionPercentage ?? it.commissionRate ?? it.sellerCommissionRate ?? 10);
+                  const itCommAmt = isExemptedSeller
+                    ? 0
+                    : ((it.commissionAmount !== undefined && it.commissionAmount !== null && !isNaN(Number(it.commissionAmount)) && Number(it.commissionAmount) > 0)
+                        ? Number(it.commissionAmount)
+                        : Math.round(((itTotal * itRate) / 100) * 100) / 100);
                   totalItemCommission += itCommAmt;
                 });
 
-                const portalComm = totalItemCommission > 0
-                  ? Math.round(totalItemCommission * 100) / 100
-                  : Math.round(((itemsGrossSale * 7) / 100) * 100) / 100;
-                const effectiveCommRate = itemsGrossSale > 0
-                  ? Math.round((portalComm / itemsGrossSale) * 100 * 10) / 10
-                  : 7;
+                const portalComm = isExemptedSeller
+                  ? 0
+                  : (totalItemCommission > 0
+                    ? Math.round(totalItemCommission * 100) / 100
+                    : Math.round(((itemsGrossSale * 10) / 100) * 100) / 100);
+                const effectiveCommRate = isExemptedSeller
+                  ? 0
+                  : (itemsGrossSale > 0
+                    ? Math.round((portalComm / itemsGrossSale) * 100 * 10) / 10
+                    : 10);
                 
-                // 2. GST on Commission (18%)
-                const gstOnComm = Math.round(((portalComm * 18) / 100) * 100) / 100;
-                // 3. TDS (0.1% Sec 194-O): Strictly on Gross Sale / Total Transaction Value
-                const tdsAmt = Math.round(((grossSale * 0.1) / 100) * 100) / 100;
+                // 2. GST on Commission (18%, 0% if exempted)
+                const gstOnComm = isExemptedSeller ? 0 : Math.round(((portalComm * 18) / 100) * 100) / 100;
+                // 3. TDS (0.1% Sec 194-O, strictly 0% if exempted)
+                const tdsAmt = isExemptedSeller ? 0 : Math.round(((grossSale * 0.1) / 100) * 100) / 100;
 
-                // 4. GST TCS (0.5% Sec 52): Strictly on Taxable Value (Net Value of Taxable Supplies), not gross!
-                // 0% for Rule 3 COD Self or Tax-Free (books)
+                // 4. GST TCS (0.5% Sec 52, strictly 0% if exempted)
+                // 0% for Rule 3 COD Self or Tax-Free (books) or Exempted Seller
                 const isTaxFreeOrder = (order.items || []).every(it => {
                   const r = Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? 5);
                   const cat = String(it.category || '').toLowerCase();
                   return r === 0 || cat.includes('book');
                 });
-                const tcsRate = (ruleNum === 3 || isTaxFreeOrder) ? 0 : 0.5;
+                const tcsRate = (ruleNum === 3 || isTaxFreeOrder || isExemptedSeller) ? 0 : 0.5;
                 const orderItemsTaxable = (order.items || []).reduce((sum, it) => {
                   const itPrice = Number(it.finalPrice || it.price || 0) * Number(it.quantity || 1);
                   const itGst = Number(it.gstPercent ?? it.gstPercentage ?? it.gstRate ?? it.gst ?? 5);
                   return sum + (itGst > 0 ? Math.round((itPrice / (1 + itGst / 100)) * 100) / 100 : itPrice);
                 }, 0);
                 const taxableForTcs = orderItemsTaxable > 0 ? orderItemsTaxable : Math.round((itemsGrossSale / 1.05) * 100) / 100;
-                const tcsAmt = (ruleNum === 3 || isTaxFreeOrder) ? 0 : Math.round(((taxableForTcs * tcsRate) / 100) * 100) / 100;
+                const tcsAmt = (ruleNum === 3 || isTaxFreeOrder || isExemptedSeller) ? 0 : Math.round(((taxableForTcs * tcsRate) / 100) * 100) / 100;
 
                 // 5. Delivery Charges (Rule 2 & Rule 4: Client Norms)
                 const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
@@ -1915,22 +1973,22 @@ export default function OrderDetailModal({
                       )}
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• Portal Commission (औसत {effectiveCommRate}% पोर्टल कमीशन):</span>
+                        <span>• Portal Commission ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `औसत ${effectiveCommRate}% पोर्टल कमीशन`}):</span>
                         <span className="font-mono font-semibold text-amber-900">−₹{portalComm.toFixed(2)}</span>
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• GST on Commission (कमीशन पर 18% GST):</span>
+                        <span>• GST on Commission ({isExemptedSeller ? '0% विशेष छूट' : 'कमीशन पर 18% GST'}):</span>
                         <span className="font-mono font-semibold text-indigo-900">−₹{gstOnComm.toFixed(2)}</span>
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• TDS (आयकर Sec 194-O लागू 0.1% TDS on Gross ₹{grossSale.toFixed(2)}):</span>
+                        <span>• TDS ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `आयकर Sec 194-O लागू 0.1% TDS on Gross ₹${grossSale.toFixed(2)}`}):</span>
                         <span className="font-mono font-semibold text-purple-900">−₹{tdsAmt.toFixed(2)}</span>
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• GST TCS (0.5% on Taxable ₹{taxableForTcs.toFixed(2)}):</span>
+                        <span>• GST TCS ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `0.5% on Taxable ₹${taxableForTcs.toFixed(2)}`}):</span>
                         <span className="font-mono font-semibold text-sky-900">−₹{tcsAmt.toFixed(2)}</span>
                       </div>
 
