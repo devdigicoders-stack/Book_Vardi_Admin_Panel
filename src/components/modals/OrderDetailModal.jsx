@@ -1387,63 +1387,109 @@ export default function OrderDetailModal({
                         <div className="text-[10px] text-gray-400">₹{itemUnitPrice} each</div>
                       </>
                     )}
-                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                      <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
-                        item.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
-                        item.status === 'Shipped' || item.status === 'Out for Delivery' ? 'bg-purple-100 text-purple-800' :
-                        item.status === 'Packed' ? 'bg-indigo-100 text-indigo-800' :
-                        item.status === 'Confirmed' ? 'bg-blue-100 text-blue-800' :
-                        item.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {item.status || displayOrder?.status || 'Pending'}
-                      </span>
-                      {!readOnly && (
-                        <select
-                          value={item.status || displayOrder?.status || 'Pending'}
-                          onChange={(e) => {
-                            const newSt = e.target.value;
-                            const activeOrder = displayOrder || order;
-                            const ordId = activeOrder._id || activeOrder.id || activeOrder.orderId;
-                            const itemIdVal = item._id || item.id || (item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId) || idx;
+                    {(() => {
+                      const reqTargetId = String(displayOrder?.returnRequest?.itemId || displayOrder?.returnRequest?.productId || '').trim();
+                      const reqTargetName = String(displayOrder?.returnRequest?.itemName || '').trim().toLowerCase();
+                      const hasActiveReturnRequest = Boolean(
+                        displayOrder?.returnRequest &&
+                        displayOrder.returnRequest.status &&
+                        !['none', 'no_request', ''].includes(String(displayOrder.returnRequest.status).toLowerCase())
+                      );
 
-                            // Optimistically update local modal state
-                            setCurrentOrder(prev => {
-                              if (!prev || !Array.isArray(prev.items)) return prev;
-                              const updatedItems = prev.items.map((it, i) => i === idx ? { ...it, status: newSt } : it);
-                              return { ...prev, items: updatedItems };
-                            });
+                      const hasExplicitTarget = Boolean(reqTargetId || reqTargetName);
+                      const isTargetMatch = Boolean(
+                        (reqTargetId && (String(item._id || '') === reqTargetId || String(item.id || '') === reqTargetId || String(item.productId || '') === reqTargetId)) ||
+                        (reqTargetName && String(item.name || '').trim().toLowerCase() === reqTargetName)
+                      );
 
-                            if (onUpdateStatus) {
-                              onUpdateStatus(ordId, newSt, {
-                                itemId: itemIdVal,
-                                itemIndex: idx,
-                                productId: item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId
-                              });
-                            }
-                            setStatusUpdatedToast(true);
-                            setTimeout(() => setStatusUpdatedToast(false), 2000);
-                          }}
-                          className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 bg-white hover:border-teal-600 focus:outline-none cursor-pointer"
-                          title="Update status for this specific item"
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="Confirmed">Confirmed</option>
-                          <option value="Processing">Processing</option>
-                          <option value="Packed">Packed</option>
-                          <option value="Shipped">Shipped</option>
-                          <option value="Out for Delivery">Out for Delivery</option>
-                          <option value="Delivered">Delivered</option>
-                          <option value="Exchange Requested">Exchange Requested</option>
-                          <option value="Return Requested">Return Requested</option>
-                          <option value="Exchange Approved">Exchange Approved</option>
-                          <option value="Return Approved">Return Approved</option>
-                          <option value="Exchanged">Exchanged</option>
-                          <option value="Refunded">Refunded</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                      )}
-                    </div>
+                      const isThisItemExchangedOrReturned = hasActiveReturnRequest && (
+                        hasExplicitTarget
+                          ? isTargetMatch
+                          : (
+                              (displayOrder?.items?.length === 1) ||
+                              String(item.status || '').toLowerCase().includes('exchange') ||
+                              String(item.status || '').toLowerCase().includes('return')
+                            )
+                      );
+
+                      let itemStat = item.status;
+                      if (!isThisItemExchangedOrReturned) {
+                        if (itemStat && (itemStat.toLowerCase().includes('exchange') || itemStat.toLowerCase().includes('return') || itemStat.toLowerCase().includes('pickup'))) {
+                          itemStat = 'Delivered';
+                        } else if (!itemStat) {
+                          itemStat = displayOrder?.status && !displayOrder.status.toLowerCase().includes('exchange') && !displayOrder.status.toLowerCase().includes('return') && !displayOrder.status.toLowerCase().includes('pickup')
+                            ? displayOrder.status
+                            : 'Delivered';
+                        }
+                      } else {
+                        itemStat = itemStat || displayOrder?.returnRequest?.status || displayOrder?.status || 'Exchange Requested';
+                      }
+
+                      return (
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <span className={`inline-block text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                            itemStat === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                            itemStat === 'Shipped' || itemStat === 'Out for Delivery' ? 'bg-purple-100 text-purple-800' :
+                            itemStat === 'Packed' ? 'bg-indigo-100 text-indigo-800' :
+                            itemStat === 'Confirmed' ? 'bg-blue-100 text-blue-800' :
+                            itemStat === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
+                            (itemStat.toLowerCase().includes('exchange') || itemStat.toLowerCase().includes('pickup') || itemStat.toLowerCase().includes('return')) ? 'bg-purple-100 text-purple-950 border border-purple-300' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {itemStat}
+                          </span>
+                          {!readOnly && (
+                            <select
+                              value={itemStat}
+                              onChange={(e) => {
+                                const newSt = e.target.value;
+                                const activeOrder = displayOrder || order;
+                                const ordId = activeOrder._id || activeOrder.id || activeOrder.orderId;
+                                const itemIdVal = item._id || item.id || (item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId) || idx;
+
+                                // Optimistically update local modal state
+                                setCurrentOrder(prev => {
+                                  if (!prev || !Array.isArray(prev.items)) return prev;
+                                  const updatedItems = prev.items.map((it, i) => i === idx ? { ...it, status: newSt } : it);
+                                  return { ...prev, items: updatedItems };
+                                });
+
+                                if (onUpdateStatus) {
+                                  onUpdateStatus(ordId, newSt, {
+                                    itemId: itemIdVal,
+                                    itemIndex: idx,
+                                    productId: item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId
+                                  });
+                                }
+                                setStatusUpdatedToast(true);
+                                setTimeout(() => setStatusUpdatedToast(false), 2000);
+                              }}
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 bg-white hover:border-teal-600 focus:outline-none cursor-pointer"
+                              title="Update status for this specific item"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Confirmed">Confirmed</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Packed">Packed</option>
+                              <option value="Shipped">Shipped</option>
+                              <option value="Out for Delivery">Out for Delivery</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Exchange Requested">Exchange Requested</option>
+                              <option value="Return Requested">Return Requested</option>
+                              <option value="Exchange Approved">Exchange Approved</option>
+                              <option value="Return Approved">Return Approved</option>
+                              <option value="Exchange Pickup Scheduled">Exchange Pickup Scheduled</option>
+                              <option value="Exchanged">Exchanged</option>
+                              <option value="Refunded">Refunded</option>
+                              <option value="Cancelled">Cancelled</option>
+                              {!['Pending', 'Confirmed', 'Processing', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered', 'Exchange Requested', 'Return Requested', 'Exchange Approved', 'Return Approved', 'Exchange Pickup Scheduled', 'Exchanged', 'Refunded', 'Cancelled'].includes(itemStat) && (
+                                <option value={itemStat}>{itemStat}</option>
+                              )}
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {(() => {
                       const itMode = String(item.deliveryType || order.deliveryMode || '').toLowerCase();
                       const courierNameVal = item.thirdPartyDetails?.courierName || order.courierName;
