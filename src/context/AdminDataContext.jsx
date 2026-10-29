@@ -15,6 +15,8 @@ import {
   updateAdminInventoryStockApi,
   quickRestockAdminInventoryApi,
   approveSellerApi,
+  approveSellerUpdatesApi,
+  rejectSellerUpdatesApi,
   rejectSellerApi,
   updateSellerCommissionApi,
   toggleSellerStatusApi,
@@ -1869,6 +1871,48 @@ export const AdminDataProvider = ({ children }) => {
     logAudit('Seller Rejected', `Rejected seller ${sellerId} with message: "${trimmedReason}"`);
   };
 
+  const approveSellerUpdates = async (sellerId) => {
+    try {
+      const res = await approveSellerUpdatesApi(sellerId);
+      if (res && (res.seller || res.message)) {
+        const data = await fetchAdminSellersApi();
+        const list = Array.isArray(data) ? data : (data?.sellers || []);
+        if (list.length > 0) {
+          setSellers(list.map(s => ({
+            id: s._id || s.id,
+            _id: s._id || s.id,
+            ...s
+          })));
+        }
+      }
+      return res;
+    } catch (e) {
+      console.error(e);
+      return { success: false, message: e.message };
+    }
+  };
+
+  const rejectSellerUpdates = async (sellerId, reason = '') => {
+    try {
+      const res = await rejectSellerUpdatesApi(sellerId, reason);
+      if (res && (res.seller || res.message)) {
+        const data = await fetchAdminSellersApi();
+        const list = Array.isArray(data) ? data : (data?.sellers || []);
+        if (list.length > 0) {
+          setSellers(list.map(s => ({
+            id: s._id || s.id,
+            _id: s._id || s.id,
+            ...s
+          })));
+        }
+      }
+      return res;
+    } catch (e) {
+      console.error(e);
+      return { success: false, message: e.message };
+    }
+  };
+
   const toggleSellerStatus = async (sellerId, targetStatus, reason = '') => {
     const lower = String(targetStatus || '').toLowerCase();
     if (lower === 'approved' || lower === 'verified') {
@@ -2750,6 +2794,8 @@ export const AdminDataProvider = ({ children }) => {
     sellers,
     approveSeller,
     rejectSeller,
+    approveSellerUpdates,
+    rejectSellerUpdates,
     setPendingSeller,
     toggleSellerStatus,
     updateSellerCommission,

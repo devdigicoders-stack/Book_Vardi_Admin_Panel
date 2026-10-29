@@ -27,6 +27,8 @@ export default function SellersTab() {
     orders = [],
     approveSeller, 
     rejectSeller, 
+    approveSellerUpdates,
+    rejectSellerUpdates,
     setPendingSeller,
     toggleSellerStatus,
     updateSellerCommission, 
@@ -45,6 +47,7 @@ export default function SellersTab() {
   // Status counts
   const counts = {
     all: sellers.length,
+    updates_pending: sellers.filter(s => Boolean(s.pendingUpdates)).length,
     pending: sellers.filter(s => {
       const st = String(s.status || '').toLowerCase();
       return st === 'pending' || st === 'pending approval';
@@ -60,6 +63,7 @@ export default function SellersTab() {
   const filteredSellers = sellers.filter(s => {
     const st = String(s.status || '').toLowerCase();
 
+    if (selectedStatusTab === 'updates_pending' && !s.pendingUpdates) return false;
     if (selectedStatusTab === 'pending' && !(st === 'pending' || st === 'pending approval')) return false;
     if (selectedStatusTab === 'approved' && !(st === 'approved' || st === 'verified')) return false;
     if (selectedStatusTab === 'rejected' && st !== 'rejected') return false;
@@ -107,6 +111,7 @@ export default function SellersTab() {
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
           {[
             { id: 'all', label: 'All Vendors', count: counts.all, color: 'bg-gray-100 text-gray-800' },
+            ...(counts.updates_pending > 0 ? [{ id: 'updates_pending', label: '⚠️ Profile Updates Pending', count: counts.updates_pending, color: 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold' }] : []),
             { id: 'pending', label: 'Pending Approval', count: counts.pending, color: 'bg-amber-100 text-amber-900' },
             { id: 'approved', label: 'Approved / Verified', count: counts.approved, color: 'bg-emerald-100 text-emerald-900' },
             { id: 'rejected', label: 'Rejected', count: counts.rejected, color: 'bg-rose-100 text-rose-900' },
@@ -194,6 +199,19 @@ export default function SellersTab() {
                       <AlertTriangle size={12} /> Rejection Message:
                     </span>
                     <p className="text-[11px] leading-snug italic">{seller.rejectionReason}</p>
+                  </div>
+                )}
+
+                {/* Profile update request banner if pending review */}
+                {seller.pendingUpdates && (
+                  <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-300 text-xs text-amber-950 flex items-center justify-between gap-2 shadow-2xs">
+                    <span className="font-extrabold text-[11px] flex items-center gap-1.5 text-amber-900">
+                      <span>⚠️</span>
+                      <span>Profile Update Awaiting Approval</span>
+                    </span>
+                    <span className="text-[10px] bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded-md uppercase">
+                      Review Diff
+                    </span>
                   </div>
                 )}
 
@@ -328,6 +346,8 @@ export default function SellersTab() {
         seller={selectedSeller}
         onApprove={approveSeller}
         onReject={rejectSeller}
+        onApproveUpdates={approveSellerUpdates}
+        onRejectUpdates={rejectSellerUpdates}
         onSetPending={setPendingSeller}
         onToggleStatus={toggleSellerStatus}
         onUpdateCommission={updateSellerCommission}

@@ -530,6 +530,34 @@ export const approveSellerApi = async (id) => {
   }
 };
 
+export const approveSellerUpdatesApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/approve-updates`, {
+      method: 'PUT',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const rejectSellerUpdatesApi = async (id, reason = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/reject-updates`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({ reason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 export const rejectSellerApi = async (id, reason = '') => {
   try {
     const res = await fetch(`${API_BASE_URL}/sellers/${id}/reject`, {

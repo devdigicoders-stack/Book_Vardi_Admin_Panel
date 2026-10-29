@@ -38,6 +38,8 @@ export default function SellerDetailModal({
   seller, 
   onApprove, 
   onReject, 
+  onApproveUpdates,
+  onRejectUpdates,
   onSetPending,
   onToggleStatus,
   onUpdateCommission, 
@@ -643,6 +645,127 @@ export default function SellerDetailModal({
 
         {/* TAB CONTENT BODY */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
+
+          {/* PENDING PROFILE & STORE UPDATES REVIEW CARD */}
+          {seller.pendingUpdates && (
+            <div className="p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-base shrink-0">
+                    ⚠️
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
+                      <span>Seller Profile & Store Update Request</span>
+                      <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded-full uppercase">Action Required</span>
+                    </h4>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      This merchant submitted updates to their legal credentials from the Seller Portal. Review diff below before approving.
+                    </p>
+                  </div>
+                </div>
+                {seller.pendingUpdates?.submittedAt && (
+                  <span className="text-[10px] font-mono font-bold text-amber-900 bg-amber-200/80 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+                    Submitted: {new Date(seller.pendingUpdates.submittedAt).toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+
+              {/* Old vs New Comparison Table */}
+              <div className="bg-white rounded-xl border border-amber-200 overflow-hidden text-xs shadow-2xs">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-amber-100/70 text-amber-950 text-[10px] uppercase font-extrabold">
+                      <th className="py-2.5 px-3">Field / Credential</th>
+                      <th className="py-2.5 px-3">Current Active Value</th>
+                      <th className="py-2.5 px-3">New Requested Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100">
+                    {seller.pendingUpdates.storeName !== undefined && seller.pendingUpdates.storeName !== seller.storeName && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Display Store Name</td>
+                        <td className="py-2.5 px-3 text-gray-500 line-through">{seller.storeName || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.storeName}</td>
+                      </tr>
+                    )}
+                    {seller.pendingUpdates.gstin !== undefined && seller.pendingUpdates.gstin !== (seller.gstNumber || '') && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">GSTIN Number</td>
+                        <td className="py-2.5 px-3 text-gray-500 font-mono line-through">{seller.gstNumber || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold font-mono text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.gstin || '—'}</td>
+                      </tr>
+                    )}
+                    {seller.pendingUpdates.sellerLegalName !== undefined && seller.pendingUpdates.sellerLegalName !== (seller.ownerDetails?.ownerFullName || seller.name || '') && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Legal Entity Name</td>
+                        <td className="py-2.5 px-3 text-gray-500 line-through">{seller.ownerDetails?.ownerFullName || seller.name || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.sellerLegalName}</td>
+                      </tr>
+                    )}
+                    {seller.pendingUpdates.phone !== undefined && seller.pendingUpdates.phone !== seller.phone && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Helpline / Support Phone</td>
+                        <td className="py-2.5 px-3 text-gray-500 font-mono line-through">{seller.phone || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold font-mono text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.phone}</td>
+                      </tr>
+                    )}
+                    {seller.pendingUpdates.email !== undefined && seller.pendingUpdates.email !== seller.email && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Official Seller Email</td>
+                        <td className="py-2.5 px-3 text-gray-500 line-through">{seller.email || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.email}</td>
+                      </tr>
+                    )}
+                    {(seller.pendingUpdates.warehouseAddress || seller.pendingUpdates.address) && (seller.pendingUpdates.warehouseAddress || seller.pendingUpdates.address) !== seller.address && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Warehouse / Pickup Address</td>
+                        <td className="py-2.5 px-3 text-gray-500 line-through">{seller.address || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.warehouseAddress || seller.pendingUpdates.address}</td>
+                      </tr>
+                    )}
+                    {seller.pendingUpdates.storeTagline && seller.pendingUpdates.storeTagline !== (seller.storeDetails?.storeTagline || '') && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Store Tagline / Subtitle</td>
+                        <td className="py-2.5 px-3 text-gray-500 line-through">{seller.storeDetails?.storeTagline || '—'}</td>
+                        <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.storeTagline}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Approve / Reject Action Buttons */}
+              {!readOnly && (
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Reject profile updates requested by '${storeName}'?`)) {
+                        if (onRejectUpdates) await onRejectUpdates(sellerId, 'Rejected by Admin');
+                        onClose();
+                      }
+                    }}
+                    className="px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    ❌ Reject Updates
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Approve and apply all profile updates for '${storeName}'? Changes will reflect live.`)) {
+                        if (onApproveUpdates) await onApproveUpdates(sellerId);
+                        onClose();
+                      }
+                    }}
+                    className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    ✅ Approve & Apply Updates
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ============================================================== */}
           {/* TAB 1: ALL 12 STEPS DOSSIER                                   */}
