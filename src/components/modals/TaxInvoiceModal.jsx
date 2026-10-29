@@ -780,7 +780,8 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
 
     if (!gstin) {
       const sNameClean = sName.toLowerCase().trim();
-      if (sNameClean.includes('national cloth')) gstin = '09APOPN2691D1ZK';
+      if (sNameClean.includes('national school') || sNameClean.includes('pustak bhandar')) gstin = '09BLMPK2840L2ZN';
+      else if (sNameClean.includes('national cloth')) gstin = '09APOPN2691D1ZK';
       else if (sNameClean.includes('shyam')) gstin = 'RGCWRCGRGCRGCC';
     }
 
@@ -795,7 +796,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
 
     if (!city) {
       const sNameClean = sName.toLowerCase().trim();
-      if (sNameClean.includes('national cloth')) city = 'Behat';
+      if (sNameClean.includes('national school') || sNameClean.includes('pustak bhandar') || sNameClean.includes('national cloth')) city = 'Behat';
       else if (sNameClean.includes('shyam')) city = 'Lucknow';
       else city = 'Lucknow';
     }
@@ -1148,17 +1149,38 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   const isRule2OnlineCourier = !isCod && isThirdParty;
   const isRule1OnlineSelf = !isCod && !isThirdParty;
 
-  // Dynamic Exemption for specific GSTIN (e.g. 09BLMPK2840L2ZN)
-  const candidateSellerGst = String(
-    resolvedSeller?.gstNumber ||
-    resolvedSeller?.gstin ||
-    order.sellerDetails?.gstNumber ||
-    order.sellerDetails?.gstin ||
-    items[0]?.sellerDetails?.gstNumber ||
-    order.sellerGstNumber ||
-    ''
-  ).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const isExemptedSeller = candidateSellerGst === '09BLMPK2840L2ZN';
+  // Dynamic Exemption for specific GSTIN (e.g. 09BLMPK2840L2ZN / National School Dress)
+  const candidateGstList = [
+    resolvedSeller?.gstNumber,
+    resolvedSeller?.gstin,
+    order.sellerDetails?.gstNumber,
+    order.sellerDetails?.gstin,
+    order.sellerGstNumber,
+    activeSellerGroup?.gstNumber,
+    activeSellerGroup?.sellerDetails?.gstNumber,
+    ...(items || []).map(it => it.sellerDetails?.gstNumber || it.sellerId?.gstNumber || it.sellerGstNumber)
+  ].filter(Boolean).map(g => String(g).trim().toUpperCase().replace(/[^A-Z0-9]/g, ''));
+
+  const candidateStoreNames = [
+    resolvedSeller?.storeName,
+    activeSellerGroup?.storeName,
+    order.sellerStoreName,
+    order.storeName,
+    order.sellerDetails?.storeName,
+    order.sellerDetails?.name,
+    ...(items || []).map(it => it.sellerStoreName || it.storeName || it.sellerDetails?.storeName)
+  ].filter(Boolean).map(s => String(s).toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  const candidatePhoneList = [
+    resolvedSeller?.phone,
+    order.sellerPhone,
+    order.sellerDetails?.phone,
+    ...(items || []).map(it => it.sellerPhone || it.sellerDetails?.phone)
+  ].filter(Boolean).map(p => String(p).replace(/\D/g, ''));
+
+  const isExemptedSeller = candidateGstList.some(g => g.includes('09BLMPK2840L2ZN')) ||
+    candidateStoreNames.some(s => s.includes('nationalschooldress') || s.includes('pustakbhandar') || s.includes('nationalschool')) ||
+    candidatePhoneList.some(p => p.includes('9027237697'));
 
   // Dynamic Marketplace Commission Rate (Resolved per seller schedule)
   const marketplaceCommissionRate = isExemptedSeller ? 0 : getSellerCommissionRate();
@@ -1950,13 +1972,17 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
               </div>
               <div className="flex justify-between text-purple-900 font-medium">
                 <span>TDS 0.1% (Sec 194-O):</span>
-                <span className="font-mono">{isSettlementReversed ? '₹0.00 (Reversed)' : `-₹${tdsAmount.toFixed(2)}`}</span>
+                <span className="font-mono">
+                  {isSettlementReversed ? '₹0.00 (Reversed)' : (isExemptedSeller ? '₹0.00 (09BLMPK2840L2ZN Exempt)' : (tdsAmount > 0 ? `-₹${tdsAmount.toFixed(2)}` : '₹0.00'))}
+                </span>
               </div>
               <div className="flex justify-between text-sky-900 font-medium">
                 <span>
                   GST TCS (Sec 52):
                   {isSettlementReversed ? (
                     <span className="text-[9px] text-rose-700 font-bold ml-1">₹0.00 (Sec 34 Reversal)</span>
+                  ) : isExemptedSeller ? (
+                    <span className="text-[9px] text-emerald-700 font-bold ml-1">0% (09BLMPK2840L2ZN Exempt)</span>
                   ) : isRule3CodSelf ? (
                     <span className="text-[9px] text-gray-500 font-normal ml-1">0% (Exempt on COD Self)</span>
                   ) : isTaxFreeOrder ? (
@@ -1965,7 +1991,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                     <span className="text-[9px] text-sky-700 font-normal ml-1">0.5% (on Taxable ₹{settlementTaxable.toFixed(2)})</span>
                   )}
                 </span>
-                <span className="font-mono">{isSettlementReversed ? '₹0.00 (Reversed)' : (gstTcsAmount > 0 ? `-₹${gstTcsAmount.toFixed(2)}` : '₹0.00')}</span>
+                <span className="font-mono">{isSettlementReversed ? '₹0.00 (Reversed)' : (isExemptedSeller ? '₹0.00' : (gstTcsAmount > 0 ? `-₹${gstTcsAmount.toFixed(2)}` : '₹0.00'))}</span>
               </div>
 
               {/* Delivery charge deduction for Rule 2 & Rule 4 */}
@@ -2023,11 +2049,13 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                       <span>⚠️ Portal Commission/Taxes (Payable to Portal):</span>
                       <span className="text-[9px] text-amber-900 block font-normal">Customer paid ₹{settlementGross.toFixed(2)} cash directly to seller</span>
                     </div>
-                    <span className="font-mono text-xs font-black text-rose-700">-₹{totalDeductions.toFixed(2)}</span>
+                    <span className="font-mono text-xs font-black text-rose-700">
+                      {isExemptedSeller ? '₹0.00 (09BLMPK2840L2ZN Exempt)' : `-₹${totalDeductions.toFixed(2)}`}
+                    </span>
                   </div>
                   <div className="flex justify-between text-emerald-800 font-black text-xs bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
                     <span>सेलर शुद्ध बचत (Net Seller Retention):</span>
-                    <span className="font-mono text-emerald-800 font-black">₹{(settlementGross - totalDeductions).toFixed(2)}</span>
+                    <span className="font-mono text-emerald-800 font-black">₹{(isExemptedSeller ? settlementGross : (settlementGross - totalDeductions)).toFixed(2)}</span>
                   </div>
                 </div>
               ) : (
