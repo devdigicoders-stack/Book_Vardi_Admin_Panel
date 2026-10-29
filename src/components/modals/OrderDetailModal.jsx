@@ -294,8 +294,9 @@ export default function OrderDetailModal({
       }
 
       tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || `DLV-${Math.floor(100000 + Math.random() * 900000)}`).trim();
-      const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
-      selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+      const isProd = typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+      const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (isProd ? 'https://www.bookvardi.in' : `${window.location.protocol}//${window.location.hostname}:5173`)).replace(/\/+$/, '');
+      selfTrackingLink = `${websiteOrigin}/delivery-partner?token=${encodeURIComponent(tokenVal)}`;
       assignedTrackingNumber = tokenVal;
     } else {
       if (!courierInput.trim()) {
@@ -393,8 +394,9 @@ export default function OrderDetailModal({
       return;
     }
     const tokenVal = String(order.selfDeliveryDetails?.deliveryPartnerToken || newTracking.trim() || `DLV-${order.id}`).trim();
-    const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5173` : 'http://localhost:5173')).replace(/\/+$/, '');
-    const selfTrackingLink = `${websiteOrigin}/#delivery-partner?token=${encodeURIComponent(tokenVal)}`;
+    const isProd = typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+    const websiteOrigin = (import.meta.env.VITE_WEBSITE_URL || (isProd ? 'https://www.bookvardi.in' : `${window.location.protocol}//${window.location.hostname}:5173`)).replace(/\/+$/, '');
+    const selfTrackingLink = `${websiteOrigin}/delivery-partner?token=${encodeURIComponent(tokenVal)}`;
 
     const waMsg = generateRiderWhatsAppMessage({
       order,
