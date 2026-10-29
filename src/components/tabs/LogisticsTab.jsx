@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Truck,
+  Bike,
   ShieldCheck,
   Key,
   Save,
@@ -16,6 +17,22 @@ import {
   Clock
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
+
+// Helper to reliably identify Store Self-Delivery vs Third-Party Courier
+const isSelfDeliveryOrder = (ord) => {
+  if (!ord) return false;
+  if (ord.deliveryMode === 'self_delivery' || ord.deliveryType === 'self' || ord.dispatchMode === 'self_delivery') return true;
+  if (ord.isSelfDelivery === true) return true;
+  if (ord.selfDeliveryDetails?.deliveryPartnerToken || ord.selfDeliveryDetails?.deliveryPersonName) return true;
+  const trk = String(ord.trackingNumber || '').trim().toUpperCase();
+  if (trk.startsWith('DLV-')) return true;
+  if (Array.isArray(ord.items) && ord.items.some(it => it?.deliveryType === 'self_delivery' || it?.selfDeliveryDetails?.deliveryPartnerToken || String(it?.trackingNumber || '').startsWith('DLV-'))) {
+    return true;
+  }
+  const courier = String(ord.courierName || '').toLowerCase().trim();
+  if (courier.includes('self') || courier.includes('direct') || courier.includes('rider')) return true;
+  return false;
+};
 
 export default function LogisticsTab() {
   const { orders = [], settings = {}, updatePlatformSettings } = useAdminData();
@@ -44,19 +61,35 @@ export default function LogisticsTab() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState('all'); // 'all' | 'courier' | 'self_delivery'
 
-  // Shipped orders master log
-  const shippedOrders = orders.filter(
-    (o) => o.status === 'Shipped' || o.overallStatus === 'shipped' || o.trackingNumber
-  );
+  // Master dispatched orders log (includes Shipped, Out for Delivery, Delivered, or any with AWB / Rider Token)
+  const shippedOrders = orders.filter((o) => {
+    const st = String(o.status || o.overallStatus || '').toLowerCase();
+    return st === 'shipped' || st === 'out for delivery' || st === 'delivered' || Boolean(o.trackingNumber) || Boolean(o.selfDeliveryDetails?.deliveryPartnerToken);
+  });
+
+  const courierCount = shippedOrders.filter(o => !isSelfDeliveryOrder(o)).length;
+  const selfDeliveryCount = shippedOrders.filter(o => isSelfDeliveryOrder(o)).length;
 
   const filteredShippedOrders = shippedOrders.filter((o) => {
+    const isSelf = isSelfDeliveryOrder(o);
+    if (deliveryTypeFilter === 'courier' && isSelf) return false;
+    if (deliveryTypeFilter === 'self_delivery' && !isSelf) return false;
+
     const q = searchTerm.toLowerCase();
+    const riderName = o.selfDeliveryDetails?.deliveryPersonName || '';
+    const courier = o.courierName || '';
+    const custName = o.customerName || o.customer?.name || o.name || '';
+    const ordId = o.id || o.orderId || '';
+    const trk = o.trackingNumber || o.selfDeliveryDetails?.deliveryPartnerToken || '';
+
     return (
-      (o.id || o.orderId || '').toLowerCase().includes(q) ||
-      (o.customerName || '').toLowerCase().includes(q) ||
-      (o.trackingNumber || '').toLowerCase().includes(q) ||
-      (o.courierName || '').toLowerCase().includes(q)
+      ordId.toLowerCase().includes(q) ||
+      custName.toLowerCase().includes(q) ||
+      trk.toLowerCase().includes(q) ||
+      courier.toLowerCase().includes(q) ||
+      riderName.toLowerCase().includes(q)
     );
   });
 
@@ -213,19 +246,58 @@ export default function LogisticsTab() {
                 <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
                   <Package size={16} className="text-amber-600" /> Master Active Shipments & AWB Audit Log
                 </h3>
-                <p className="text-[11px] text-gray-500">Live courier tracking across all seller dispatches.</p>
+                <p className="text-[11px] text-gray-500">Live courier & store self-delivery tracking across all seller dispatches.</p>
               </div>
 
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search AWB or Order ID..."
+                  placeholder="Search AWB, Token, Rider or Order ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
+                  className="pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 w-full sm:w-64"
                 />
               </div>
+            </div>
+
+            {/* Filter Pills for Courier vs Store Self-Delivery */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setDeliveryTypeFilter('all')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                  deliveryTypeFilter === 'all'
+                    ? 'bg-gray-900 text-white shadow-xs'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                All Dispatches ({shippedOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeliveryTypeFilter('courier')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                  deliveryTypeFilter === 'courier'
+                    ? 'bg-sky-700 text-white shadow-xs'
+                    : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200'
+                }`}
+              >
+                <Truck size={13} />
+                <span>🚚 Courier Partner ({courierCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeliveryTypeFilter('self_delivery')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                  deliveryTypeFilter === 'self_delivery'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                }`}
+              >
+                <Bike size={13} />
+                <span>🛵 Store Self-Delivery ({selfDeliveryCount})</span>
+              </button>
             </div>
 
             <div className="border border-gray-200 rounded-2xl overflow-hidden">
@@ -234,41 +306,97 @@ export default function LogisticsTab() {
                   <tr className="bg-gray-900 text-white text-[10px] uppercase tracking-wider font-extrabold">
                     <th className="py-2.5 px-3">Order ID</th>
                     <th className="py-2.5 px-3">Customer</th>
-                    <th className="py-2.5 px-3">Courier Partner</th>
-                    <th className="py-2.5 px-3">AWB Tracking No.</th>
+                    <th className="py-2.5 px-3">Delivery Partner / Channel</th>
+                    <th className="py-2.5 px-3">AWB / Rider Token</th>
                     <th className="py-2.5 px-3 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs">
                   {filteredShippedOrders.length > 0 ? (
-                    filteredShippedOrders.map((ord) => (
-                      <tr key={ord.id || ord.orderId} className="hover:bg-gray-50">
-                        <td className="py-3 px-3 font-mono font-bold text-gray-900">#{ord.id || ord.orderId}</td>
-                        <td className="py-3 px-3 font-bold text-gray-800">{ord.customerName || ord.name || 'Customer'}</td>
-                        <td className="py-3 px-3 font-medium text-teal-800">{ord.courierName || 'Shiprocket Air'}</td>
-                        <td className="py-3 px-3 font-mono font-bold text-amber-900">
-                          {ord.trackingNumber ? (
-                            ord.trackingNumber
-                          ) : (
-                            <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
-                              Not Assigned
+                    filteredShippedOrders.map((ord) => {
+                      const isSelf = isSelfDeliveryOrder(ord);
+                      const riderName = ord.selfDeliveryDetails?.deliveryPersonName || '';
+                      const riderPhone = ord.selfDeliveryDetails?.deliveryPersonPhone || '';
+                      const tokenVal = ord.trackingNumber || ord.selfDeliveryDetails?.deliveryPartnerToken || (isSelf ? `DLV-${ord.id || ord.orderId}` : '');
+                      const statusStr = ord.status || ord.overallStatus || 'Shipped';
+                      const statusLower = String(statusStr).toLowerCase();
+
+                      return (
+                        <tr key={ord.id || ord.orderId} className="hover:bg-gray-50">
+                          <td className="py-3 px-3 font-mono font-bold text-gray-900">
+                            #{ord.id || ord.orderId}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-gray-800">{ord.customerName || ord.customer?.name || ord.name || 'Customer'}</div>
+                            {ord.customer?.phone && (
+                              <div className="text-[10px] text-gray-500 font-mono">{ord.customer.phone}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-medium">
+                            {isSelf ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[11px]">
+                                  <Bike size={12} className="text-emerald-600" />
+                                  <span>Store Self-Delivery</span>
+                                </span>
+                                {riderName && (
+                                  <div className="text-[10px] text-gray-600 mt-1">
+                                    Rider: <span className="font-semibold text-gray-800">{riderName}</span>
+                                    {riderPhone && ` (${riderPhone})`}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-bold text-[11px]">
+                                  <Truck size={12} className="text-sky-600" />
+                                  <span>{ord.courierName || 'Courier Partner'}</span>
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3">
+                            {isSelf ? (
+                              <div>
+                                <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-xs">
+                                  {tokenVal}
+                                </span>
+                                <span className="block text-[10px] text-emerald-700 font-medium mt-0.5">Direct Rider Token</span>
+                              </div>
+                            ) : ord.trackingNumber ? (
+                              <div>
+                                <span className="font-mono font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs">
+                                  {ord.trackingNumber}
+                                </span>
+                                <span className="block text-[10px] text-gray-500 mt-0.5">Courier AWB</span>
+                              </div>
+                            ) : (
+                              <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
+                                Not Assigned
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`inline-block text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+                              statusLower === 'delivered'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                                : statusLower.includes('out')
+                                ? 'bg-amber-100 text-amber-900 border-amber-200'
+                                : 'bg-purple-100 text-purple-900 border-purple-200'
+                            }`}>
+                              {statusStr}
                             </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <span className="inline-block text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
-                            In Transit
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan="5" className="py-10 text-center">
                         <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                           <Package size={22} className="text-gray-400" />
-                          <div className="font-bold text-gray-700">No live courier data available yet.</div>
-                          <div className="text-[11px]">Real shipment records will appear here once orders are dispatched.</div>
+                          <div className="font-bold text-gray-700">No matching dispatch data found.</div>
+                          <div className="text-[11px]">Orders will appear here once dispatched via Courier or Store Self-Delivery.</div>
                         </div>
                       </td>
                     </tr>
