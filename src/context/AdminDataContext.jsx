@@ -58,6 +58,9 @@ import {
   updateAdminKitApi,
   deleteAdminKitApi,
   fetchAdminCategoriesApi,
+  fetchAdminTicketsApi,
+  updateAdminTicketStatusApi,
+  replyAdminTicketApi,
   isTokenValid,
   SERVER_URL
 } from '../utils/api';
@@ -748,6 +751,30 @@ export const AdminDataProvider = ({ children }) => {
         if (data.metrics) setInventoryMetrics(data.metrics);
       } else if (Array.isArray(data)) {
         setInventory(data);
+      }
+    }).catch(() => {});
+
+    fetchAdminTicketsApi().then(res => {
+      if (res && res.success && Array.isArray(res.tickets)) {
+        setSupportTickets(res.tickets.map(t => ({
+          id: t.id || t.ticketId || t._id,
+          ticketId: t.ticketId || t.id,
+          _id: t._id,
+          customerName: t.customerName || t.storeName || 'Merchant Partner',
+          storeName: t.storeName || '',
+          email: t.email || '',
+          phone: t.phone || '',
+          category: t.category || 'General',
+          subject: t.subject || 'Support Ticket',
+          message: t.message || '',
+          lastMessage: t.lastMessage || t.message || '',
+          priority: t.priority || 'Medium',
+          status: t.status || 'Open',
+          userType: t.userType || 'seller',
+          adminReplies: t.adminReplies || [],
+          created: t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+          createdAt: t.createdAt || new Date().toISOString()
+        })));
       }
     }).catch(() => {});
 
@@ -2593,12 +2620,19 @@ export const AdminDataProvider = ({ children }) => {
 
   // ==================== SUPPORT TICKET ACTIONS ====================
   const updateTicketStatus = (ticketId, status) => {
-    setSupportTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
+    setSupportTickets(prev => prev.map(t => (t.id === ticketId || t.ticketId === ticketId || t._id === ticketId) ? { ...t, status } : t));
+    updateAdminTicketStatusApi(ticketId, status).catch(err => console.error("Ticket status sync failed:", err));
     logAudit('Ticket Updated', `Ticket ${ticketId} marked as ${status}`);
   };
 
   const replyTicket = (ticketId, replyText) => {
-    setSupportTickets(prev => prev.map(t => t.id === ticketId ? { ...t, lastMessage: `[Admin Response]: ${replyText}`, status: 'In Progress' } : t));
+    setSupportTickets(prev => prev.map(t => (t.id === ticketId || t.ticketId === ticketId || t._id === ticketId) ? {
+      ...t,
+      lastMessage: `[Admin Response]: ${replyText}`,
+      status: 'In Progress',
+      adminReplies: [...(t.adminReplies || []), { reply: replyText, repliedAt: new Date().toISOString(), repliedBy: adminUser?.name || 'Admin Support' }]
+    } : t));
+    replyAdminTicketApi(ticketId, replyText, 'In Progress').catch(err => console.error("Ticket reply sync failed:", err));
     logAudit('Support Reply', `Responded to ticket ${ticketId}`);
   };
 

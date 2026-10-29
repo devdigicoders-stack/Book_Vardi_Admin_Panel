@@ -1262,4 +1262,51 @@ export const downloadSellerFinancialStatementPdfApi = async (sellerId, storeName
   window.URL.revokeObjectURL(url);
 };
 
+// ==========================================
+// Support Tickets API
+// ==========================================
+export const fetchAdminTicketsApi = async (params = {}) => {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const url = `${API_BASE_URL}/tickets${query ? `?${query}` : ''}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch tickets');
+    return await res.json();
+  } catch (error) {
+    console.error('Error fetching admin tickets:', error);
+    return { success: false, tickets: [] };
+  }
+};
+
+export const updateAdminTicketStatusApi = async (ticketId, status) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/tickets/${encodeURIComponent(ticketId)}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status })
+    });
+    return await res.json();
+  } catch (error) {
+    console.error('Error updating ticket status:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+export const replyAdminTicketApi = async (ticketId, replyText, status = 'In Progress') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/tickets/${encodeURIComponent(ticketId)}/reply`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ replyText, status })
+    });
+    return await res.json();
+  } catch (error) {
+    console.error('Error replying to ticket:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+
 

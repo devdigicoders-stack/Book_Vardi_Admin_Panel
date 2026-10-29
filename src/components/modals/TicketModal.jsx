@@ -44,13 +44,32 @@ export default function TicketModal({ isOpen, onClose, ticket, onReply, onUpdate
 
         <div className="space-y-4">
           {/* Subject & Details */}
-          <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+          <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
             <div className="text-xs font-bold text-gray-800">{ticket.subject}</div>
+            {ticket.storeName && (
+              <div className="text-[11px] text-teal-800 font-semibold">Merchant / Store: {ticket.storeName}</div>
+            )}
             {ticket.orderId && (
               <div className="text-[11px] text-teal-700 font-semibold">Associated Order: {ticket.orderId}</div>
             )}
-            <div className="text-xs text-gray-600 pt-1 leading-relaxed">{ticket.lastMessage}</div>
+            <div className="text-xs text-gray-600 pt-1 leading-relaxed whitespace-pre-wrap">{ticket.message || ticket.lastMessage}</div>
           </div>
+
+          {/* Previous Admin Replies if any */}
+          {ticket.adminReplies && ticket.adminReplies.length > 0 && (
+            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Previous Admin Responses:</span>
+              {ticket.adminReplies.map((r, i) => (
+                <div key={i} className="p-2.5 bg-teal-50/70 border border-teal-100 rounded-lg text-xs text-teal-900">
+                  <div className="font-semibold text-[11px] text-teal-800 flex justify-between">
+                    <span>{r.repliedBy || 'Admin Support'}</span>
+                    <span className="text-gray-400 font-normal">{r.repliedAt ? new Date(r.repliedAt).toLocaleDateString('en-IN') : ''}</span>
+                  </div>
+                  <div className="mt-0.5 whitespace-pre-wrap">{r.reply}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Status Changer */}
           <div className="flex items-center justify-between gap-3 p-3 bg-teal-50/60 rounded-xl border border-teal-100">

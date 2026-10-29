@@ -32,9 +32,13 @@ export default function SupportTab() {
   const [newAnswer, setNewAnswer] = useState('');
 
   const filteredTickets = supportTickets.filter(t => {
-    const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          t.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch = !term ||
+      (t.customerName || '').toLowerCase().includes(term) ||
+      (t.storeName || '').toLowerCase().includes(term) ||
+      (t.subject || '').toLowerCase().includes(term) ||
+      (t.id || t.ticketId || '').toLowerCase().includes(term) ||
+      (t.email || '').toLowerCase().includes(term);
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
