@@ -30,6 +30,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { resolveImageUrl } from '../../utils/api';
+import useModalBackTrap from '../../hooks/useModalBackTrap';
 
 export default function SellerDetailModal({ 
   isOpen, 
