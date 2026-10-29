@@ -26,6 +26,7 @@ export default function SettingsTab() {
     companyGstin: settings?.companyGstin || '09AAACB1234F1Z9',
     customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || '+91 98765 43210',
     customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || 'support@bookvardi.in',
+    sellerSupportEmail: settings?.sellerSupportEmail || 'sellers@bookvardi.in',
     supportPhone: settings?.supportPhone || settings?.customerCarePhone || '+91 98765 43210',
     supportEmail: settings?.supportEmail || settings?.customerCareEmail || 'support@bookvardi.in',
     supportHours: settings?.supportHours || 'Mon - Sat (9:00 AM - 6:00 PM)',
@@ -45,6 +46,7 @@ export default function SettingsTab() {
       companyGstin: settings?.companyGstin || prev.companyGstin || '09AAACB1234F1Z9',
       customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || prev.customerCarePhone || '+91 98765 43210',
       customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || prev.customerCareEmail || 'support@bookvardi.in',
+      sellerSupportEmail: settings?.sellerSupportEmail || prev.sellerSupportEmail || 'sellers@bookvardi.in',
       supportPhone: settings?.supportPhone || settings?.customerCarePhone || prev.supportPhone || '+91 98765 43210',
       supportEmail: settings?.supportEmail || settings?.customerCareEmail || prev.supportEmail || 'support@bookvardi.in',
       supportHours: settings?.supportHours || prev.supportHours || 'Mon - Sat (9:00 AM - 6:00 PM)',
@@ -195,6 +197,20 @@ export default function SettingsTab() {
                 className="w-full px-3.5 py-2 text-xs font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
               />
               <span className="text-[10px] text-gray-400 mt-1 block">Direct customer support & order query inbox</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                <Mail size={13} className="text-emerald-700" /> Seller Helpdesk & Escalation Email
+              </label>
+              <input
+                type="email"
+                value={formData.sellerSupportEmail || ''}
+                onChange={e => setFormData({ ...formData, sellerSupportEmail: e.target.value })}
+                placeholder="e.g. sellers@bookvardi.in"
+                className="w-full px-3.5 py-2 text-xs font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden bg-white"
+              />
+              <span className="text-[10px] text-gray-400 mt-1 block">Official support email displayed to merchants on the Seller Panel Helpdesk</span>
             </div>
 
             <div>
