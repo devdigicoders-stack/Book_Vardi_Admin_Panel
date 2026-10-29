@@ -89,27 +89,6 @@ export default function OrderDetailModal({
   const [copiedAwb, setCopiedAwb] = useState(false);
   const [statusUpdatedToast, setStatusUpdatedToast] = useState(false);
 
-  // Handle browser back button (popstate) safely so user never gets kicked out of the portal
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const modalId = 'admin_order_modal_' + Date.now();
-    window.history.pushState({ modalOpen: true, modalId }, '');
-
-    const handlePopState = () => {
-      onClose();
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      if (window.history.state?.modalId === modalId) {
-        window.history.back();
-      }
-    };
-  }, [isOpen, onClose]);
-
   const displayOrder = currentOrder || order;
 
   // Helper to reliably resolve initial delivery mode from order data
@@ -720,13 +699,23 @@ export default function OrderDetailModal({
                     </div>
                   </div>
 
-                  <div className="text-[11px] rounded-lg p-2 bg-white/80 border border-purple-100 font-semibold text-purple-950">
+                  <div className="text-[11px] rounded-lg p-2.5 bg-white/90 border border-purple-200 font-semibold text-purple-950 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-indigo-950">
+                      <span>🔄 1-Round Doorstep Swap:</span>
+                      <span className="font-normal text-gray-700">Rider delivers replacement unit & collects original return item in a single trip.</span>
+                    </div>
                     {order.returnRequest?.priceAdjustmentType === 'extra_payment' ? (
-                      <span>⚠️ <strong>Delivery Rider Instruction:</strong> Rider must collect <strong>₹{order.returnRequest.priceDifference} in cash or UPI</strong> from the customer upon delivering replacement.</span>
+                      <div className="text-amber-900 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                        ⚠️ <strong>Delivery Rider Instruction:</strong> Rider must collect <strong>₹{order.returnRequest.priceDifference} in cash or UPI</strong> from the customer upon delivering replacement.
+                      </div>
                     ) : order.returnRequest?.priceAdjustmentType === 'partial_refund' ? (
-                      <span>✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong>. Partial refund of ₹{Math.abs(order.returnRequest.priceDifference)} is credited directly to customer's account.</span>
+                      <div className="text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                        ✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong>. Partial refund of ₹{Math.abs(order.returnRequest.priceDifference)} is credited directly to customer's account.
+                      </div>
                     ) : (
-                      <span>✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong> (Equal price exchange).</span>
+                      <div className="text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                        ✅ <strong>Delivery Rider Instruction:</strong> Rider collects <strong>₹0</strong> (Equal price exchange).
+                      </div>
                     )}
                   </div>
                 </div>
@@ -877,18 +866,32 @@ export default function OrderDetailModal({
                           </>
                         )}
 
-                        {isApproved && (
+                        {/* For Returns: Schedule pickup */}
+                        {isApproved && isReturn && (
                           <button
                             type="button"
                             disabled={Boolean(actionLoadingKey)}
                             onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
                             className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            <span>📅 Schedule Pickup</span>
+                            <span>📅 Schedule Return Pickup</span>
                           </button>
                         )}
 
-                        {isPickupScheduled && (
+                        {/* For Exchanges: Direct 1-Round Doorstep Swap (Delivers Replacement + Picks Up Return at same time) */}
+                        {(isApproved || isPickupScheduled || isProductReceived) && isExchange && !isExchangeDispatched && (
+                          <button
+                            type="button"
+                            disabled={Boolean(actionLoadingKey)}
+                            onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
+                            className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          >
+                            <span>🚚 Dispatch Replacement & Doorstep Swap</span>
+                          </button>
+                        )}
+
+                        {/* For Returns: Mark product received and restore stock */}
+                        {isPickupScheduled && isReturn && (
                           <button
                             type="button"
                             disabled={Boolean(actionLoadingKey)}
@@ -906,6 +909,7 @@ export default function OrderDetailModal({
                           </button>
                         )}
 
+                        {/* For Returns: Mark Refund Completed */}
                         {isProductReceived && isReturn && (
                           <button
                             type="button"
@@ -917,18 +921,8 @@ export default function OrderDetailModal({
                           </button>
                         )}
 
-                        {isProductReceived && isExchange && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
-                            className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>🚚 Dispatch Replacement Unit</span>
-                          </button>
-                        )}
-
-                        {isExchangeDispatched && (
+                        {/* For Exchanges: Complete Doorstep Swap (Replacement Delivered & Returned Unit Restocked in 1 round) */}
+                        {(isExchangeDispatched || (isProductReceived && isExchange)) && (
                           <button
                             type="button"
                             disabled={Boolean(actionLoadingKey)}
@@ -941,7 +935,7 @@ export default function OrderDetailModal({
                                 <span>Completing Exchange...</span>
                               </>
                             ) : (
-                              <span>✓ Complete Exchange</span>
+                              <span>✓ Complete Doorstep Swap (Replacement Delivered & Old Item Restocked)</span>
                             )}
                           </button>
                         )}
