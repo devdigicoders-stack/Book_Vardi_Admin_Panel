@@ -2528,7 +2528,8 @@ export default function OrderDetailModal({
       </div>
 
       {/* Tax Invoice Modal with latest merged order state */}
-      <TaxInvoiceModal
+      {isInvoiceOpen && (
+        <TaxInvoiceModal
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
         sellers={sellers}
@@ -2576,6 +2577,7 @@ export default function OrderDetailModal({
           };
         })()}
       />
+      )}
     </div>
   );
 }
