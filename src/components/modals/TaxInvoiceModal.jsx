@@ -588,7 +588,12 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   const isItemPriceAlreadyDiscounted = !currentItemsHaveDiscount && rawSubtotal > 0 && totalDiscounts > 0 && Math.abs((itemsSum + totalDiscounts) - rawSubtotal) < 1;
 
   const subtotal = itemsSum;
-  const grandTotal = Math.max(0, Math.round((subtotal + shippingCost - totalDiscounts) * 100) / 100);
+  const rawCodFee = Number(order.codFee ?? order.appliedCodFee ?? order.codCharges ?? order.settlement?.codChargeAmount ?? 0);
+  const isCodOrder = String(order.paymentMethod || '').toUpperCase().includes('COD') || 
+                     String(order.paymentMethod || '').toUpperCase().includes('CASH') || 
+                     rawCodFee > 0;
+  const effectiveCodFeeInTotal = (isCodOrder && rawCodFee > 0) ? rawCodFee : 0;
+  const grandTotal = Math.max(0, Math.round((subtotal + shippingCost - totalDiscounts + effectiveCodFeeInTotal) * 100) / 100);
   const discountRatio = (!currentItemsHaveDiscount && subtotal > 0 && totalDiscounts > 0)
     ? Math.min(1, totalDiscounts / subtotal)
     : 0;
@@ -704,6 +709,10 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
     }
     totalTaxableValue += shippingTaxable;
     totalTaxAmount += shippingTax;
+  }
+
+  if (effectiveCodFeeInTotal > 0) {
+    totalTaxableValue += effectiveCodFeeInTotal;
   }
 
   totalTaxableValue = Math.round(totalTaxableValue * 100) / 100;
@@ -1139,14 +1148,26 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   const isRule2OnlineCourier = !isCod && isThirdParty;
   const isRule1OnlineSelf = !isCod && !isThirdParty;
 
+  // Dynamic Exemption for specific GSTIN (e.g. 09BLMPK2840L2ZN)
+  const candidateSellerGst = String(
+    resolvedSeller?.gstNumber ||
+    resolvedSeller?.gstin ||
+    order.sellerDetails?.gstNumber ||
+    order.sellerDetails?.gstin ||
+    items[0]?.sellerDetails?.gstNumber ||
+    order.sellerGstNumber ||
+    ''
+  ).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isExemptedSeller = candidateSellerGst === '09BLMPK2840L2ZN';
+
   // Dynamic Marketplace Commission Rate (Resolved per seller schedule)
-  const marketplaceCommissionRate = getSellerCommissionRate();
+  const marketplaceCommissionRate = isExemptedSeller ? 0 : getSellerCommissionRate();
 
   const settlementGross = Math.max(0, Math.round((subtotal - totalDiscounts) * 100) / 100);
 
-  const marketplaceCommission = isSettlementReversed ? 0 : Math.round((settlementGross * (marketplaceCommissionRate / 100)) * 100) / 100;
-  const gstOnCommission = isSettlementReversed ? 0 : Math.round((marketplaceCommission * 0.18) * 100) / 100;
-  const tdsAmount = isSettlementReversed ? 0 : Math.round((settlementGross * 0.001) * 100) / 100;
+  const marketplaceCommission = (isSettlementReversed || isExemptedSeller) ? 0 : Math.round((settlementGross * (marketplaceCommissionRate / 100)) * 100) / 100;
+  const gstOnCommission = (isSettlementReversed || isExemptedSeller) ? 0 : Math.round((marketplaceCommission * 0.18) * 100) / 100;
+  const tdsAmount = (isSettlementReversed || isExemptedSeller) ? 0 : Math.round((settlementGross * 0.001) * 100) / 100;
 
   // Statutory Tax:
   // Rule 3 (COD Self): GST TCS is 0% when portal does not collect customer payment
@@ -1159,8 +1180,8 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   });
   const itemsTaxableSum = (itemBreakdowns || []).reduce((sum, it) => sum + (Number(it.taxableVal) || 0), 0);
   const settlementTaxable = itemsTaxableSum > 0 ? itemsTaxableSum : settlementGross;
-  const tcsRate = (isSettlementReversed || isRule3CodSelf || isTaxFreeOrder) ? 0 : 0.5;
-  const gstTcsAmount = (isSettlementReversed || isRule3CodSelf || isTaxFreeOrder) ? 0 : Math.round(((settlementTaxable * tcsRate) / 100) * 100) / 100;
+  const tcsRate = (isSettlementReversed || isExemptedSeller || isRule3CodSelf || isTaxFreeOrder) ? 0 : 0.5;
+  const gstTcsAmount = (isSettlementReversed || isExemptedSeller || isRule3CodSelf || isTaxFreeOrder) ? 0 : Math.round(((settlementTaxable * tcsRate) / 100) * 100) / 100;
 
   // Delivery Charges + 18% GST (Rule 2 & Rule 4: Third-Party Delivery)
   const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
@@ -1179,7 +1200,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   let gstOnDeliveryAmount = 0;
   let totalDeliveryDeduction = 0;
 
-  if (!isSettlementReversed && isThirdParty && delivBorneBy === 'seller' && !isAbove400) {
+  if (!isSettlementReversed && !isExemptedSeller && isThirdParty && delivBorneBy === 'seller' && !isAbove400) {
     const rawDeliveryFee = Number(order.deliveryCharge ?? order.shippingAmount ?? order.shippingCost ?? order.shippingFee ?? 49);
     // Delivery charges are GST INCLUSIVE (no extra GST added on top)
     totalDeliveryDeduction = Math.round(rawDeliveryFee * 100) / 100;
@@ -1187,15 +1208,31 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
     gstOnDeliveryAmount = Math.round((totalDeliveryDeduction - deliveryChargeAmount) * 100) / 100;
   }
 
-  const statutoryDeductions = isSettlementReversed ? 0 : Math.round((marketplaceCommission + gstOnCommission + tdsAmount + gstTcsAmount) * 100) / 100;
-  const totalDeductions = isSettlementReversed ? 0 : Math.round((statutoryDeductions + totalDeliveryDeduction) * 100) / 100;
+  // COD Charges & Allocation Policy
+  const isCodExempted = Boolean(isExemptedSeller);
+  let codChargeRetainedBy = isCod ? (isSelf ? 'seller' : 'portal') : 'none';
+  let codChargeDeduction = 0;
+  if (isCod && rawCodFee > 0) {
+    if (isSelf) {
+      codChargeRetainedBy = 'seller';
+      codChargeDeduction = 0; // Seller retains full COD cash
+    } else {
+      codChargeRetainedBy = 'portal';
+      codChargeDeduction = isCodExempted ? 0 : rawCodFee; // 09BLMPK2840L2ZN is exempt
+    }
+  }
+
+  const statutoryDeductions = (isSettlementReversed || isExemptedSeller) ? 0 : Math.round((marketplaceCommission + gstOnCommission + tdsAmount + gstTcsAmount) * 100) / 100;
+  const totalDeductions = (isSettlementReversed || isExemptedSeller) ? 0 : Math.round((statutoryDeductions + totalDeliveryDeduction + codChargeDeduction) * 100) / 100;
 
   // Final Settlement:
   const sellerSettlement = isSettlementReversed
     ? 0
-    : (isRule3CodSelf
-      ? -totalDeductions
-      : Math.max(0, Math.round((settlementGross - totalDeductions) * 100) / 100));
+    : (isExemptedSeller
+      ? settlementGross
+      : (isRule3CodSelf
+        ? -totalDeductions
+        : Math.max(0, Math.round((settlementGross - totalDeductions) * 100) / 100)));
 
   const sellerPayout = sellerSettlement;
 
@@ -1749,6 +1786,76 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                     </td>
                   </tr>
                 )}
+
+                {/* Dedicated Cash on Delivery (COD) Charges Line Item */}
+                {isCod && (
+                  rawCodFee > 0 ? (
+                    <tr className="hover:bg-amber-50/40 bg-amber-50/20">
+                      <td className="py-2.5 px-3">
+                        <p className="font-bold text-gray-900 flex items-center gap-1.5 flex-wrap">
+                          <span>💵</span> Cash on Delivery (COD) Charges
+                          {isRule3CodSelf ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                              Retained by Seller (₹0 Portal Deduction)
+                            </span>
+                          ) : isExemptedSeller ? (
+                            <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-300">
+                              09BLMPK2840L2ZN Exempt (Not Deducted)
+                            </span>
+                          ) : (
+                            <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-300">
+                              Retained by Portal
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-gray-500">Doorstep Cash Handling &amp; Collection (SAC 998544)</p>
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-bold text-gray-400">—</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-gray-700">1</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-700">₹{rawCodFee.toFixed(2)}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-600">₹{rawCodFee.toFixed(2)}</td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <span className="text-gray-500 font-semibold text-[10px] block">0% GST</span>
+                        <span className="text-[9px] text-gray-400 block font-mono">₹0.00 (Exempt)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-gray-900 font-mono whitespace-nowrap pr-3.5">
+                        ₹{rawCodFee.toFixed(2)}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="hover:bg-amber-50/30 bg-amber-50/15">
+                      <td className="py-2.5 px-3">
+                        <p className="font-bold text-amber-950 flex items-center gap-1.5 flex-wrap">
+                          <span>💵</span> Cash on Delivery (COD) Charges
+                          <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                            FREE COD (₹0 Fee)
+                          </span>
+                          {isRule3CodSelf ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                              Self Delivery (Cash with Seller)
+                            </span>
+                          ) : isExemptedSeller ? (
+                            <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-300">
+                              09BLMPK2840L2ZN Exempted
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-[10px] text-amber-700">Doorstep Cash Collection Promotion (Admin Absorbed / Free COD Promotion)</p>
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-bold text-gray-400">—</td>
+                      <td className="py-2.5 px-3 text-center font-bold text-gray-400">NA</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-400 line-through">₹40.00</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-600">₹0.00</td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <span className="text-amber-800 font-semibold text-[10px] block">0% GST</span>
+                        <span className="text-[9px] text-gray-400 block font-mono">₹0.00 (Exempt)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-emerald-700 font-mono whitespace-nowrap pr-3.5">
+                        FREE (₹0.00)
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
               <tfoot className="bg-gray-100/95 font-bold border-t-2 border-gray-300">
                 <tr>
@@ -1873,6 +1980,30 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                     <span className="font-mono text-teal-700 font-bold">₹0.00 (ग्राहक द्वारा वहन / Paid by Customer)</span>
                   ) : (
                     <span className="font-mono text-teal-700 font-bold">FREE (Admin Absorbs ≥₹{orderThreshold})</span>
+                  )}
+                </div>
+              )}
+
+              {/* COD Charges Allocation & Policy */}
+              {isCod && (
+                <div className="flex justify-between font-medium">
+                  <span className="text-amber-950 font-bold">COD Handling (Policy):</span>
+                  {isSettlementReversed ? (
+                    <span className="font-mono text-rose-700 font-bold">₹0.00 (Reversed)</span>
+                  ) : isRule3CodSelf ? (
+                    <span className="font-mono text-emerald-700 font-bold">
+                      {rawCodFee > 0 ? `+₹${rawCodFee.toFixed(2)} (Retained by Seller)` : '₹0.00 (Self Delivery / Seller Handled)'}
+                    </span>
+                  ) : isExemptedSeller ? (
+                    <span className="font-mono text-teal-700 font-bold">
+                      ₹0.00 (09BLMPK2840L2ZN Chhoot / Exempted)
+                    </span>
+                  ) : isRule4CodCourier ? (
+                    <span className="font-mono text-purple-700 font-bold">
+                      {rawCodFee > 0 ? `-₹${rawCodFee.toFixed(2)} (Retained by Portal)` : '₹0.00 (Admin Absorbed)'}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-gray-500">₹0.00</span>
                   )}
                 </div>
               )}
