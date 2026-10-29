@@ -117,7 +117,9 @@ export default function SellerDetailModal({
   const ownerName = seller.ownerDetails?.ownerFullName || app.ownerFullName || seller.ownerName || seller.name || 'N/A';
   const ownerDesignation = seller.ownerDetails?.ownerDesignation || app.ownerDesignation || 'Proprietor / Owner';
   const ownerPan = seller.documents?.panNumber || seller.ownerDetails?.ownerPan || app.ownerPan || seller.pan || seller.ownerPan || seller.businessPan || 'N/A';
-  const ownerAadhaarLast4 = seller.documents?.aadhaarNumber ? String(seller.documents.aadhaarNumber).slice(-4) : (seller.ownerDetails?.ownerAadhaarLast4 || app.ownerAadhaarLast4 || (seller.aadhaar ? String(seller.aadhaar).slice(-4) : 'N/A'));
+  const rawAadhaar = seller.documents?.aadhaarNumber || seller.ownerDetails?.ownerAadhaarLast4 || app.ownerAadhaarLast4 || seller.aadhaar || '';
+  const aadhaarDigits = String(rawAadhaar).replace(/\D/g, '');
+  const ownerAadhaarLast4 = aadhaarDigits.length >= 4 ? aadhaarDigits.slice(-4) : (aadhaarDigits || 'N/A');
 
   const businessPan = seller.documents?.panNumber || seller.businessPan || app.businessPan || seller.pan || ownerPan;
   const gstin = seller.gstNumber || seller.gstin || app.gstin || (seller.hasGstExemption || app.hasGstExemption ? 'GST Exempted' : 'N/A');
