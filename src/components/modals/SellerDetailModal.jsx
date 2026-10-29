@@ -47,17 +47,13 @@ export default function SellerDetailModal({
 }) {
   useModalBackTrap(isOpen, onClose);
 
-  if (!isOpen || !seller) return null;
-
-  const sellerId = seller.id || seller._id;
-
   // Active review tab
   const [activeTab, setActiveTab] = useState('dossier'); // 'dossier' | 'documents' | 'storefront' | 'financials'
 
   // Commission & rejection state
-  const [commission, setCommission] = useState(() => seller.commissionRate ?? seller.commissionPercentage ?? 5);
+  const [commission, setCommission] = useState(() => seller?.commissionRate ?? seller?.commissionPercentage ?? 5);
   const [commissionSaved, setCommissionSaved] = useState(false);
-  const [rejectReason, setRejectReason] = useState(seller.rejectionReason || '');
+  const [rejectReason, setRejectReason] = useState(seller?.rejectionReason || '');
   const [showRejectBox, setShowRejectBox] = useState(false);
 
   useEffect(() => {
@@ -86,6 +82,10 @@ export default function SellerDetailModal({
     11: true,
     12: true
   });
+
+  if (!isOpen || !seller) return null;
+
+  const sellerId = seller.id || seller._id;
 
   const toggleSection = (id) => {
     setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));

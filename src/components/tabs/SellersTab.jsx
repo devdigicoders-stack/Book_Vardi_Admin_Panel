@@ -321,7 +321,8 @@ export default function SellersTab() {
       )}
 
       {/* Seller Detail Modal */}
-      <SellerDetailModal
+      {modalOpen && selectedSeller && (
+        <SellerDetailModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         seller={selectedSeller}
@@ -333,7 +334,8 @@ export default function SellersTab() {
         onReleasePayout={releaseSellerPayout}
         onOpenFinance={(seller) => setFinanceSeller(seller)}
         readOnly={!canEdit}
-      />
+        />
+      )}
 
       {/* Seller Finance & Settlement Modal */}
       {financeSeller && (
