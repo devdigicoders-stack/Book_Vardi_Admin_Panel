@@ -331,7 +331,7 @@ export default function SettingsTab() {
                 <input
                   type="number"
                   min="1"
-                  max="500"
+                  max="5000"
                   value={formData.schoolRadiusKm}
                   onChange={e => setFormData({ ...formData, schoolRadiusKm: Number(e.target.value) })}
                   className="w-24 px-3.5 py-2 text-sm font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"

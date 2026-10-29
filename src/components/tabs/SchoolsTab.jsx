@@ -247,7 +247,7 @@ export default function SchoolsTab() {
             <input
               type="range"
               min="5"
-              max="200"
+              max={Math.max(1000, Number(tempRadius) || 200)}
               step="5"
               value={tempRadius}
               onChange={(e) => setTempRadius(Number(e.target.value))}
@@ -255,7 +255,7 @@ export default function SchoolsTab() {
               onTouchEnd={() => handleApplyRadius(tempRadius)}
               className="w-full accent-brand-yellow h-2 bg-teal-800 rounded-lg cursor-pointer"
             />
-            <span className="text-xs font-semibold text-teal-300">200 km</span>
+            <span className="text-xs font-semibold text-teal-300">{Math.max(200, Number(tempRadius) || 200)} km</span>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -263,7 +263,7 @@ export default function SchoolsTab() {
               <input
                 type="number"
                 min="1"
-                max="500"
+                max="5000"
                 value={tempRadius}
                 onChange={(e) => setTempRadius(Number(e.target.value))}
                 className="w-16 bg-transparent text-white font-mono font-bold text-center text-sm outline-hidden"

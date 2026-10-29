@@ -2006,7 +2006,7 @@ export const AdminDataProvider = ({ children }) => {
 
   // ==================== SCHOOL ACTIONS ====================
   const updateSchoolRadius = (km) => {
-    const validKm = Math.max(1, Math.min(500, Number(km) || 25));
+    const validKm = Math.max(1, Math.min(5000, Number(km) || 25));
     setSchoolRadiusKm(validKm);
     setSettings(prev => {
       const next = { ...prev, schoolRadiusKm: validKm };
