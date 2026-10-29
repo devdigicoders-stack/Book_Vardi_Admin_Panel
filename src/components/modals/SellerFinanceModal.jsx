@@ -71,7 +71,7 @@ export default function SellerFinanceModal({
     adminCtx?.settings?.minOrderFreeShipping ??
     adminCtx?.settings?.freeShippingThreshold ??
     adminCtx?.settings?.freeDeliveryThreshold ??
-    401
+    1000
   );
 
   const sellerId = String(seller._id || seller.id || seller.sellerId || '').trim();
@@ -1207,8 +1207,8 @@ export default function SellerFinanceModal({
                               <div className="text-[9px] text-gray-400">₹{o.deliveryChargeAmount || 0} + ₹{o.gstOnDeliveryAmount || 0} GST</div>
                             </div>
                           ) : o.isThirdParty && o.isAbove400 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title={`Order >= ₹${o.freeDeliveryThreshold || 401}: Free delivery borne by Admin`}>
-                              ₹0 (Admin ≥₹{o.freeDeliveryThreshold || 401})
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200" title={`Order >= ₹${(o.freeDeliveryThreshold && o.freeDeliveryThreshold !== 401 ? o.freeDeliveryThreshold : platformFreeDeliveryThreshold) || 1000}: Free delivery borne by Admin`}>
+                              ₹0 (Admin ≥₹{(o.freeDeliveryThreshold && o.freeDeliveryThreshold !== 401 ? o.freeDeliveryThreshold : platformFreeDeliveryThreshold) || 1000})
                             </span>
                           ) : o.isThirdParty && o.deliveryChargeBorneBy === 'customer' ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-800 border border-sky-200" title="Delivery fee paid by customer">

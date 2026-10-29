@@ -1937,7 +1937,16 @@ export default function OrderDetailModal({
                 const tcsAmt = (ruleNum === 3 || isTaxFreeOrder || isExemptedSeller) ? 0 : Math.round(((taxableForTcs * tcsRate) / 100) * 100) / 100;
 
                 // 5. Delivery Charges (Rule 2 & Rule 4: Client Norms)
-                const orderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? 401);
+                const dynamicGlobalThreshold = (() => {
+                  try {
+                    const saved = JSON.parse(localStorage.getItem('admin_settings') || localStorage.getItem('bookvardi_platform_settings') || localStorage.getItem('platform_settings') || '{}');
+                    return Number(saved?.freeShippingThreshold ?? saved?.minOrderFreeShipping ?? saved?.freeDeliveryThreshold) || 1000;
+                  } catch (e) { return 1000; }
+                })();
+                const rawOrderThreshold = Number(order.freeDeliveryThreshold ?? order.minOrderFreeShipping ?? order.freeShippingThreshold);
+                const orderThreshold = (!isNaN(rawOrderThreshold) && rawOrderThreshold > 0 && rawOrderThreshold !== 401)
+                  ? rawOrderThreshold
+                  : dynamicGlobalThreshold;
                 const isAboveThreshold = (itemsGrossSale >= orderThreshold || Number(order.total || order.totalAmount || 0) >= orderThreshold || Number(order.subtotal || 0) >= orderThreshold);
                 let delivBorneBy = order.deliveryChargeBorneBy;
                 if (!delivBorneBy || customerShippingPaid > 0) {
