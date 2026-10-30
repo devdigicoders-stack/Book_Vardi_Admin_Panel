@@ -1,0 +1,85 @@
+/* =========================================================
+   BOOK VARDI DESIGN SYSTEM - THEME TOKENS (CSS VARIABLES)
+   Tailwind CSS v4 & CSS Variables Integrated
+   Strict Brand Palette
+   ========================================================= */
+
+@theme {
+  --color-brand-teal: #233835;
+  --color-brand-teal-light: #2e4945;
+  --color-brand-teal-dark: #172725;
+  --color-brand-teal-subtle: #e9f0ef;
+
+  --color-brand-yellow: #f5ce42;
+  --color-brand-yellow-hover: #e5bd2e;
+  --color-brand-yellow-light: #fdf3d0;
+  --color-brand-yellow-subtle: #fef9eb;
+
+  --color-brand-pink: #c45a76;
+  --color-brand-pink-hover: #b24d67;
+  --color-brand-pink-light: #f5dce3;
+  --color-brand-pink-subtle: #faecf0;
+
+  --color-brand-ochre: #b99452;
+  --color-brand-ochre-hover: #a58242;
+  --color-brand-ochre-light: #f3e9d8;
+  --color-brand-ochre-subtle: #f8f3ea;
+
+  --color-brand-blue: #5b86e5;
+  --color-brand-blue-hover: #4872ce;
+  --color-brand-blue-light: #dbe4f9;
+  --color-brand-blue-subtle: #eef3fc;
+
+  --color-brand-green: #38a169;
+  --color-brand-green-subtle: #e8f7ee;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+}
+
+:root {
+  --color-brand-teal: #233835;
+  --color-brand-teal-light: #2e4945;
+  --color-brand-teal-dark: #172725;
+  --color-brand-teal-subtle: #e9f0ef;
+
+  --color-brand-yellow: #f5ce42;
+  --color-brand-yellow-hover: #e5bd2e;
+  --color-brand-yellow-light: #fdf3d0;
+  --color-brand-yellow-subtle: #fef9eb;
+
+  --color-brand-pink: #c45a76;
+  --color-brand-pink-hover: #b24d67;
+  --color-brand-pink-light: #f5dce3;
+  --color-brand-pink-subtle: #faecf0;
+
+  --color-brand-ochre: #b99452;
+  --color-brand-ochre-hover: #a58242;
+  --color-brand-ochre-light: #f3e9d8;
+  --color-brand-ochre-subtle: #f8f3ea;
+
+  --color-brand-blue: #5b86e5;
+  --color-brand-blue-hover: #4872ce;
+  --color-brand-blue-light: #dbe4f9;
+  --color-brand-blue-subtle: #eef3fc;
+
+  --color-brand-green: #38a169;
+  --color-brand-green-subtle: #e8f7ee;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

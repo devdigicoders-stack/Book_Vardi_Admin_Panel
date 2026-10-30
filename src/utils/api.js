@@ -1,0 +1,1237 @@
+export const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = `${SERVER_URL}/admin`;
+
+export function resolveImageUrl(url) {
+  if (!url) return '';
+  if (typeof url === 'object') {
+    url = url.url || url.dataUrl || url.src || '';
+  }
+  if (typeof url !== 'string' || !url.trim()) return '';
+  const cleanUrl = url.trim();
+  if (/^https?:\/\//i.test(cleanUrl) || cleanUrl.startsWith('data:') || cleanUrl.startsWith('blob:')) return cleanUrl;
+  const backendHost = SERVER_URL.replace(/\/api\/?$/, '');
+  const cleanPath = cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`;
+  return `${backendHost}${cleanPath}`;
+}
+
+export function parseSizeVariants(product) {
+  if (!product) return [];
+  let raw = product.sizeVariants ?? product.variants ?? product.size_variants ?? product.sizes;
+  let parsed = [];
+
+  if (raw) {
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        if (raw.includes(',')) {
+          raw = raw.split(',').map(s => s.trim()).filter(Boolean);
+        } else if (raw.trim()) {
+          raw = [raw.trim()];
+        } else {
+          raw = [];
+        }
+      }
+    }
+
+    if (Array.isArray(raw)) {
+      parsed = raw.map((v, idx) => {
+        if (typeof v === 'string') {
+          return {
+            id: `var_${idx}_${v}`,
+            size: v,
+            measureScale: 'size',
+            measureValue: v,
+            price: Number(product?.price || 0),
+            mrp: Number(product?.mrp || product?.originalPrice || 0),
+            stock: Number(product?.stockQuantity ?? product?.stock ?? 0),
+            stockQuantity: Number(product?.stockQuantity ?? product?.stock ?? 0),
+            sku: product?.sku ? `${product.sku}-${v}` : `SKU-${idx + 1}`,
+            image: product?.image || (Array.isArray(product?.images) ? product.images[0] : '') || '',
+            images: Array.isArray(product?.images) && product.images.length > 0 ? product.images : (product?.image ? [product.image] : [])
+          };
+        }
+
+        if (typeof v === 'object' && v !== null) {
+          const fallbackProductImg = product?.image || (Array.isArray(product?.images) && product.images[0]) || '';
+          const fallbackUrl = fallbackProductImg ? resolveImageUrl(fallbackProductImg) : '';
+          const isPlaceholder = (img) => !img || (typeof img === 'string' && img.includes('unsplash.com'));
+
+          let rawImages = Array.isArray(v.images) && v.images.length > 0 ? v.images : (v.image ? [v.image] : []);
+          if (typeof rawImages === 'string') {
+            try { rawImages = JSON.parse(rawImages); } catch { rawImages = [rawImages]; }
+          }
+          if (!Array.isArray(rawImages)) rawImages = [rawImages];
+
+          // Deduplicate and filter placeholders
+          const seen = new Set();
+          let cleanedImages = [];
+          rawImages.forEach(img => {
+            if (!img || isPlaceholder(img)) return;
+            const resolved = resolveImageUrl(img);
+            if (resolved && !seen.has(resolved)) {
+              seen.add(resolved);
+              cleanedImages.push(img);
+            }
+          });
+
+          // If there are multiple images and one is the base product fallback, keep only custom variant images
+          if (cleanedImages.length > 1 && fallbackUrl) {
+            const customOnly = cleanedImages.filter(img => resolveImageUrl(img) !== fallbackUrl);
+            if (customOnly.length > 0) {
+              cleanedImages = customOnly;
+            }
+          }
+
+          // If no variant image, fallback to base product image
+          if (cleanedImages.length === 0 && fallbackProductImg && !isPlaceholder(fallbackProductImg)) {
+            cleanedImages = [fallbackProductImg];
+          }
+
+          const rawImage = cleanedImages[0] || (v.image && !isPlaceholder(v.image) ? v.image : fallbackProductImg);
+
+          const sizeVal = String(v.size || v.measureValue || v.name || v.label || v.title || `Variant #${idx + 1}`);
+          const priceVal = (v.price !== undefined && v.price !== null && !isNaN(Number(v.price)) && Number(v.price) >= 0)
+            ? Number(v.price)
+            : Number(product?.price || 0);
+
+          const rawMrp = v.mrp ?? v.originalPrice ?? v.regularPrice ?? v.marketPrice;
+          const mrpVal = (rawMrp !== undefined && rawMrp !== null && !isNaN(Number(rawMrp)) && Number(rawMrp) >= 0)
+            ? Number(rawMrp)
+            : (priceVal > 0 ? Math.round(priceVal * 1.25) : Number(product?.mrp || product?.originalPrice || 0));
+
+          const stockVal = v.stock !== undefined ? Number(v.stock) : (v.stockQuantity !== undefined ? Number(v.stockQuantity) : Number(product?.stockQuantity ?? product?.stock ?? 0));
+
+          return {
+            ...v,
+            id: v.id || v._id || `var_${idx}_${sizeVal}`,
+            size: sizeVal,
+            measureValue: sizeVal,
+            measureScale: v.measureScale || v.scale || v.scaleUnit || 'size',
+            price: priceVal,
+            mrp: mrpVal,
+            originalPrice: mrpVal,
+            stock: stockVal,
+            stockQuantity: stockVal,
+            sku: v.sku || (product?.sku ? `${product.sku}-${sizeVal}` : `SKU-VAR-${idx + 1}`),
+            image: rawImage,
+            images: cleanedImages
+          };
+        }
+
+        return null;
+      }).filter(Boolean);
+    }
+  }
+
+  // Filter out any artificial / legacy "Base Product" options if other variants exist
+  if (parsed.length > 1) {
+    const withoutBase = parsed.filter(v => 
+      !v.isBase && 
+      String(v.size || '').trim().toLowerCase() !== 'base product' && 
+      String(v.measureValue || '').trim().toLowerCase() !== 'base product' && 
+      !String(v.id || '').startsWith('base_option_')
+    );
+    if (withoutBase.length > 0) {
+      parsed = withoutBase;
+    }
+  } else if (parsed.length === 1) {
+    const single = parsed[0];
+    if (single.isBase || 
+        String(single.size || '').trim().toLowerCase() === 'base product' || 
+        String(single.measureValue || '').trim().toLowerCase() === 'base product' || 
+        String(single.id || '').startsWith('base_option_')) {
+      parsed = [];
+    }
+  }
+
+  // Return parsed variants cleanly without prepending an artificial "Base Product" option
+  return parsed;
+}
+
+// Validate JWT token format and expiration
+export const isTokenValid = (token) => {
+  if (!token || typeof token !== 'string') return false;
+  const clean = token.trim();
+  if (!clean || clean === 'undefined' || clean === 'null') return false;
+
+  // Known developer / testing tokens
+  if (clean === 'mock-jwt-token-123' || clean === 'dev-admin-token' || clean === 'super-admin-token' || clean === 'test-token') {
+    return true;
+  }
+
+  // Parse JWT parts (header.payload.signature)
+  const parts = clean.split('.');
+  if (parts.length !== 3) return false;
+
+  try {
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+
+    // Check expiration timestamp (exp in seconds)
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Check API response for authentication failure (401/403) and purge stale credentials
+export const checkAuthResponse = (res) => {
+  if (res && (res.status === 401 || res.status === 403)) {
+    try {
+      localStorage.removeItem('bv_admin_jwt_token');
+      localStorage.removeItem('admin_is_authenticated');
+      window.dispatchEvent(new CustomEvent('bv:admin:session-expired', {
+        detail: { status: res.status }
+      }));
+    } catch {}
+  }
+};
+
+// Helper to get auth headers with token injection
+export const getAuthHeaders = () => {
+  const token = localStorage.getItem('bv_admin_jwt_token');
+  if (token && isTokenValid(token)) {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  }
+
+  // If token is in storage but expired/invalid, clean it up immediately
+  if (token) {
+    try {
+      localStorage.removeItem('bv_admin_jwt_token');
+      localStorage.removeItem('admin_is_authenticated');
+    } catch {}
+  }
+
+  return {
+    'Content-Type': 'application/json'
+  };
+};
+
+// ==========================================
+// 1. Admin Auth API
+// ==========================================
+export const loginAdminApi = async (emailOrPhone, password) => {
+  try {
+    const payload = typeof emailOrPhone === 'object' 
+      ? emailOrPhone 
+      : { email: emailOrPhone, password };
+
+    const res = await fetch(`${API_BASE_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.token) {
+      localStorage.setItem('bv_admin_jwt_token', data.token);
+    }
+    return data;
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 2. Dashboard & Analytics APIs
+// ==========================================
+export const fetchAdminDashboardStatsApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/dashboard/stats`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const fetchAdminChartDataApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/chart-data`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const fetchAdminRecentActivitiesApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/recent-activities`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+// ==========================================
+// 3. Products Catalog & Approvals APIs (RESTful)
+// ==========================================
+export const fetchAdminProductsApi = async (params = {}) => {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const url = `${API_BASE_URL}/products${query ? `?${query}` : ''}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const errData = await res.json().catch(() => null);
+    console.warn('fetchAdminProductsApi error response:', errData);
+    return null;
+  } catch (error) {
+    console.error('fetchAdminProductsApi request failed:', error);
+    return null;
+  }
+};
+
+export const fetchAdminProductByIdApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${id}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    console.error(`fetchAdminProductByIdApi failed for ${id}:`, error);
+    return null;
+  }
+};
+
+export const updateProductApprovalApi = async (id, status, remark = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${id}/approval`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status, remark })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const createAdminProductApi = async (productData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(productData)
+    });
+    checkAuthResponse(res);
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminProductApi = async (id, productData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(productData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminProductApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 3.5. Kit & Bundle Management APIs
+// ==========================================
+export const fetchAdminKitsApi = async (params = {}) => {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE_URL}/kits${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) return { success: false, kits: [] };
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    console.error('fetchAdminKitsApi error:', error);
+    return { success: false, kits: [] };
+  }
+};
+
+export const updateKitApprovalStatusApi = async (id, approvalStatus, comment = '', rejectionReason = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}/approval`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ approvalStatus, approvalComment: comment, rejectionReason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const createAdminKitApi = async (kitData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(kitData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminKitApi = async (id, kitData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(kitData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminKitApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kits/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 4. Inventory & Stock Management APIs (RESTful)
+// ==========================================
+export const fetchAdminInventoryApi = async (params = {}) => {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const url = `${API_BASE_URL}/inventory${query ? `?${query}` : ''}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const errData = await res.json().catch(() => null);
+    console.warn('fetchAdminInventoryApi error response:', errData);
+    return null;
+  } catch (error) {
+    console.warn('fetchAdminInventoryApi (offline/reconnecting):', error?.message || error);
+    return null;
+  }
+};
+
+export const updateAdminInventoryStockApi = async (id, payload) => {
+  try {
+    const bodyData = typeof payload === 'number' ? { stock: payload } : (payload || {});
+    const res = await fetch(`${API_BASE_URL}/inventory/${id}/stock`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(bodyData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const quickRestockAdminInventoryApi = async (productId, quantity = 50, variantSize = null) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/inventory/quick-restock`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ productId, quantity, variantSize })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 4. Sellers Verification & Commission APIs
+// ==========================================
+export const fetchAdminSellersApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    const data = await res.json();
+    return data.sellers || data;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const reconcileAllSellersApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/reconcile-all`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const approveSellerApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/approve`, {
+      method: 'PUT',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const rejectSellerApi = async (id, reason = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/reject`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ reason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const setPendingSellerApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/pending`, {
+      method: 'PUT',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateSellerCommissionApi = async (id, rate) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/commission`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ commissionRate: rate })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const toggleSellerStatusApi = async (id, status, reason = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sellers/${id}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status, reason, rejectionReason: reason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 5. Orders & Fulfillment APIs
+// ==========================================
+export const fetchAdminOrdersApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/admin/all`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const updateOrderStatusApi = async (id, status, extraPayload = {}) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${id}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status, ...extraPayload })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const resendRiderWhatsAppApi = async (orderId) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${orderId}/resend-rider-whatsapp`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const cancelOrderAdminApi = async (id, reason = '') => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${id}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status: 'Cancelled', cancellationReason: reason })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateReturnExchangeStatusApi = async (orderId, payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/orders/${orderId}/return-exchange/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data?.message || `Request failed with status ${res.status}`;
+      throw new Error(errMsg);
+    }
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+
+// ==========================================
+// 6. Schools & Geo Discovery APIs
+// ==========================================
+export const fetchAdminSchoolsApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools`);
+    if (!res.ok) throw new Error('API Error');
+    const data = await res.json();
+    return data.schools || data;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const fetchSchoolsApi = fetchAdminSchoolsApi;
+
+export const createSchoolApi = async (schoolData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(schoolData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateSchoolApi = async (id, schoolData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(schoolData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteSchoolApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateSchoolRadiusApi = async (radiusKm) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ schoolRadiusKm: radiusKm })
+    });
+    const data = await res.json();
+    localStorage.setItem('bv_school_radius_km', JSON.stringify(radiusKm));
+    return data;
+  } catch (error) {
+    localStorage.setItem('bv_school_radius_km', JSON.stringify(radiusKm));
+    return { success: true, radiusKm };
+  }
+};
+
+// ==========================================
+// 7. Users Accounts APIs
+// ==========================================
+export const fetchAdminUsersApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createUserApi = async (userData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(userData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateUserApi = async (id, updates) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteUserApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 8. Financial Payouts APIs
+// ==========================================
+export const fetchAdminPayoutsApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/payouts`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const processPayoutApi = async (id, status, note = '') => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/payouts/${id}/process`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ action: status === 'approve' || status === 'processed' ? 'approve' : 'reject', transactionReference: note, rejectionReason: note })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 9. Promotions & Marketing APIs
+// ==========================================
+export const fetchAdminPromotionsApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/coupons`);
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createPromotionApi = async (promo) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/coupons`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(promo)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deletePromotionApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/coupons/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// Top Announcement Bar APIs
+export const fetchAnnouncementsApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements`);
+    if (!res.ok) throw new Error('API Error');
+    const data = await res.json();
+    return data.announcements || data;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createAnnouncementApi = async (data) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAnnouncementApi = async (id, data) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const toggleAnnouncementStatusApi = async (id, isActive) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ isActive })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAnnouncementApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const broadcastPromotionalSmsApi = async (payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/announcements/broadcast-sms`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+
+// ==========================================
+// 10. Customer Reviews Moderation APIs
+// ==========================================
+export const fetchAdminReviewsApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/reviews`);
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const moderateReviewApi = async (id, status) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/reviews/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminReviewApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/reviews/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 11. Platform Settings APIs
+// ==========================================
+export const fetchAdminSettingsApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('API Error');
+    return await res.json();
+  } catch (error) {
+    const saved = localStorage.getItem('admin_settings');
+    return saved ? JSON.parse(saved) : null;
+  }
+};
+
+export const updateSettingsApi = async (settings) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(settings)
+    });
+    const data = await res.json();
+    localStorage.setItem('admin_settings', JSON.stringify(settings));
+    return data;
+  } catch (error) {
+    localStorage.setItem('admin_settings', JSON.stringify(settings));
+    return { success: true, settings };
+  }
+};
+
+// ==========================================
+// 12. Sub-Admin RBAC Team APIs
+// ==========================================
+export const fetchSubadminsApi = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/subadmins`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch subadmins');
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+};
+
+export const createSubadminApi = async (subadminData) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/subadmins`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(subadminData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateSubadminApi = async (id, updates) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/subadmins/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteSubadminApi = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/subadmins/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 13. School Bulk Orders & Distribution APIs
+// ==========================================
+export const fetchAdminSchoolBulkOrdersApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/list`, {
+      headers: getAuthHeaders()
+    });
+    checkAuthResponse(res);
+    if (!res.ok) {
+      console.warn('fetchAdminSchoolBulkOrdersApi warning: server responded with status', res.status);
+      return [];
+    }
+    const data = await res.json();
+    return data.orders || (Array.isArray(data) ? data : []);
+  } catch (error) {
+    console.warn('fetchAdminSchoolBulkOrdersApi warning:', error.message);
+    return [];
+  }
+};
+
+export const updateItemSellerPricesApi = async (id, itemPrices, extra = {}) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/item-prices`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({ itemPrices, callerRole: 'admin', ...extra })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const distributeSchoolBulkOrderApi = async (id, payload) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/distribute`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateBulkOrderPrepaymentPercentageApi = async (id, prepaymentPercentage) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/prepayment-percentage`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ prepaymentPercentage })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const approveSellerQuotationApi = async (id, quoteId, updateData = {}) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/approve-quote`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        quoteId,
+        updatedRequirements: updateData?.updatedRequirements,
+        totalQuantity: updateData?.totalQuantity,
+        quoteAmount: updateData?.quoteAmount
+      })
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const confirmBuyerAcceptanceApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/confirm-buyer-acceptance`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const confirmSellerAcceptanceApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/confirm-seller-acceptance`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminSchoolOrderStatusApi = async (id, payload = {}) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/schools/bulk-orders/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// ==========================================
+// 14. Categories CRUD APIs
+// ==========================================
+export const fetchAdminCategoriesApi = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/tree`);
+    if (!res.ok) throw new Error('Failed to fetch categories');
+    return await res.json();
+  } catch (error) {
+    console.warn('fetchAdminCategoriesApi (offline/reconnecting):', error?.message || error);
+    return null;
+  }
+};
+
+export const createAdminCategoryApi = async (categoryData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const updateAdminCategoryApi = async (id, categoryData) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(categoryData)
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const deleteAdminCategoryApi = async (id) => {
+  try {
+    const res = await fetch(`${SERVER_URL}/categories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await res.json();
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export const downloadSellerFinancialStatementPdfApi = async (sellerId, storeName = 'Seller') => {
+  const token = localStorage.getItem('bv_admin_jwt_token');
+  const res = await fetch(`${API_BASE_URL}/sellers/${sellerId}/finance-statement/pdf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to download statement (HTTP ${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cleanName = storeName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  a.download = `Financial_Statement_${cleanName}_${Date.now()}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+
