@@ -1356,6 +1356,10 @@ export default function OrderDetailModal({
                   const isCancelled = String(order.status).toLowerCase() === 'cancelled' || Boolean(order.cancelledAt);
                   const canShowCreditNote = isOrderExchange ? isReturnAccepted : (isReturnAccepted || isCancelled);
                   const isPendingApproval = !isCancelled && (retType === 'return' || retType === 'exchange' || retStatus.includes('return') || retStatus.includes('exchange')) && !isReturnAccepted;
+                  // Exchange Tax Invoice under Section 31 CGST Act is ONLY generated when the replacement item is dispatched or delivered/completed
+                  const isExchangeDispatched = ['exchange_dispatched', 'exchanged', 'completed'].some(s => retStatus.includes(s)) ||
+                    ['exchange_dispatched', 'exchanged'].includes(String(order.status).toLowerCase());
+                  const canShowExchangeInvoice = isOrderExchange && isExchangeDispatched;
 
                   return (
                     <>
@@ -1379,7 +1383,7 @@ export default function OrderDetailModal({
                           <span>Credit Note (Pending Approval)</span>
                         </span>
                       )}
-                      {isOrderExchange && (
+                      {canShowExchangeInvoice && (
                         <a
                           href={`${SERVER_URL}/orders/${order.id || order._id}/exchange-invoice`}
                           target="_blank"
