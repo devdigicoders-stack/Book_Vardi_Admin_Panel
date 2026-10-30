@@ -733,6 +733,17 @@ export default function SellerDetailModal({
                         <td className="py-2.5 px-3 font-bold text-emerald-800 bg-emerald-50/60">{seller.pendingUpdates.storeTagline}</td>
                       </tr>
                     )}
+                    {seller.pendingUpdates.bankDetails && (
+                      <tr>
+                        <td className="py-2.5 px-3 font-bold text-gray-700">Bank & Settlement Account</td>
+                        <td className="py-2.5 px-3 text-gray-500 font-mono line-through">
+                          {seller.bankDetails?.accountNumber ? `A/C: ${seller.bankDetails.accountNumber} (${seller.bankDetails.ifscCode || ''})` : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold font-mono text-emerald-800 bg-emerald-50/60">
+                          A/C: {seller.pendingUpdates.bankDetails.accountNumber || seller.pendingUpdates.bankAccountNumber} ({seller.pendingUpdates.bankDetails.ifscCode || seller.pendingUpdates.bankIfscCode || ''}) - {seller.pendingUpdates.bankDetails.bankName || seller.pendingUpdates.bankName || ''}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
