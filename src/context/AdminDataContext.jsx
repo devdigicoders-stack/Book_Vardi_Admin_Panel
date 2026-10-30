@@ -1552,7 +1552,7 @@ export const AdminDataProvider = ({ children }) => {
     try {
       const res = await updateOrderStatusApi(targetId, newStatus, extraDetails);
       if (res?.order) {
-        savedOrderResult = res.order;
+        savedOrderResult = { ...res.order, shiprocket: res.shiprocket };
         setOrders(prev => {
           const synced = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, ...res.order } : o);
           return synced;

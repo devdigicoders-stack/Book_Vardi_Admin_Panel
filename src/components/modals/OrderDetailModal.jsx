@@ -1110,6 +1110,53 @@ export default function OrderDetailModal({
                   <option value="Cancelled">Cancelled</option>
                 </select>
 
+                    {(() => {
+                      const normStatus = String(displayOrder?.status || '').toLowerCase().replace(/_/g, ' ');
+                      const isShipped = normStatus === 'shipped' || normStatus === 'out for delivery' || normStatus === 'delivered';
+                      const hasTracking = Boolean(displayOrder?.trackingNumber || displayOrder?.courierName);
+                      const canCreateShipment = !isShipped && !hasTracking;
+                      
+                      return canCreateShipment ? (
+                        <button
+                          type="button"
+                          disabled={Boolean(actionLoadingKey)}
+                          onClick={async () => {
+                            const orderId = displayOrder?._id || displayOrder?.id || displayOrder?.orderId;
+                            if (!orderId) {
+                              setActionFeedback({ type: 'error', message: 'Order ID is missing' });
+                              return;
+                            }
+                            setActionLoadingKey('shipment');
+                            setActionFeedback(null);
+                            try {
+                              const res = await onUpdateStatus(orderId, 'Shipped', {
+                                createShipment: true,
+                                courierCode: 'SHIPROCKET',
+                                weightKg: 1.5
+                              });
+                              if (res?.shiprocket?.success) {
+                                setActionFeedback({ type: 'success', message: `✅ Shipment created! AWB: ${res.shiprocket.awbCode} via ${res.shiprocket.courierName}` });
+                              } else if (res?.shiprocket?.error) {
+                                setActionFeedback({ type: 'error', message: `Shiprocket: ${res.shiprocket.error}` });
+                              } else {
+                                setActionFeedback({ type: 'success', message: 'Shipment request sent successfully' });
+                              }
+                            } catch (err) {
+                              setActionFeedback({ type: 'error', message: err.message || 'Shipment creation failed' });
+                            } finally {
+                              setActionLoadingKey(null);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed text-emerald-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 border border-emerald-200"
+                        >
+                          {actionLoadingKey === 'shipment' ? (
+                            <><Loader2 size={13} className="animate-spin" /> Creating AWB...</>
+                          ) : (
+                            <><Truck size={13} /> Create Shipment (AWB)</>
+                          )}
+                        </button>
+                      ) : null;
+                    })()}
                 <button
                   type="button"
                   disabled={Boolean(actionLoadingKey)}
