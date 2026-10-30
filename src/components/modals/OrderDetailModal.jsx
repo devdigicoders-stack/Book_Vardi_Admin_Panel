@@ -127,8 +127,12 @@ export default function OrderDetailModal({
     showRefundInput: false,
     refundTxnId: '',
     showDispatchInput: false,
+    exchangeDeliveryMode: 'third_party',
     exchangeAwb: '',
-    exchangeCourier: ''
+    exchangeCourier: 'Shiprocket',
+    exchangeDriverName: '',
+    exchangeDriverPhone: '',
+    exchangeVehicleNumber: ''
   });
 
   const handleReturnExchangeStatusUpdate = async (newStatus, extraPayload = {}, actionKey = 'workflow') => {
@@ -1027,38 +1031,152 @@ export default function OrderDetailModal({
                   )}
 
                   {returnActionState.showDispatchInput && (
-                    <div className="p-3 bg-white rounded-xl border border-indigo-200 space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          placeholder="Courier Partner Name (e.g. Delhivery)"
-                          value={returnActionState.exchangeCourier}
-                          onChange={e => setReturnActionState(prev => ({ ...prev, exchangeCourier: e.target.value }))}
-                          className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Replacement AWB Tracking Number"
-                          value={returnActionState.exchangeAwb}
-                          onChange={e => setReturnActionState(prev => ({ ...prev, exchangeAwb: e.target.value }))}
-                          className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden"
-                        />
+                    <div className="p-3.5 bg-white rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
+                      <label className="font-semibold text-indigo-950 text-xs block">
+                        Replacement Dispatch Details:
+                      </label>
+
+                      {/* Mode Selector Tabs */}
+                      <div className="grid grid-cols-2 gap-2 bg-indigo-50 p-1 rounded-xl border border-indigo-100">
+                        <button
+                          type="button"
+                          onClick={() => setReturnActionState(prev => ({ ...prev, exchangeDeliveryMode: 'third_party' }))}
+                          className={`py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                            (returnActionState.exchangeDeliveryMode || 'third_party') === 'third_party'
+                              ? 'bg-white text-indigo-950 shadow-xs ring-1 ring-indigo-300'
+                              : 'text-indigo-700 hover:text-indigo-900'
+                          }`}
+                        >
+                          🚚 3rd-Party Courier (Shiprocket / Delhivery)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReturnActionState(prev => ({ ...prev, exchangeDeliveryMode: 'self_delivery' }))}
+                          className={`py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                            returnActionState.exchangeDeliveryMode === 'self_delivery'
+                              ? 'bg-white text-indigo-950 shadow-xs ring-1 ring-indigo-300'
+                              : 'text-indigo-700 hover:text-indigo-900'
+                          }`}
+                        >
+                          🛵 Direct Self-Delivery (Store Fleet / Rider)
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        disabled={Boolean(actionLoadingKey)}
-                        onClick={() => handleReturnExchangeStatusUpdate('exchange_dispatched', { exchangeAwb: returnActionState.exchangeAwb, exchangeCourier: returnActionState.exchangeCourier }, 'dispatch')}
-                        className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-                      >
-                        {actionLoadingKey === 'dispatch' ? (
-                          <>
-                            <Loader2 size={13} className="animate-spin text-white" />
-                            <span>Dispatching Replacement...</span>
-                          </>
-                        ) : (
-                          <span>Confirm Replacement Dispatched</span>
-                        )}
-                      </button>
+
+                      {returnActionState.exchangeDeliveryMode === 'self_delivery' ? (
+                        /* Mode: Self Delivery (Store Fleet Rider) */
+                        <div className="space-y-2 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-700">Driver / Rider Name *</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Ramesh Kumar"
+                                value={returnActionState.exchangeDriverName || ''}
+                                onChange={e => setReturnActionState(prev => ({ ...prev, exchangeDriverName: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 text-xs border border-indigo-300 rounded-lg outline-none bg-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-700">Driver Phone *</label>
+                              <input
+                                type="text"
+                                placeholder="+91 98765 00000"
+                                value={returnActionState.exchangeDriverPhone || ''}
+                                onChange={e => setReturnActionState(prev => ({ ...prev, exchangeDriverPhone: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 text-xs border border-indigo-300 rounded-lg outline-none bg-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-700">Vehicle Number</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. UP32 AB 1234"
+                                value={returnActionState.exchangeVehicleNumber || ''}
+                                onChange={e => setReturnActionState(prev => ({ ...prev, exchangeVehicleNumber: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 text-xs border border-indigo-300 rounded-lg outline-none bg-white font-mono"
+                              />
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-indigo-900 bg-white p-2 rounded-lg border border-indigo-200">
+                            🔑 <strong>Doorstep 1-Round Swap:</strong> Rider delivers new replacement item & collects old item. Customer will receive a 4-digit Exchange OTP on their phone.
+                          </div>
+                        </div>
+                      ) : (
+                        /* Mode: 3rd Party Courier */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Courier Partner Name (e.g. Shiprocket / Delhivery)"
+                            value={returnActionState.exchangeCourier || 'Shiprocket'}
+                            onChange={e => setReturnActionState(prev => ({ ...prev, exchangeCourier: e.target.value }))}
+                            className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden bg-white"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Replacement AWB Tracking Number"
+                            value={returnActionState.exchangeAwb}
+                            onChange={e => setReturnActionState(prev => ({ ...prev, exchangeAwb: e.target.value }))}
+                            className="px-3 py-1.5 text-xs border border-indigo-300 rounded-lg outline-hidden font-mono bg-white"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={Boolean(actionLoadingKey)}
+                          onClick={() => {
+                            const isSelf = returnActionState.exchangeDeliveryMode === 'self_delivery';
+                            if (isSelf) {
+                              if (!returnActionState.exchangeDriverName?.trim()) {
+                                alert('⚠️ Please enter Driver / Rider Name.');
+                                return;
+                              }
+                              if (!returnActionState.exchangeDriverPhone?.trim()) {
+                                alert('⚠️ Please enter Driver Phone Number.');
+                                return;
+                              }
+                              const tokenVal = `DLV-${Math.floor(100000 + Math.random() * 900000)}`;
+                              handleReturnExchangeStatusUpdate('exchange_dispatched', {
+                                deliveryMode: 'self_delivery',
+                                deliveryType: 'self_delivery',
+                                exchangeCourier: 'Self-Delivery (Store Rider)',
+                                exchangeAwb: tokenVal,
+                                selfDeliveryDetails: {
+                                  deliveryPersonName: returnActionState.exchangeDriverName.trim(),
+                                  deliveryPersonPhone: returnActionState.exchangeDriverPhone.trim(),
+                                  vehicleNumber: returnActionState.exchangeVehicleNumber?.trim() || '',
+                                  deliveryPartnerToken: tokenVal
+                                }
+                              }, 'dispatch');
+                            } else {
+                              handleReturnExchangeStatusUpdate('exchange_dispatched', {
+                                deliveryMode: 'third_party',
+                                deliveryType: 'third_party',
+                                exchangeAwb: returnActionState.exchangeAwb,
+                                exchangeCourier: returnActionState.exchangeCourier || 'Shiprocket'
+                              }, 'dispatch');
+                            }
+                          }}
+                          className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        >
+                          {actionLoadingKey === 'dispatch' ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin text-white" />
+                              <span>Dispatching Replacement...</span>
+                            </>
+                          ) : (
+                            <span>Confirm Replacement Dispatched</span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: false }))}
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
