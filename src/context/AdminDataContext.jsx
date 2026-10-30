@@ -1477,7 +1477,7 @@ export const AdminDataProvider = ({ children }) => {
     try {
       const res = await updateOrderStatusApi(targetId, newStatus, extraDetails);
       if (res?.order) {
-        savedOrderResult = res.order;
+        savedOrderResult = { ...res.order, shiprocket: res.shiprocket };
         setOrders(prev => {
           const synced = prev.map(o => (o.id === targetId || o._id === targetId || o.orderId === targetId) ? { ...o, ...res.order } : o);
           return synced;
@@ -1982,6 +1982,19 @@ export const AdminDataProvider = ({ children }) => {
       freeShippingThreshold: minVal
     };
     setSettings(updated);
+    if (!isNaN(minVal) && minVal > 0) {
+      setAnnouncements(prev => prev.map(a => {
+        const combined = `${a.badge || ''} ${a.text || ''}`.toLowerCase();
+        if (combined.includes('free delivery') || combined.includes('free shipping') || combined.includes('freedelivery')) {
+          const updatedText = a.text.replace(
+            /((?:over|above|min(?:imum)?|orders?\s*(?:over|above)?)\s*(?:₹|rs\.?|inr)?\s*)\d+/i,
+            `$1${minVal}`
+          );
+          return { ...a, text: updatedText };
+        }
+        return a;
+      }));
+    }
     try {
       localStorage.setItem('admin_settings', JSON.stringify(updated));
       localStorage.setItem('bv_free_shipping_threshold', JSON.stringify(minVal));
@@ -2328,6 +2341,19 @@ export const AdminDataProvider = ({ children }) => {
     setAnnouncements(prev => [...prev, newItem].sort((a, b) => (Number(a.priority) || 1) - (Number(b.priority) || 1)));
     logAudit('Announcement Added', `Added top banner item: "${newItem.text}" (Priority ${newItem.priority})`);
 
+    // Synchronize free shipping threshold if announcement specifies one
+    const checkCombined = `${itemData.badge || ''} ${itemData.text || ''}`.toLowerCase();
+    if (checkCombined.includes('free delivery') || checkCombined.includes('free shipping') || checkCombined.includes('freedelivery')) {
+      const match = itemData.text?.match(/(?:over|above|min(?:imum)?|orders?\s*(?:over|above)?)\s*(?:₹|rs\.?|inr)?\s*(\d+)/i) ||
+                    itemData.text?.match(/(?:₹|rs\.?|inr)\s*(\d+)/i);
+      if (match && match[1]) {
+        const val = Number(match[1]);
+        if (!isNaN(val) && val > 0) {
+          updatePlatformSettings({ minOrderFreeShipping: val, freeShippingThreshold: val });
+        }
+      }
+    }
+
     try {
       const res = await createAnnouncementApi(itemData);
       if (res?.success && res.announcement) {
@@ -2350,6 +2376,21 @@ export const AdminDataProvider = ({ children }) => {
   const updateAnnouncement = async (id, updates) => {
     setAnnouncements(prev => prev.map(a => (a.id === id || a._id === id ? { ...a, ...updates } : a)).sort((a, b) => (Number(a.priority) || 1) - (Number(b.priority) || 1)));
     logAudit('Announcement Updated', `Updated top banner item #${id}`);
+
+    // Synchronize free shipping threshold if announcement specifies one
+    if (updates.text) {
+      const checkCombined = `${updates.badge || ''} ${updates.text || ''}`.toLowerCase();
+      if (checkCombined.includes('free delivery') || checkCombined.includes('free shipping') || checkCombined.includes('freedelivery')) {
+        const match = updates.text.match(/(?:over|above|min(?:imum)?|orders?\s*(?:over|above)?)\s*(?:₹|rs\.?|inr)?\s*(\d+)/i) ||
+                      updates.text.match(/(?:₹|rs\.?|inr)\s*(\d+)/i);
+        if (match && match[1]) {
+          const val = Number(match[1]);
+          if (!isNaN(val) && val > 0) {
+            updatePlatformSettings({ minOrderFreeShipping: val, freeShippingThreshold: val });
+          }
+        }
+      }
+    }
 
     try {
       const res = await updateAnnouncementApi(id, updates);

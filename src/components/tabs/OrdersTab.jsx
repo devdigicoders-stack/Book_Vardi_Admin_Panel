@@ -816,6 +816,7 @@ export default function OrdersTab() {
           if (updated) {
             setSelectedOrder(updated);
           }
+          return updated;
         }}
         onUpdateTracking={async (ordId, trk, extra) => {
           await updateOrderTracking(ordId, trk, extra);

@@ -129,6 +129,22 @@ export default function AnnouncementModal({ isOpen, onClose, onSave, announcemen
               placeholder="e.g. Free Shipping on Orders Over ₹499 | Limited Time Offer"
               className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 outline-hidden focus:ring-2 focus:ring-brand-yellow font-medium"
             />
+            {(() => {
+              const combined = `${badge || ''} ${text || ''}`.toLowerCase();
+              if (!combined.includes('free delivery') && !combined.includes('free shipping') && !combined.includes('freedelivery')) return null;
+              const match = text.match(/(?:over|above|min(?:imum)?|orders?\s*(?:over|above)?)\s*(?:₹|rs\.?|inr)?\s*(\d+)/i) ||
+                            text.match(/(?:₹|rs\.?|inr)\s*(\d+)/i);
+              const thresh = match && match[1] ? Number(match[1]) : null;
+              if (!thresh) return null;
+              return (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                  <Sparkles size={13} className="shrink-0 text-emerald-600" />
+                  <span>
+                    Free Delivery Threshold: <strong>₹{thresh}</strong> detected. Saving will automatically sync Platform Logistics, Cart & Checkout!
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
