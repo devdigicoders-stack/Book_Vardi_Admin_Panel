@@ -315,7 +315,7 @@ export default function OrderDetailModal({
         lowerCourier.includes('shadowfax') ? `https://track.shadowfax.in/track?tracking_id=${assignedTrackingNumber}` :
         lowerCourier.includes('xpressbees') ? `https://www.xpressbees.com/track?shipment_id=${assignedTrackingNumber}` :
         lowerCourier.includes('indiapost') || lowerCourier.includes('speedpost') ? `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?consignmentNo=${assignedTrackingNumber}` :
-        `https://track.shiprocket.in/tracking/${assignedTrackingNumber}`;
+        `https://shiprocket.co/tracking/${assignedTrackingNumber}`;
     }
 
     const payload = {
@@ -2576,13 +2576,13 @@ export default function OrderDetailModal({
                       <input
                         type="text"
                         readOnly
-                        value={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`)}
+                        value={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://shiprocket.co/tracking/${newTracking}`)}
                         className="flex-1 px-2.5 py-1 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-lg text-gray-700 truncate select-all"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          const url = isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`);
+                          const url = isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://shiprocket.co/tracking/${newTracking}`);
                           navigator.clipboard.writeText(url);
                           setCopiedLink(true);
                           setTimeout(() => setCopiedLink(false), 2000);
@@ -2592,7 +2592,7 @@ export default function OrderDetailModal({
                         {copiedLink ? 'Copied!' : 'Copy Link'}
                       </button>
                       <a
-                        href={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://track.shiprocket.in/tracking/${newTracking}`)}
+                        href={isSelf ? selfDeliveryUrl : (order.trackingUrl || `https://shiprocket.co/tracking/${newTracking}`)}
                         target="_blank"
                         rel="noreferrer"
                         className="px-2.5 py-1 text-[11px] font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1"
@@ -2636,7 +2636,7 @@ export default function OrderDetailModal({
               lowerCourier.includes('bluedart') ? `https://www.bluedart.com/tracking?awb=${newTracking.trim()}` :
               lowerCourier.includes('dtdc') ? `https://www.dtdc.in/tracking/shipment-tracking.asp?awb=${newTracking.trim()}` :
               lowerCourier.includes('ekart') ? `https://ekartlogistics.com/shipmenttrack/${newTracking.trim()}` :
-              `https://track.shiprocket.in/tracking/${newTracking.trim()}`;
+              `https://shiprocket.co/tracking/${newTracking.trim()}`;
           }
 
           return {
