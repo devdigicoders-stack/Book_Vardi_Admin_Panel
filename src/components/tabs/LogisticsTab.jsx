@@ -21,16 +21,33 @@ import { useAdminData } from '../../context/AdminDataContext';
 // Helper to reliably identify Store Self-Delivery vs Third-Party Courier
 const isSelfDeliveryOrder = (ord) => {
   if (!ord) return false;
-  if (ord.deliveryMode === 'self_delivery' || ord.deliveryType === 'self' || ord.dispatchMode === 'self_delivery') return true;
+  if (
+    ord.deliveryMode === 'self_delivery' ||
+    ord.deliveryMode === 'self' ||
+    ord.deliveryType === 'self' ||
+    ord.deliveryType === 'self_delivery' ||
+    ord.dispatchMode === 'self_delivery' ||
+    ord.shippingMethod === 'self_delivery'
+  ) return true;
   if (ord.isSelfDelivery === true) return true;
-  if (ord.selfDeliveryDetails?.deliveryPartnerToken || ord.selfDeliveryDetails?.deliveryPersonName) return true;
-  const trk = String(ord.trackingNumber || '').trim().toUpperCase();
-  if (trk.startsWith('DLV-')) return true;
-  if (Array.isArray(ord.items) && ord.items.some(it => it?.deliveryType === 'self_delivery' || it?.selfDeliveryDetails?.deliveryPartnerToken || String(it?.trackingNumber || '').startsWith('DLV-'))) {
+  if (
+    ord.selfDeliveryDetails?.deliveryPartnerToken ||
+    ord.selfDeliveryDetails?.deliveryPersonName ||
+    ord.selfDeliveryDetails?.token ||
+    (ord.selfDeliveryDetails && Object.keys(ord.selfDeliveryDetails).length > 0)
+  ) return true;
+  const trk = String(ord.trackingNumber || ord.trackingId || '').trim().toUpperCase();
+  if (trk.startsWith('DLV-') || trk.includes('DLV-')) return true;
+  if (Array.isArray(ord.items) && ord.items.some(it => 
+    it?.deliveryType === 'self_delivery' ||
+    it?.deliveryType === 'self' ||
+    it?.selfDeliveryDetails?.deliveryPartnerToken ||
+    String(it?.trackingNumber || '').toUpperCase().startsWith('DLV-')
+  )) {
     return true;
   }
-  const courier = String(ord.courierName || '').toLowerCase().trim();
-  if (courier.includes('self') || courier.includes('direct') || courier.includes('rider')) return true;
+  const courier = String(ord.courierName || ord.carrier || '').toLowerCase().trim();
+  if (courier.includes('self') || courier.includes('direct') || courier.includes('rider') || courier.includes('store fleet')) return true;
   return false;
 };
 
