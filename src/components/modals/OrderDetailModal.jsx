@@ -22,7 +22,8 @@ import {
   ExternalLink,
   Lock,
   Loader2,
-  MessageSquare
+  MessageSquare,
+  Barcode as BarcodeIcon
 } from 'lucide-react';
 import TaxInvoiceModal, { parseStateInfo } from './TaxInvoiceModal';
 import { resendRiderWhatsAppApi, SERVER_URL } from '../../utils/api';
@@ -81,6 +82,7 @@ export default function OrderDetailModal({
   const adminCtx = typeof useAdminData === 'function' ? useAdminData() : {};
   const sellers = adminCtx?.sellers || [];
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [invoiceModalMode, setInvoiceModalMode] = useState('invoice');
   const [newTracking, setNewTracking] = useState('');
   const [selectedStatus, setSelectedStatus] = useState(order?.overallStatus || order?.status || 'Pending');
   const [refundReason, setRefundReason] = useState('');
@@ -1367,18 +1369,37 @@ export default function OrderDetailModal({
                   const isConfirmedOrder = modalStatus && !['pending', 'placed', 'unconfirmed', 'draft', ''].includes(modalStatus) && !hasPendingItems;
                   const isLocked = !isConfirmedOrder;
                   return (
-                    <button
-                      onClick={() => setIsInvoiceOpen(true)}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${
-                        isLocked
-                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                          : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-200'
-                      }`}
-                      title={isLocked ? "Invoice locked while order status is pending confirmation" : "View & Print GST Tax Invoice & Settlement"}
-                    >
-                      {isLocked ? <Lock size={13} /> : <FileText size={13} />}
-                      <span>{isLocked ? 'Invoice Locked (Pending)' : 'Tax Invoice & Settlement'}</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          setInvoiceModalMode('invoice');
+                          setIsInvoiceOpen(true);
+                        }}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border ${
+                          isLocked
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-200'
+                        }`}
+                        title={isLocked ? "Invoice locked while order status is pending confirmation" : "View & Print GST Tax Invoice & Settlement"}
+                      >
+                        {isLocked ? <Lock size={13} /> : <FileText size={13} />}
+                        <span>{isLocked ? 'Invoice Locked (Pending)' : 'Tax Invoice & Settlement'}</span>
+                      </button>
+
+                      {!isLocked && (
+                        <button
+                          onClick={() => {
+                            setInvoiceModalMode('shipping_label');
+                            setIsInvoiceOpen(true);
+                          }}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200 shadow-2xs"
+                          title="Generate & Print 4x6 Thermal Sticker / A4 Parcel Shipping Label & Packing Slip with Barcode"
+                        >
+                          <BarcodeIcon size={13} />
+                          <span>Shipping Label & Slip</span>
+                        </button>
+                      )}
+                    </>
                   );
                 })()}
                 {/* Statutory Invoicing: Exchange gets BOTH Credit Note (returned item) & Exchange Tax Invoice (new item); Returns/Refunds get Credit Note ONLY */}
@@ -2783,6 +2804,7 @@ export default function OrderDetailModal({
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
         sellers={sellers}
+        initialMode={invoiceModalMode}
         order={(() => {
           const currentBase = displayOrder || order;
           const baseMode = String(currentBase.deliveryMode || currentBase.deliveryType || '').toLowerCase();
