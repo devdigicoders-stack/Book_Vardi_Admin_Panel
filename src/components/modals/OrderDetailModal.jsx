@@ -1213,20 +1213,40 @@ export default function OrderDetailModal({
             <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200/80 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-gray-700">Order Status:</span>
-                <select
-                  value={selectedStatus}
-                  onChange={e => setSelectedStatus(e.target.value)}
-                  className="bg-white border border-gray-300 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer shadow-2xs"
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Processing">Processing</option>
-                  <option value="Packed">Packed</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Out for Delivery">Out for Delivery</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
+                {(() => {
+                  const currentSt = String(displayOrder?.status || 'Pending').toLowerCase().trim();
+                  const isDeliveredOrCancelled = currentSt === 'delivered' || currentSt === 'cancelled';
+                  const isConfirmedStage = currentSt === 'confirmed' || currentSt === 'processing' || currentSt === 'packed';
+                  const isShippedStage = currentSt === 'shipped' || currentSt === 'out for delivery' || currentSt === 'out_for_delivery';
+
+                  if (isDeliveredOrCancelled) {
+                    return (
+                      <span className="bg-gray-100 text-gray-700 border border-gray-300 text-xs font-extrabold rounded-xl px-3 py-1.5 shadow-2xs">
+                        {displayOrder?.status} (Final)
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <select
+                      value={selectedStatus}
+                      onChange={e => setSelectedStatus(e.target.value)}
+                      className="bg-white border border-gray-300 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer shadow-2xs"
+                    >
+                      {!isConfirmedStage && !isShippedStage && <option value="Pending">Pending</option>}
+                      {!isShippedStage && (
+                        <>
+                          <option value="Confirmed">Confirmed</option>
+                          <option value="Packed">Packed</option>
+                        </>
+                      )}
+                      <option value="Shipped">Shipped</option>
+                      <option value="Out for Delivery">Out for Delivery</option>
+                      <option value="Delivered">Delivered</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  );
+                })()}
 
                     {(() => {
                       const normStatus = String(displayOrder?.status || '').toLowerCase().replace(/_/g, ' ');
