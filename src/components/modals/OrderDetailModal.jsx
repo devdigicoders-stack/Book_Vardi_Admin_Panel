@@ -772,6 +772,25 @@ export default function OrderDetailModal({
                   {order.returnRequest.pickupDate && (
                     <div><strong>Scheduled Pickup:</strong> {new Date(order.returnRequest.pickupDate).toLocaleDateString('en-IN')}</div>
                   )}
+                  {order.returnRequest.returnAwbNumber && (
+                    <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs">
+                      <span className="text-[10px] uppercase font-bold text-blue-700 block">Shiprocket Reverse Pickup AWB:</span>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="font-mono font-extrabold text-blue-950 text-xs">{order.returnRequest.returnAwbNumber}</span>
+                        {order.returnRequest.returnTrackingUrl && (
+                          <a
+                            href={order.returnRequest.returnTrackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded shadow-2xs"
+                          >
+                            Track Return ↗
+                          </a>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">Courier: {order.returnRequest.returnCourierName || 'Shiprocket'}</div>
+                    </div>
+                  )}
                   {order.returnRequest.refundTxnId && (
                     <div><strong>Refund Txn ID:</strong> <span className="font-mono font-bold text-emerald-800">{order.returnRequest.refundTxnId}</span></div>
                   )}
