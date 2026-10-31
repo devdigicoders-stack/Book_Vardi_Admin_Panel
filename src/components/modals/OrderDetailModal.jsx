@@ -1863,7 +1863,9 @@ export default function OrderDetailModal({
                         (order.sellerGstin === '09BLMPK2840L2ZN') ||
                         (order.gstNumber === '09BLMPK2840L2ZN') ||
                         order.isCodExempted ||
-                        String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('national school dress');
+                        String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('national school dress') ||
+                        String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('digicoders') ||
+                        (order.items || []).some(it => String(it.sellerStoreName || it.storeName || '').toLowerCase().includes('digicoders'));
 
                       return (
                         <div className="flex justify-between items-center text-gray-700 flex-wrap gap-1">
@@ -2047,7 +2049,10 @@ export default function OrderDetailModal({
 
                 const isExemptedSeller = candidateGstList.includes('09BLMPK2840L2ZN') ||
                   String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('national school dress') ||
-                  (order.items || []).some(it => String(it.sellerStoreName || it.storeName || '').toLowerCase().includes('national school dress'));
+                  (order.items || []).some(it => String(it.sellerStoreName || it.storeName || '').toLowerCase().includes('national school dress')) ||
+                  String(order.sellerStoreName || order.storeName || '').toLowerCase().includes('digicoders') ||
+                  (order.items || []).some(it => String(it.sellerStoreName || it.storeName || '').toLowerCase().includes('digicoders')) ||
+                  (order.sellerDetails?.storeName && String(order.sellerDetails.storeName).toLowerCase().includes('digicoders'));
 
                 // Multi-item exact commission calculation (supports different seller commission rates)
                 let totalItemCommission = 0;
@@ -2221,7 +2226,7 @@ export default function OrderDetailModal({
                       )}
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• Portal Commission ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `औसत ${effectiveCommRate}% पोर्टल कमीशन`}):</span>
+                        <span>• Portal Commission ({isExemptedSeller ? '0% विशेष छूट (09BLMPK2840L2ZN / Digicoders)' : `औसत ${effectiveCommRate}% पोर्टल कमीशन`}):</span>
                         <span className="font-mono font-semibold text-amber-900">−₹{portalComm.toFixed(2)}</span>
                       </div>
 
@@ -2231,12 +2236,12 @@ export default function OrderDetailModal({
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• TDS ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `आयकर Sec 194-O लागू 0.1% TDS on Gross ₹${grossSale.toFixed(2)}`}):</span>
+                        <span>• TDS ({isExemptedSeller ? '0% विशेष छूट (09BLMPK2840L2ZN / Digicoders)' : `आयकर Sec 194-O लागू 0.1% TDS on Gross ₹${grossSale.toFixed(2)}`}):</span>
                         <span className="font-mono font-semibold text-purple-900">−₹{tdsAmt.toFixed(2)}</span>
                       </div>
 
                       <div className="flex justify-between text-gray-700">
-                        <span>• GST TCS ({isExemptedSeller ? '0% विशेष छूट GST 09BLMPK2840L2ZN' : `0.5% on Taxable ₹${taxableForTcs.toFixed(2)}`}):</span>
+                        <span>• GST TCS ({isExemptedSeller ? '0% विशेष छूट (09BLMPK2840L2ZN / Digicoders)' : `0.5% on Taxable ₹${taxableForTcs.toFixed(2)}`}):</span>
                         <span className="font-mono font-semibold text-sky-900">−₹{tcsAmt.toFixed(2)}</span>
                       </div>
 

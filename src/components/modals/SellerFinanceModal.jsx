@@ -103,7 +103,7 @@ export default function SellerFinanceModal({
     gstin ||
     ''
   ).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const isExemptedSeller = candidateSellerGst === '09BLMPK2840L2ZN' || sellerStoreName.includes('national school dress');
+  const isExemptedSeller = candidateSellerGst === '09BLMPK2840L2ZN' || sellerStoreName.includes('national school dress') || sellerStoreName.includes('digicoders') || Number(seller.commissionRate ?? seller.commissionPercentage) === 0;
   const commissionRate = isExemptedSeller ? 0 : Number(seller.commissionRate ?? seller.commissionPercentage ?? 10);
 
   // Filter orders and extract items belonging strictly to this seller
