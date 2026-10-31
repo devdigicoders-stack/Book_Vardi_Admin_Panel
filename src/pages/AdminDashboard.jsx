@@ -97,12 +97,18 @@ export default function AdminDashboard() {
     }
 
     const handleDashboardPopState = (e) => {
-      // If an open modal handled popstate, don't navigate tab
-      if (e.state && e.state.adminModalOpen) return;
+      // 1. If any modal is currently open or was just closed/popped, DO NOT navigate away from tab!
+      if (
+        (window.__bv_modal_open_count && window.__bv_modal_open_count > 0) ||
+        (window.__bv_modal_popping && Date.now() < window.__bv_modal_popping) ||
+        (e.state && (e.state.adminModalOpen || e.state.modalBackTrap || e.state.sellerOrderModalOpen))
+      ) {
+        return;
+      }
 
       const current = activeTabRef.current;
       if (current !== 'dashboard') {
-        // Return to main dashboard tab
+        // Return to main dashboard tab only when explicitly backing out of an empty subtab
         navigate('/dashboard');
       } else {
         // Double-back to exit on main Dashboard
