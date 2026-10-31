@@ -557,3 +557,4 @@ function ScanBarcodeIcon({ size = 16 }) {
     </svg>
   );
 }
+
