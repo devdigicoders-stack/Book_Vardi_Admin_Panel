@@ -14,7 +14,8 @@ import {
   Lock,
   AlertCircle,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  Check
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import OrderDetailModal, { hasActiveReturnRequest } from '../modals/OrderDetailModal';
@@ -543,17 +544,23 @@ export default function OrdersTab() {
 
                       {/* Return Status */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                          statusKey.includes('approved') ? 'bg-blue-100 text-blue-900 border-blue-300' :
-                          statusKey.includes('completed') || statusKey === 'exchanged' || statusKey === 'refund_completed' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                          statusKey === 'rejected' ? 'bg-rose-100 text-rose-900 border-rose-300' :
-                          statusKey === 'pickup_scheduled' ? 'bg-indigo-100 text-indigo-900 border-indigo-300' :
-                          statusKey === 'product_received' ? 'bg-purple-100 text-purple-900 border-purple-300' :
-                          statusKey === 'exchange_dispatched' ? 'bg-teal-100 text-teal-900 border-teal-300' :
-                          'bg-amber-100 text-amber-900 border-amber-300'
-                        }`}>
-                          {(req?.status || order.status || 'Pending').replace(/_/g, ' ')}
-                        </span>
+                        {(() => {
+                          const isExch = Boolean(req?.type === 'exchange' || req?.requestType === 'exchange' || Boolean(req?.exchangeSize || req?.exchangeLength) || String(order.status).toLowerCase().includes('exchange'));
+                          const isExchDone = isExch && (statusKey === 'exchanged' || statusKey.includes('completed') || String(order.deliveryStatus || '').toLowerCase().includes('swap completed') || String(order.selfDeliveryDetails?.status || '').toLowerCase().includes('swap completed'));
+                          return (
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                              isExchDone || statusKey.includes('completed') || statusKey === 'exchanged' || statusKey === 'refund_completed' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                              statusKey.includes('approved') ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                              statusKey === 'rejected' ? 'bg-rose-100 text-rose-900 border-rose-300' :
+                              statusKey === 'pickup_scheduled' ? 'bg-indigo-100 text-indigo-900 border-indigo-300' :
+                              statusKey === 'product_received' ? 'bg-purple-100 text-purple-900 border-purple-300' :
+                              statusKey === 'exchange_dispatched' ? 'bg-teal-100 text-teal-900 border-teal-300' :
+                              'bg-amber-100 text-amber-900 border-amber-300'
+                            }`}>
+                              {isExchDone ? 'Doorstep Swap Completed' : (req?.status || order.status || 'Pending').replace(/_/g, ' ')}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Resolution / Tracking */}
@@ -684,16 +691,24 @@ export default function OrdersTab() {
 
                     {/* Status */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                          order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
-                          order.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
-                          (order.status === 'Out for Delivery' || order.status === 'out_for_delivery') ? 'bg-purple-100 text-purple-800 border border-purple-200' :
-                          order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
-                          'bg-amber-100 text-amber-800'
-                        }`}>
-                          {order.status}
-                        </span>
+                      {(() => {
+                        const hasPartner = isDeliveryPartnerDecided(order);
+                        const effectiveStatus = (!hasPartner && !hasActiveReturnRequest(order) && ['confirmed', 'packed'].includes(String(order.status || '').toLowerCase()))
+                          ? 'Pending'
+                          : (order.status || 'Pending');
+
+                        return (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                              effectiveStatus === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
+                              effectiveStatus === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
+                              (effectiveStatus === 'Out for Delivery' || effectiveStatus === 'out_for_delivery') ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                              effectiveStatus === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                              effectiveStatus === 'Confirmed' ? 'bg-indigo-100 text-indigo-800' :
+                              'bg-amber-100 text-amber-800'
+                            }`}>
+                              {effectiveStatus}
+                            </span>
                         {hasActiveReturnRequest(order) && (
                           <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
                             <RotateCcw size={9} /> {order.returnRequest.requestType === 'exchange' ? 'Exchange Req' : 'Return Req'}
@@ -705,6 +720,8 @@ export default function OrdersTab() {
                           </span>
                         )}
                       </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Tracking - ONLY seen when product is out for delivery AND delivery partner decided */}
@@ -772,12 +789,29 @@ export default function OrdersTab() {
 
                     {/* Actions */}
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => handleOpenDetail(order)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        <Eye size={13} /> View & Manage
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!isDeliveryPartnerDecided(order) && (order.status === 'Pending' || ['pending', 'placed', 'unconfirmed'].includes(String(order.status || '').toLowerCase())) && (
+                          <button
+                            onClick={() => {
+                              handleOpenDetail(order);
+                              setTimeout(() => {
+                                const sec = document.getElementById('admin-delivery-details-section');
+                                if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+                              }, 200);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                            title="Select Delivery Partner (Self-Delivery or Courier) to Confirm Order"
+                          >
+                            <Check size={12} /> Confirm Order
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOpenDetail(order)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Eye size={13} /> View & Manage
+                        </button>
+                      </div>
                     </td>
 
                   </tr>

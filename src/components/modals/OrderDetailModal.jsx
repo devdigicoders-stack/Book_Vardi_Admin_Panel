@@ -65,6 +65,35 @@ export const hasActiveReturnRequest = (order) => {
   return returnStatuses.includes(s);
 };
 
+export const isOrderSelfDelivery = (ord) => {
+  if (!ord) return false;
+  const mode = String(ord.deliveryMode || ord.deliveryType || '').toLowerCase();
+  const hasCourier = Boolean(ord.courierName && ord.courierName !== 'N/A' && ord.courierName !== '');
+  if (hasCourier) return false;
+  return Boolean(
+    mode.includes('self') ||
+    ord.selfDeliveryDetails?.deliveryPartnerToken ||
+    ord.selfDeliveryDetails?.deliveryPersonName ||
+    ord.deliveryOtp ||
+    (ord.settlementRule && String(ord.settlementRule).includes('SELF_DELIVERY'))
+  );
+};
+
+export const isDeliveryPartnerDecided = (ord) => {
+  if (!ord) return false;
+  const mode = String(ord.deliveryMode || ord.deliveryType || '').toLowerCase();
+  const hasSelf = mode === 'self_delivery' || mode === 'self' || Boolean(ord.selfDeliveryDetails?.deliveryPartnerToken || ord.selfDeliveryDetails?.deliveryPersonName);
+  const validCourier = Boolean(ord.courierName && ord.courierName !== 'N/A' && ord.courierName !== '');
+  const hasThirdParty = mode === 'third_party' || Boolean(validCourier || ord.thirdPartyDetails?.courierName);
+  if (hasSelf && !hasThirdParty) {
+    return Boolean(ord.selfDeliveryDetails?.deliveryPersonName || ord.selfDeliveryDetails?.deliveryPartnerToken || mode === 'self_delivery');
+  }
+  if (hasThirdParty) {
+    return Boolean(validCourier || ord.thirdPartyDetails?.courierName);
+  }
+  return false;
+};
+
 export default function OrderDetailModal({ 
   isOpen, 
   onClose, 
@@ -343,11 +372,16 @@ export default function OrderDetailModal({
     setIsSavingDelivery(true);
     const orderIdentifier = order._id || order.id || order.orderId;
     try {
+      const isPendingOrder = String(displayOrder?.status || selectedStatus || '').toLowerCase() === 'pending' ||
+                             String(displayOrder?.status || selectedStatus || '').toLowerCase() === 'placed';
+      const targetStatus = isPendingOrder ? 'Confirmed' : selectedStatus;
+      setSelectedStatus(targetStatus);
+
       if (onUpdateTracking) {
         await onUpdateTracking(orderIdentifier, payload.trackingNumber, payload);
       }
       if (onUpdateStatus) {
-        await onUpdateStatus(orderIdentifier, selectedStatus, payload);
+        await onUpdateStatus(orderIdentifier, targetStatus, payload);
       }
 
       // Immediately sync local state so UI updates without needing reload
@@ -432,6 +466,17 @@ export default function OrderDetailModal({
     const statusToApply = targetStatus || selectedStatus;
     const activeOrder = displayOrder || order;
     if (!activeOrder) return;
+
+    // Order confirmation requires delivery partner selection
+    const isConfirming = statusToApply === 'Confirmed' || statusToApply === 'Packed';
+    const hasDeliveryPartner = isDeliveryPartnerDecided(currentOrder || displayOrder || order);
+    if (isConfirming && !hasDeliveryPartner) {
+      alert("⚠️ Order confirmation requires delivery partner selection. Please choose Self-Delivery or 3rd-Party Courier in the Delivery Details section below and save.");
+      const delivSec = document.getElementById('admin-delivery-details-section');
+      if (delivSec) delivSec.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     const orderIdentifier = activeOrder._id || activeOrder.id || activeOrder.orderId;
     setSelectedStatus(statusToApply);
     setActionLoadingKey('status');
@@ -650,14 +695,20 @@ export default function OrderDetailModal({
                   <RotateCcw size={16} className="text-amber-700" />
                   <span>{order.returnRequest.requestType === 'exchange' ? '🔄 Product Exchange Request' : '📦 Product Return & Refund Request'}</span>
                 </div>
-                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
-                  order.returnRequest.status?.includes('approved') ? 'bg-blue-100 text-blue-900 border-blue-300' :
-                  order.returnRequest.status?.includes('completed') || order.returnRequest.status === 'exchanged' || order.returnRequest.status === 'refund_completed' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                  order.returnRequest.status === 'rejected' ? 'bg-rose-100 text-rose-900 border-rose-300' :
-                  'bg-amber-100 text-amber-900 border-amber-300'
-                }`}>
-                  {order.returnRequest.status?.replace(/_/g, ' ')}
-                </span>
+                {(() => {
+                  const isExch = Boolean(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || Boolean(order.returnRequest?.exchangeSize || order.returnRequest?.exchangeLength) || String(order.status).toLowerCase().includes('exchange'));
+                  const isExchDone = isExch && (order.returnRequest?.status === 'exchanged' || order.status === 'exchanged' || String(order.deliveryStatus || '').toLowerCase().includes('swap completed') || String(order.selfDeliveryDetails?.status || '').toLowerCase().includes('swap completed'));
+                  return (
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase border ${
+                      isExchDone || order.returnRequest?.status?.includes('completed') || order.returnRequest?.status === 'refund_completed' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                      order.returnRequest?.status?.includes('approved') ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                      order.returnRequest?.status === 'rejected' ? 'bg-rose-100 text-rose-900 border-rose-300' :
+                      'bg-amber-100 text-amber-900 border-amber-300'
+                    }`}>
+                      {isExchDone ? 'Doorstep Swap Completed' : (order.returnRequest?.status?.replace(/_/g, ' ') || 'Pending')}
+                    </span>
+                  );
+                })()}
               </div>
 
               {Boolean(order.returnRequest?.type === 'exchange' || order.returnRequest?.requestType === 'exchange' || String(order.status).toLowerCase().includes('exchange')) && (() => {
@@ -793,6 +844,38 @@ export default function OrderDetailModal({
                       <div className="text-[10px] text-gray-500 mt-0.5">Courier: {order.returnRequest.returnCourierName || 'Shiprocket'}</div>
                     </div>
                   )}
+                  {/* Partial refund status banner for Exchange */}
+                  {(() => {
+                    const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
+                    const isExch = retReq.type === 'exchange' || retReq.requestType === 'exchange' || Boolean(retReq.exchangeSize || retReq.exchangeLength || retReq.exchangeColor);
+                    const diff = Number(retReq.priceDifference || 0);
+                    const adjType = retReq.priceAdjustmentType || (diff > 0 ? 'extra_payment' : diff < 0 ? 'partial_refund' : 'none');
+                    const dueAmt = Math.abs(diff) || Number(retReq.refundAmount || 0) || Math.max(0, Number(retReq.originalItemPrice || 0) - Number(retReq.replacementItemPrice || 0));
+                    const isDue = isExch && (adjType === 'partial_refund' || diff < 0 || dueAmt > 0);
+                    const isDone = Boolean(retReq.refundTxnId || displayOrder?.refundTxnId || order?.refundTxnId || displayOrder?.refundDetails?.refundTxnId || order?.refundDetails?.refundTxnId || retReq.refundStatus === 'completed');
+
+                    if (!isDue) return null;
+                    return isDone ? (
+                      <div className="p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                        <CheckCircle size={14} className="text-emerald-700 shrink-0" />
+                        <span>₹{dueAmt} Refund Completed! TXN: <span className="font-mono font-black">{retReq.refundTxnId || displayOrder?.refundTxnId || order?.refundTxnId}</span></span>
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-amber-50 border border-amber-300 rounded-lg text-xs font-bold text-amber-950 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1">
+                          ⚠️ <strong>₹{dueAmt} Refund Pending:</strong> Pay to customer's account
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: true }))}
+                          className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold rounded cursor-pointer shrink-0"
+                        >
+                          💳 Enter TXN No
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   {order.returnRequest.refundTxnId && (
                     <div><strong>Refund Txn ID:</strong> <span className="font-mono font-bold text-emerald-800">{order.returnRequest.refundTxnId}</span></div>
                   )}
@@ -862,109 +945,218 @@ export default function OrderDetailModal({
                     const isPickupScheduled = retStatus === 'pickup_scheduled';
                     const isProductReceived = ['product_received', 'product_return_received'].includes(retStatus);
                     const isExchangeDispatched = retStatus === 'exchange_dispatched';
+                    const isCompleted = ['refund_completed', 'refunded', 'exchanged'].includes(retStatus);
+
+                    const exchangePriceDiff = Number(retReq.priceDifference || 0);
+                    const exchangePriceAdjType = retReq.priceAdjustmentType || (exchangePriceDiff > 0 ? 'extra_payment' : exchangePriceDiff < 0 ? 'partial_refund' : 'none');
+                    const refundDueAmount = Math.abs(exchangePriceDiff) || Number(retReq.refundAmount || 0) || Math.max(0, Number(retReq.originalItemPrice || 0) - Number(retReq.replacementItemPrice || 0));
+                    const hasRefundDue = isExchange && (exchangePriceAdjType === 'partial_refund' || exchangePriceDiff < 0 || refundDueAmount > 0);
+                    const isExchangeRefundDone = Boolean(retReq.refundTxnId || displayOrder?.refundTxnId || order?.refundTxnId || displayOrder?.refundDetails?.refundTxnId || order?.refundDetails?.refundTxnId || retReq.refundStatus === 'completed');
 
                     return (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isRequested && (
-                          <>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isRequested && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={Boolean(actionLoadingKey)}
+                                onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved', {}, 'approve')}
+                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              >
+                                {actionLoadingKey === 'approve' ? (
+                                  <>
+                                    <Loader2 size={13} className="animate-spin text-white" />
+                                    <span>Approving {isExchange ? 'Exchange' : 'Return'}...</span>
+                                  </>
+                                ) : (
+                                  <span>✓ Approve {isExchange ? 'Exchange' : 'Return'}</span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={Boolean(actionLoadingKey)}
+                                onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
+                                className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              >
+                                <span>✕ Reject Request</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* For Returns: Schedule pickup */}
+                          {isApproved && isReturn && (
                             <button
                               type="button"
                               disabled={Boolean(actionLoadingKey)}
-                              onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved', {}, 'approve')}
-                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
+                              className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                             >
-                              {actionLoadingKey === 'approve' ? (
+                              <span>📅 Schedule Return Pickup</span>
+                            </button>
+                          )}
+
+                          {/* For Exchanges: Direct 1-Round Doorstep Swap (Delivers Replacement + Picks Up Return at same time) */}
+                          {(isApproved || isPickupScheduled || isProductReceived) && isExchange && !isExchangeDispatched && (
+                            <button
+                              type="button"
+                              disabled={Boolean(actionLoadingKey)}
+                              onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
+                              className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            >
+                              <span>🚚 Dispatch Replacement & Doorstep Swap</span>
+                            </button>
+                          )}
+
+                          {/* For Returns: Mark product received and restore stock */}
+                          {isPickupScheduled && isReturn && (
+                            <button
+                              type="button"
+                              disabled={Boolean(actionLoadingKey)}
+                              onClick={() => handleReturnExchangeStatusUpdate('product_received', {}, 'received')}
+                              className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            >
+                              {actionLoadingKey === 'received' ? (
                                 <>
                                   <Loader2 size={13} className="animate-spin text-white" />
-                                  <span>Approving {isExchange ? 'Exchange' : 'Return'}...</span>
+                                  <span>Restoring Stock...</span>
                                 </>
                               ) : (
-                                <span>✓ Approve {isExchange ? 'Exchange' : 'Return'}</span>
+                                <span>📦 Mark Product Received & Restore Stock</span>
                               )}
                             </button>
+                          )}
+
+                          {/* For Returns: Mark Refund Completed */}
+                          {isProductReceived && isReturn && (
                             <button
                               type="button"
                               disabled={Boolean(actionLoadingKey)}
-                              onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
-                              className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
+                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                             >
-                              <span>✕ Reject Request</span>
+                              <span>💳 Mark Refund Completed</span>
                             </button>
-                          </>
-                        )}
+                          )}
 
-                        {/* For Returns: Schedule pickup */}
-                        {isApproved && isReturn && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => setReturnActionState(prev => ({ ...prev, showPickupInput: !prev.showPickupInput }))}
-                            className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>📅 Schedule Return Pickup</span>
-                          </button>
-                        )}
+                          {/* For Exchanges: Complete Doorstep Swap (Replacement Delivered & Returned Unit Restocked in 1 round) */}
+                          {(isExchangeDispatched || (isProductReceived && isExchange)) && (
+                            <button
+                              type="button"
+                              disabled={Boolean(actionLoadingKey)}
+                              onClick={() => {
+                                if (hasRefundDue && !isExchangeRefundDone) {
+                                  setReturnActionState(prev => ({ ...prev, showRefundInput: true }));
+                                } else {
+                                  handleReturnExchangeStatusUpdate('exchanged', {}, 'complete');
+                                }
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            >
+                              {actionLoadingKey === 'complete' ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin text-white" />
+                                  <span>Completing Exchange...</span>
+                                </>
+                              ) : hasRefundDue && !isExchangeRefundDone ? (
+                                <span>💳 Process Customer Refund (₹{refundDueAmount}) & Complete Swap</span>
+                              ) : (
+                                <span>✓ Complete Doorstep Swap (Replacement Delivered & Old Item Restocked)</span>
+                              )}
+                            </button>
+                          )}
 
-                        {/* For Exchanges: Direct 1-Round Doorstep Swap (Delivers Replacement + Picks Up Return at same time) */}
-                        {(isApproved || isPickupScheduled || isProductReceived) && isExchange && !isExchangeDispatched && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => setReturnActionState(prev => ({ ...prev, showDispatchInput: !prev.showDispatchInput }))}
-                            className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>🚚 Dispatch Replacement & Doorstep Swap</span>
-                          </button>
-                        )}
+                          {isCompleted && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-[11px] bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                                <span>✅ Lifecycle Completed</span>
+                              </div>
 
-                        {/* For Returns: Mark product received and restore stock */}
-                        {isPickupScheduled && isReturn && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => handleReturnExchangeStatusUpdate('product_received', {}, 'received')}
-                            className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            {actionLoadingKey === 'received' ? (
-                              <>
-                                <Loader2 size={13} className="animate-spin text-white" />
-                                <span>Restoring Stock...</span>
-                              </>
+                              {/* Customer Refund button if exchange was swapped/completed without entering refund transaction yet */}
+                              {isExchange && hasRefundDue && !isExchangeRefundDone && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(actionLoadingKey)}
+                                  onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
+                                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <span>💳 Process Customer Refund (₹{refundDueAmount})</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {returnActionState.showRefundInput && (
+                          <div className="p-3.5 bg-white rounded-xl border border-emerald-300 shadow-xs space-y-2.5">
+                            {isExchange && hasRefundDue ? (
+                              <div className="p-2.5 bg-amber-50/90 border border-amber-200 rounded-lg text-xs space-y-1">
+                                <p className="font-extrabold text-amber-950 flex items-center gap-1">
+                                  <span>💳 Customer Partial Refund Due:</span>
+                                  <span className="text-emerald-800 font-black text-sm">₹{refundDueAmount}</span>
+                                </p>
+                                <p className="text-[11px] text-amber-800">
+                                  Replacement product price is ₹{refundDueAmount} lower than original product.
+                                  Transfer ₹{refundDueAmount} to customer's bank account and enter the transaction / UTR reference below to complete.
+                                </p>
+                              </div>
                             ) : (
-                              <span>📦 Mark Product Received & Restore Stock</span>
+                              <label className="block text-[11px] font-bold text-gray-700">Refund Transaction Reference / ID:</label>
                             )}
-                          </button>
-                        )}
 
-                        {/* For Returns: Mark Refund Completed */}
-                        {isProductReceived && isReturn && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
-                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            <span>💳 Mark Refund Completed</span>
-                          </button>
-                        )}
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder={isExchange ? "Enter Refund Transaction ID / Bank UTR (e.g. UPI-REF-98765432)" : "Enter Refund Transaction ID / Reference (e.g. TXN987654321)"}
+                                value={returnActionState.refundTxnId}
+                                onChange={e => setReturnActionState(prev => ({ ...prev, refundTxnId: e.target.value }))}
+                                className="flex-1 px-3 py-1.5 text-xs border border-emerald-300 rounded-lg outline-hidden font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setReturnActionState(prev => ({ ...prev, refundTxnId: `UPI-REF-${Date.now().toString().slice(-8)}` }))}
+                                className="px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-emerald-100"
+                              >
+                                Generate ID
+                              </button>
+                            </div>
 
-                        {/* For Exchanges: Complete Doorstep Swap (Replacement Delivered & Returned Unit Restocked in 1 round) */}
-                        {(isExchangeDispatched || (isProductReceived && isExchange)) && (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionLoadingKey)}
-                            onClick={() => handleReturnExchangeStatusUpdate('exchanged', {}, 'complete')}
-                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            {actionLoadingKey === 'complete' ? (
-                              <>
-                                <Loader2 size={13} className="animate-spin text-white" />
-                                <span>Completing Exchange...</span>
-                              </>
-                            ) : (
-                              <span>✓ Complete Doorstep Swap (Replacement Delivered & Old Item Restocked)</span>
-                            )}
-                          </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={Boolean(actionLoadingKey)}
+                                onClick={() => {
+                                  const finalTxn = returnActionState.refundTxnId || `UPI-REF-${Date.now().toString().slice(-8)}`;
+                                  handleReturnExchangeStatusUpdate(
+                                    isExchange ? 'exchanged' : 'refund_completed',
+                                    {
+                                      refundTxnId: finalTxn,
+                                      refundTransactionId: finalTxn,
+                                      refundAmount: isExchange ? refundDueAmount : undefined
+                                    },
+                                    'refund'
+                                  );
+                                }}
+                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              >
+                                {actionLoadingKey === 'refund' ? (
+                                  <>
+                                    <Loader2 size={13} className="animate-spin text-white" />
+                                    <span>{isExchange ? 'Saving & Completing Refund...' : 'Confirming Refund...'}</span>
+                                  </>
+                                ) : (
+                                  <span>{isExchange ? `✓ Complete Exchange & Record ₹${refundDueAmount} Refund` : 'Confirm Refund Completed'}</span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: false }))}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     );
@@ -1024,32 +1216,7 @@ export default function OrderDetailModal({
                     </div>
                   )}
 
-                  {returnActionState.showRefundInput && (
-                    <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Enter Refund Transaction ID / Reference (e.g. TXN987654321)"
-                        value={returnActionState.refundTxnId}
-                        onChange={e => setReturnActionState(prev => ({ ...prev, refundTxnId: e.target.value }))}
-                        className="w-full px-3 py-1.5 text-xs border border-emerald-300 rounded-lg outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        disabled={Boolean(actionLoadingKey)}
-                        onClick={() => handleReturnExchangeStatusUpdate('refund_completed', { refundTxnId: returnActionState.refundTxnId }, 'refund')}
-                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-                      >
-                        {actionLoadingKey === 'refund' ? (
-                          <>
-                            <Loader2 size={13} className="animate-spin text-white" />
-                            <span>Confirming Refund...</span>
-                          </>
-                        ) : (
-                          <span>Confirm Refund Completed</span>
-                        )}
-                      </button>
-                    </div>
-                  )}
+
 
                   {returnActionState.showDispatchInput && (
                     <div className="p-3.5 bg-white rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
@@ -1224,6 +1391,28 @@ export default function OrderDetailModal({
             </div>
           )}
 
+          {/* Unconfirmed Partner Banner */}
+          {!readOnly && !isDeliveryPartnerDecided(displayOrder) && !hasActiveReturnRequest(displayOrder) && (
+            <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="text-amber-600 shrink-0" size={16} />
+                <span className="text-amber-950 font-medium">
+                  <strong>Order Pending Confirmation:</strong> Delivery partner must be selected to confirm. Please choose Self-Delivery or 3rd-Party Courier below.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const sec = document.getElementById('admin-delivery-details-section');
+                  if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                <Truck size={13} /> Select Delivery Partner ↓
+              </button>
+            </div>
+          )}
+
           {/* Quick Actions Bar / View-Only Status */}
           {readOnly ? (
             <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/70 flex items-center justify-between gap-3 text-xs">
@@ -1386,7 +1575,7 @@ export default function OrderDetailModal({
                         <span>{isLocked ? 'Invoice Locked (Pending)' : 'Tax Invoice & Settlement'}</span>
                       </button>
 
-                      {!isLocked && (
+                      {!isLocked && !isOrderSelfDelivery(order) && (
                         <button
                           onClick={() => {
                             setInvoiceModalMode('shipping_label');
@@ -1663,55 +1852,6 @@ export default function OrderDetailModal({
                           }`}>
                             {itemStat}
                           </span>
-                          {!readOnly && (
-                            <select
-                              value={itemStat}
-                              onChange={(e) => {
-                                const newSt = e.target.value;
-                                const activeOrder = displayOrder || order;
-                                const ordId = activeOrder._id || activeOrder.id || activeOrder.orderId;
-                                const itemIdVal = item._id || item.id || (item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId) || idx;
-
-                                // Optimistically update local modal state
-                                setCurrentOrder(prev => {
-                                  if (!prev || !Array.isArray(prev.items)) return prev;
-                                  const updatedItems = prev.items.map((it, i) => i === idx ? { ...it, status: newSt } : it);
-                                  return { ...prev, items: updatedItems };
-                                });
-
-                                if (onUpdateStatus) {
-                                  onUpdateStatus(ordId, newSt, {
-                                    itemId: itemIdVal,
-                                    itemIndex: idx,
-                                    productId: item.productId && typeof item.productId === 'object' ? item.productId._id : item.productId
-                                  });
-                                }
-                                setStatusUpdatedToast(true);
-                                setTimeout(() => setStatusUpdatedToast(false), 2000);
-                              }}
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 bg-white hover:border-teal-600 focus:outline-none cursor-pointer"
-                              title="Update status for this specific item"
-                            >
-                              <option value="Pending">Pending</option>
-                              <option value="Confirmed">Confirmed</option>
-                              <option value="Processing">Processing</option>
-                              <option value="Packed">Packed</option>
-                              <option value="Shipped">Shipped</option>
-                              <option value="Out for Delivery">Out for Delivery</option>
-                              <option value="Delivered">Delivered</option>
-                              <option value="Exchange Requested">Exchange Requested</option>
-                              <option value="Return Requested">Return Requested</option>
-                              <option value="Exchange Approved">Exchange Approved</option>
-                              <option value="Return Approved">Return Approved</option>
-                              <option value="Exchange Pickup Scheduled">Exchange Pickup Scheduled</option>
-                              <option value="Exchanged">Exchanged</option>
-                              <option value="Refunded">Refunded</option>
-                              <option value="Cancelled">Cancelled</option>
-                              {!['Pending', 'Confirmed', 'Processing', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered', 'Exchange Requested', 'Return Requested', 'Exchange Approved', 'Return Approved', 'Exchange Pickup Scheduled', 'Exchanged', 'Refunded', 'Cancelled'].includes(itemStat) && (
-                                <option value={itemStat}>{itemStat}</option>
-                              )}
-                            </select>
-                          )}
                         </div>
                       );
                     })()}
@@ -2503,7 +2643,7 @@ export default function OrderDetailModal({
             const sellerContactPhone = sellerDetails?.phone || order.items?.[0]?.sellerPhone || '';
 
             return (
-              <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-3">
+              <div id="admin-delivery-details-section" className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-teal-950">
                     <Truck size={15} className="text-teal-700" />

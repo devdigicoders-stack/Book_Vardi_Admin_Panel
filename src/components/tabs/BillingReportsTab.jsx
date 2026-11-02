@@ -32,7 +32,7 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import { SERVER_URL } from '../../utils/api';
 import { exportToExcel } from '../../utils/excelExporter';
-import { getSellerInvoiceNumber } from '../../utils/invoiceHelper';
+import { getSellerInvoiceNumber, getSellerCreditNoteNumber, getSellerExchangeInvoiceNumber, isOrderExchangeDelivered } from '../../utils/invoiceHelper';
 
 // Helper to check if an order is Third-Party Courier or Direct Self-Delivery
 const isOrderThirdPartyCourier = (o) => {
@@ -293,24 +293,68 @@ export default function BillingReportsTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
+  // Helper to parse dates safely across all formats (ISO, DD/MM/YYYY, text)
+  const parseOrderDate = (dateVal, createdAtVal) => {
+    if (createdAtVal) {
+      const cd = new Date(createdAtVal);
+      if (!isNaN(cd.getTime())) return cd;
+    }
+    if (!dateVal) return new Date();
+    if (dateVal instanceof Date && !isNaN(dateVal.getTime())) return dateVal;
+    const str = String(dateVal).trim();
+    const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const month = parseInt(dmyMatch[2], 10) - 1;
+      const year = parseInt(dmyMatch[3], 10);
+      return new Date(year, month, day, 12, 0, 0);
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+    return new Date();
+  };
+
   // Normalization and Enrichment of all orders
   const enrichedOrders = useMemo(() => {
-    return (orders || []).map(o => {
-      const orderDate = new Date(o.createdAt || o.date || Date.now());
+    const list = [];
+    (orders || []).forEach(o => {
+      const orderDate = parseOrderDate(o.date, o.createdAt);
       const orderIdStr = o.orderId || (o._id ? o._id.toString().substring(0, 8).toUpperCase() : 'ORD');
-      const invoiceNo = getSellerInvoiceNumber(o, null, orders);
-      const creditNoteNo = `CN-${invoiceNo}`;
-      const exchangeInvoiceNo = `EXCH-${invoiceNo}`;
 
       const rawStatus = String(o.status || o.overallStatus || '').toLowerCase().trim();
+      const normStatus = rawStatus.replace(/[\s-]+/g, '_');
       const returnReqStatus = String(o.returnRequest?.status || '').toLowerCase().trim();
-      const returnType = String(o.returnRequest?.type || o.returnRequest?.requestType || '').toLowerCase();
+      const normReturnStatus = returnReqStatus.replace(/[\s-]+/g, '_');
+      const returnType = String(o.returnRequest?.type || o.returnRequest?.requestType || '').toLowerCase().trim();
 
-      const isCancelled = rawStatus === 'cancelled' || Boolean(o.cancelledAt);
-      const isReturn = returnType === 'return' || rawStatus.includes('return') || returnReqStatus.includes('return');
-      const isExchange = returnType === 'exchange' || rawStatus.includes('exchange') || returnReqStatus.includes('exchange');
-      const isRefunded = ['refunded', 'refund_completed', 'refund_processed'].includes(rawStatus) ||
-                         ['refunded', 'refund_completed', 'refunded'].includes(returnReqStatus);
+      const isCancelled = normStatus.includes('cancel') || Boolean(o.cancelledAt) || Boolean(o.cancellationReason);
+
+      const isExchange = Boolean(
+        returnType === 'exchange' ||
+        normStatus.includes('exchange') ||
+        normReturnStatus.includes('exchange') ||
+        String(o.deliveryStatus || '').toLowerCase().includes('swap') ||
+        String(o.selfDeliveryDetails?.status || '').toLowerCase().includes('swap') ||
+        Boolean(o.returnRequest?.exchangeSize || o.returnRequest?.exchangeLength)
+      );
+
+      const isReturn = !isExchange && Boolean(
+        returnType === 'return' ||
+        normStatus.includes('return') ||
+        normReturnStatus.includes('return') ||
+        normStatus.includes('refund') ||
+        normReturnStatus.includes('refund') ||
+        normStatus.includes('product_received') ||
+        normReturnStatus.includes('product_received') ||
+        Boolean(o.returnRequest?.reason && o.returnRequest?.reason !== 'N/A') ||
+        Boolean(o.refundDetails?.refundTxnId) ||
+        Boolean(o.refundStatus)
+      );
+
+      const isRefunded = ['refunded', 'refund_completed', 'refund_processed', 'completed'].includes(normStatus) ||
+                         ['refunded', 'refund_completed', 'refund_processed'].includes(normReturnStatus) ||
+                         String(o.refundStatus || '').toLowerCase().includes('completed') ||
+                         String(o.refundStatus || '').toLowerCase().includes('refunded');
 
       const isThirdParty = isOrderThirdPartyCourier(o);
       const isSelfDelivery = !isThirdParty;
@@ -336,6 +380,18 @@ export default function BillingReportsTab() {
         const targetStore = String(sellerStoreName).toLowerCase().replace(/[^a-z0-9]/g, '');
         return targetStore && cleanStore && (targetStore === cleanStore || targetStore.includes(cleanStore) || cleanStore.includes(targetStore));
       });
+
+      const invoiceNo = o.sellerInvoiceNo || o.invoiceNumber || getSellerInvoiceNumber(o, matchedSeller, orders);
+      const creditNoteNo = o.sellerCreditNoteNo || o.creditNoteNumber || getSellerCreditNoteNumber(o, matchedSeller, orders);
+      const isExchDelivered = isOrderExchangeDelivered(o);
+      const exchangeInvoiceNo = o.exchangeInvoiceNumber || o.sellerExchangeInvoiceNo || getSellerExchangeInvoiceNumber(o, matchedSeller, orders);
+
+      const isCreditNoteOrder = Boolean(isCancelled || isReturn || isRefunded || isExchange || o.creditNoteNumber || o.sellerCreditNoteNo);
+
+      const creditNoteDate = parseOrderDate(
+        o.returnRequest?.updatedAt || o.returnRequest?.requestedAt || o.cancelledAt || o.refundDetails?.refundedAt || o.date,
+        o.returnRequest?.updatedAt || o.returnRequest?.requestedAt || o.cancelledAt || o.refundDetails?.refundedAt || o.createdAt
+      );
 
       // Statutory Exemption check (09BLMPK2840L2ZN / National School Dress / Digicoders / 0% Commission)
       const candidateGstList = [
@@ -461,17 +517,20 @@ export default function BillingReportsTab() {
       const sellerState = o.sellerState || 'Uttar Pradesh';
       const isInterState = customerState && sellerState && customerState.toLowerCase().trim() !== sellerState.toLowerCase().trim();
 
-      return {
+      const baseEnriched = {
         ...o,
         orderDate,
         orderIdStr,
         invoiceNo,
         creditNoteNo,
         exchangeInvoiceNo,
+        creditNoteDate,
         isCancelled,
         isReturn,
         isExchange,
         isRefunded,
+        isCreditNoteOrder,
+        isExchangeDelivered: isExchDelivered,
         isSelfDelivery,
         isThirdParty,
         sellerId,
@@ -497,7 +556,38 @@ export default function BillingReportsTab() {
         customerCity,
         customerState
       };
+
+      list.push(baseEnriched);
+
+      // Section 31: If exchange replacement was delivered, issue new consecutive replacement Tax Invoice
+      if (isExchDelivered) {
+        const replacementDate = parseOrderDate(
+          o.returnRequest?.exchangedAt || o.exchangedAt || o.deliveredAt || o.returnRequest?.updatedAt || o.date,
+          o.returnRequest?.exchangedAt || o.exchangedAt || o.deliveredAt || o.returnRequest?.updatedAt || o.createdAt
+        );
+
+        list.push({
+          ...baseEnriched,
+          _id: `${o._id || o.id}_exch_replacement`,
+          id: `${o.id || o._id}_exch_replacement`,
+          baseOrderId: o.orderId || o.id || o._id,
+          orderIdStr: orderIdStr,
+          invoiceNo: exchangeInvoiceNo,
+          orderDate: replacementDate,
+          creditNoteNo: creditNoteNo,
+          originalInvoiceNo: invoiceNo,
+          isReplacementInvoice: true,
+          isCancelled: false,
+          isRefunded: false,
+          isReturn: false,
+          isExchange: false,
+          isCreditNoteOrder: false,
+          status: 'Delivered (Exchange Swap)',
+          displayStatus: 'Exchange Delivered'
+        });
+      }
     });
+    return list;
   }, [orders, sellers]);
 
   // Compute Active Period Date Range & Label
@@ -571,12 +661,12 @@ export default function BillingReportsTab() {
 
   // Filter Orders based on Report Type, Date, Seller, Order Type, and Search
   const filteredOrders = useMemo(() => {
-    return enrichedOrders.filter(o => {
+    const res = (enrichedOrders || []).filter(o => {
       // 1. Report Type filter
       if (reportType === 'tax_invoice') {
         if (o.isCancelled || o.isRefunded) return false;
       } else if (reportType === 'credit_note') {
-        if (!o.isCancelled && !o.isRefunded && !o.isReturn) return false;
+        if (!o.isCreditNoteOrder) return false;
       }
 
       // 2. Seller filter
@@ -587,14 +677,22 @@ export default function BillingReportsTab() {
       }
 
       // 3. Date range filter
-      const d = o.orderDate;
-      if (periodDetails.startDate && d < periodDetails.startDate) return false;
-      if (periodDetails.endDate && d > periodDetails.endDate) return false;
+      const d = (reportType === 'credit_note') ? (o.creditNoteDate || o.orderDate) : o.orderDate;
+      const altD = o.orderDate;
+      if (periodDetails.startDate && periodDetails.endDate) {
+        const inPrimary = (d >= periodDetails.startDate && d <= periodDetails.endDate);
+        const inAlt = (altD >= periodDetails.startDate && altD <= periodDetails.endDate);
+        if (!inPrimary && !inAlt) return false;
+      } else if (periodDetails.startDate) {
+        if (d < periodDetails.startDate && altD < periodDetails.startDate) return false;
+      } else if (periodDetails.endDate) {
+        if (d > periodDetails.endDate && altD > periodDetails.endDate) return false;
+      }
 
       // 4. Order Type filter
       if (orderTypeFilter === 'self_delivery' && !o.isSelfDelivery) return false;
       if (orderTypeFilter === 'courier' && !o.isThirdParty) return false;
-      if (orderTypeFilter === 'returns' && !o.isReturn && !o.isCancelled) return false;
+      if (orderTypeFilter === 'returns' && !o.isReturn && !o.isCancelled && !o.isRefunded) return false;
       if (orderTypeFilter === 'exchanges' && !o.isExchange) return false;
 
       // 5. Search query
@@ -609,6 +707,16 @@ export default function BillingReportsTab() {
       }
 
       return true;
+    });
+
+    // Sort chronologically reverse (newest invoice numbers and events first)
+    return (res || []).sort((a, b) => {
+      const invA = String(a.invoiceNo || '').match(/\d+/);
+      const invB = String(b.invoiceNo || '').match(/\d+/);
+      const numA = invA ? parseInt(invA[0], 10) : 0;
+      const numB = invB ? parseInt(invB[0], 10) : 0;
+      if (numA !== numB) return numB - numA;
+      return (b.orderDate?.getTime() || 0) - (a.orderDate?.getTime() || 0);
     });
   }, [enrichedOrders, reportType, selectedSellerId, periodDetails, orderTypeFilter, searchQuery]);
 
@@ -632,8 +740,15 @@ export default function BillingReportsTab() {
     let uniformSales5Gst = 0;
     let otherSales1218Gst = 0;
 
-    filteredOrders.forEach(o => {
-      if (o.isCancelled || o.isRefunded) {
+    (filteredOrders || []).forEach(o => {
+      if (reportType === 'credit_note') {
+        totalCreditNotesGross += o.grossAmount;
+        totalTaxable += o.totalTaxableValue;
+        totalGst += o.totalGstAmount;
+        totalCgst += o.cgstAmount;
+        totalSgst += o.sgstAmount;
+        totalIgst += o.igstAmount;
+      } else if (o.isCancelled || o.isRefunded) {
         totalCreditNotesGross += o.grossAmount;
       } else {
         totalInvoicedGross += o.grossAmount;
@@ -1057,9 +1172,10 @@ export default function BillingReportsTab() {
 
     const getCells = (o, idx) => {
       const isReturnOrCancel = o.isCancelled || o.isRefunded;
+      const docNo = isReturnOrCancel ? o.creditNoteNo : o.invoiceNo;
       return [
         idx + 1,
-        isReturnOrCancel ? o.creditNoteNo : (o.isExchange ? o.exchangeInvoiceNo : o.invoiceNo),
+        docNo,
         o.orderDate.toLocaleDateString('en-IN'),
         `#${o.orderIdStr}`,
         o.sellerStoreName,
@@ -1076,10 +1192,11 @@ export default function BillingReportsTab() {
 
     const getXlsx = (o, idx) => {
       const isReturnOrCancel = o.isCancelled || o.isRefunded;
+      const docNo = isReturnOrCancel ? o.creditNoteNo : o.invoiceNo;
       return {
         'S.No': idx + 1,
-        'Invoice / Doc No': isReturnOrCancel ? o.creditNoteNo : (o.isExchange ? o.exchangeInvoiceNo : o.invoiceNo),
-        'Document Type': isReturnOrCancel ? 'Credit Note (Sec 34)' : (o.isExchange ? 'Replacement Tax Invoice' : 'Tax Invoice (Sec 31)'),
+        'Invoice / Doc No': docNo,
+        'Document Type': isReturnOrCancel ? 'Credit Note (Sec 34)' : (o.isReplacementInvoice ? 'Replacement Tax Invoice' : 'Tax Invoice (Sec 31)'),
         'Date': o.orderDate.toLocaleDateString('en-IN'),
         'Order ID': o.orderIdStr,
         'Merchant Store': o.sellerStoreName,
@@ -1819,18 +1936,18 @@ export default function BillingReportsTab() {
                         <div className="flex items-center justify-center gap-1">
                           {!isReturnOrCancel && (
                             <a
-                              href={`${SERVER_URL}/orders/${o.id || o._id}/invoice`}
+                              href={o.isReplacementInvoice ? `${SERVER_URL}/orders/${o.baseOrderId || o.orderId || o.id}/exchange-invoice` : `${SERVER_URL}/orders/${o.id || o._id}/invoice`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-bold rounded-lg transition-colors border border-gray-200"
-                              title="Download Invoice PDF"
+                              title={o.isReplacementInvoice ? "Download Replacement Tax Invoice PDF" : "Download Invoice PDF"}
                             >
                               PDF
                             </a>
                           )}
-                          {(isReturnOrCancel || o.isExchange) && (
+                          {(isReturnOrCancel || o.isExchange || o.isCreditNoteOrder) && (
                             <a
-                              href={`${SERVER_URL}/orders/${o.id || o._id}/credit-note`}
+                              href={`${SERVER_URL}/orders/${o.baseOrderId || o.orderId || o.id || o._id}/credit-note`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 text-[10px] font-bold rounded-lg transition-colors border border-rose-200"
