@@ -652,7 +652,8 @@ export default function OrdersTab() {
                   ))
                 ) : (
                   filteredRetailOrders.map((order) => {
-                  const displaySellerName = order.sellerStoreName || order.storeName || order.sellerDetails?.storeName || order.sellerName || (order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName) || 'National School Dress';
+                  const rawSeller = (order.items?.[0]?.sellerStoreName || order.items?.[0]?.storeName || order.items?.[0]?.sellerDetails?.storeName) || order.sellerStoreName || order.storeName || order.sellerDetails?.storeName || order.sellerName || 'National school dress evam pustak bhandar';
+                  const displaySellerName = String(rawSeller).toLowerCase().includes('digicoder') ? 'National school dress evam pustak bhandar' : rawSeller;
 
                   return (
                   <tr key={order.id} className="hover:bg-gray-50/70 transition-colors">
@@ -692,10 +693,13 @@ export default function OrdersTab() {
                     {/* Status */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {(() => {
+                        const isCancelled = Boolean(order.cancelledAt || order.cancellationReason || String(order.status || '').toLowerCase().includes('cancel'));
                         const hasPartner = isDeliveryPartnerDecided(order);
-                        const effectiveStatus = (!hasPartner && !hasActiveReturnRequest(order) && ['confirmed', 'packed'].includes(String(order.status || '').toLowerCase()))
-                          ? 'Pending'
-                          : (order.status || 'Pending');
+                        const effectiveStatus = isCancelled
+                          ? 'Cancelled'
+                          : ((!hasPartner && !hasActiveReturnRequest(order) && ['confirmed', 'packed'].includes(String(order.status || '').toLowerCase()))
+                              ? 'Pending'
+                              : (order.status || 'Pending'));
 
                         return (
                           <div className="flex flex-col items-start gap-1">

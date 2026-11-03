@@ -58,6 +58,7 @@ export default function LogisticsTab() {
   const [shippingFee, setShippingFee] = useState(String(settings.shippingFee ?? 49));
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(settings.minOrderFreeShipping || settings.freeShippingThreshold || '999'));
   const [codFee, setCodFee] = useState(String(settings.codFee ?? 0));
+  const [defaultPackageWeight, setDefaultPackageWeight] = useState(String(settings.defaultPackageWeightKg ?? '0.5'));
 
   useEffect(() => {
     if (settings) {
@@ -67,6 +68,9 @@ export default function LogisticsTab() {
       }
       if (settings.codFee !== undefined) {
         setCodFee(String(settings.codFee));
+      }
+      if (settings.defaultPackageWeightKg !== undefined) {
+        setDefaultPackageWeight(String(settings.defaultPackageWeightKg));
       }
     }
   }, [settings]);
@@ -119,7 +123,8 @@ export default function LogisticsTab() {
         shippingFee: Number(shippingFee),
         minOrderFreeShipping: Number(freeShippingThreshold),
         freeShippingThreshold: Number(freeShippingThreshold),
-        codFee: Number(codFee)
+        codFee: Number(codFee),
+        defaultPackageWeightKg: Number(defaultPackageWeight) || 0.5
       });
     }
     setTimeout(() => {
@@ -204,6 +209,31 @@ export default function LogisticsTab() {
                   onChange={(e) => setBluedartKey(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-mono text-xs"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-gray-700">Package Weight Slab</label>
+                  <span className="text-[10px] text-emerald-800 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Default: 0.500 kg (500g)
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0.1"
+                    max="50"
+                    value={defaultPackageWeight}
+                    onChange={(e) => setDefaultPackageWeight(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-gray-900 pr-10 text-xs focus:ring-2 focus:ring-amber-500"
+                    placeholder="0.5"
+                  />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-gray-400">kg</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Standard 0.500 kg (500 grams) package slab reduces Shiprocket courier shipping cost.
+                </p>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1">

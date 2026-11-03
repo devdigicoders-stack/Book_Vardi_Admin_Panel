@@ -614,9 +614,7 @@ export const toggleSellerStatusApi = async (id, status, reason = '') => {
 // ==========================================
 export const fetchAdminOrdersApi = async () => {
   try {
-    const res = await fetch(`${SERVER_URL}/orders/admin/all`, {
-      headers: getAuthHeaders()
-    });
+    const res = await fetch(`${SERVER_URL}/orders/admin/all?_t=${Date.now()}`, { headers: { ...getAuthHeaders(), "Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache" } });
     if (!res.ok) throw new Error('API Error');
     return await res.json();
   } catch (error) {

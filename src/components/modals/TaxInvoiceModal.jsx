@@ -856,16 +856,38 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
     const address = sItemSeller?.address || sDetails.address || sItem.sellerAddress || order.sellerAddress || 'Registered Merchant Store Address';
     const pincode = sItemSeller?.pincode || sDetails.pincode || sItem.sellerPincode || '226001';
 
+    let finalStoreName = sName;
+    let finalOwnerName = ownerName || 'praveen kumar';
+    let finalPhone = phone;
+    let finalEmail = email;
+    let finalAddress = address;
+    let finalCity = city;
+    let finalState = state;
+    let finalPincode = pincode;
+    let finalGstin = gstin;
+
+    if (String(finalStoreName).toLowerCase().includes('digicoder') || String(finalAddress).toLowerCase().includes('digicoder')) {
+      finalStoreName = 'National school dress evam pustak bhandar';
+      finalOwnerName = 'praveen kumar';
+      finalPhone = '+91 9027237697';
+      finalEmail = 'nationalschooldressbehat@gmail.com';
+      finalAddress = 'shakhumbhari road , opp uttam palace';
+      finalCity = 'saharanpur';
+      finalState = 'Uttar Pradesh';
+      finalPincode = '247121';
+      finalGstin = '09BLMPK2840L2ZN';
+    }
+
     return {
-      storeName: sName,
-      ownerName,
-      phone,
-      email,
-      address,
-      city,
-      state,
-      pincode,
-      gstNumber: gstin || '09AAACB1234F1Z9'
+      storeName: finalStoreName,
+      ownerName: finalOwnerName,
+      phone: finalPhone,
+      email: finalEmail,
+      address: finalAddress,
+      city: finalCity,
+      state: finalState,
+      pincode: finalPincode,
+      gstNumber: finalGstin || '09BLMPK2840L2ZN'
     };
   };
 
@@ -1343,7 +1365,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   const companyGstin = platformSettings.companyGstin || '09AAACB1234F1Z9';
 
   const resolvedInvoiceNumber = useMemo(() => {
-    if (isOrderExchangeDelivered(order)) {
+    if (order.isReplacementInvoice) {
       return getSellerExchangeInvoiceNumber(order, activeSellerGroup, []);
     }
     return getSellerInvoiceNumber(order, activeSellerGroup, []);

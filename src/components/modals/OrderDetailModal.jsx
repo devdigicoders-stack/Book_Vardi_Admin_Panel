@@ -67,15 +67,18 @@ export const hasActiveReturnRequest = (order) => {
 
 export const isOrderSelfDelivery = (ord) => {
   if (!ord) return false;
-  const mode = String(ord.deliveryMode || ord.deliveryType || '').toLowerCase();
-  const hasCourier = Boolean(ord.courierName && ord.courierName !== 'N/A' && ord.courierName !== '');
+  const mode = String(ord.deliveryMode || ord.deliveryType || '').toLowerCase().trim();
+  const courier = String(ord.courierName || ord.carrier || ord.thirdPartyDetails?.courierName || '').trim();
+  const hasCourier = Boolean(courier && courier !== 'N/A' && courier !== 'null' && courier !== 'undefined' && courier !== '');
   if (hasCourier) return false;
+  if (mode === 'third_party' || mode === 'courier' || mode === 'shiprocket') return false;
+
   return Boolean(
+    mode === 'self_delivery' ||
     mode.includes('self') ||
     ord.selfDeliveryDetails?.deliveryPartnerToken ||
     ord.selfDeliveryDetails?.deliveryPersonName ||
-    ord.deliveryOtp ||
-    (ord.settlementRule && String(ord.settlementRule).includes('SELF_DELIVERY'))
+    ord.deliveryOtp
   );
 };
 
@@ -596,17 +599,23 @@ export default function OrderDetailModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-display font-bold text-lg text-gray-900">Order #{order.id}</h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                  (displayOrder?.overallStatus || displayOrder?.status) === 'Delivered' ? 'bg-emerald-100 text-emerald-800' :
-                  (displayOrder?.overallStatus || displayOrder?.status) === 'Cancelled' ? 'bg-red-100 text-red-800' :
-                  ((displayOrder?.overallStatus || displayOrder?.status) === 'Out for Delivery' || (displayOrder?.overallStatus || displayOrder?.status) === 'out_for_delivery') ? 'bg-purple-100 text-purple-900 border border-purple-200' :
-                  (displayOrder?.overallStatus || displayOrder?.status) === 'Shipped' ? 'bg-blue-100 text-blue-800' :
-                  ((displayOrder?.overallStatus || displayOrder?.status) === 'Packed' || (displayOrder?.overallStatus || displayOrder?.status) === 'Confirmed') ? 'bg-indigo-100 text-indigo-800' :
-                  (displayOrder?.overallStatus || displayOrder?.status) === 'Processing' ? 'bg-sky-100 text-sky-800' :
-                  'bg-amber-100 text-amber-800'
-                }`}>
-                  {displayOrder?.overallStatus || displayOrder?.status}
-                </span>
+                {(() => {
+                  const isCancelledHdr = Boolean(order.cancelledAt || order.cancellationReason || String(displayOrder?.overallStatus || displayOrder?.status || '').toLowerCase() === 'cancelled');
+                  const currentDisplayStatus = isCancelledHdr ? "Cancelled" : (displayOrder?.overallStatus || displayOrder?.status);
+                  return (
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                      currentDisplayStatus === "Delivered" ? "bg-emerald-100 text-emerald-800" :
+                      currentDisplayStatus === "Cancelled" ? "bg-red-100 text-red-800" :
+                      (currentDisplayStatus === "Out for Delivery" || currentDisplayStatus === "out_for_delivery") ? "bg-purple-100 text-purple-900 border border-purple-200" :
+                      currentDisplayStatus === "Shipped" ? "bg-blue-100 text-blue-800" :
+                      (currentDisplayStatus === "Packed" || currentDisplayStatus === "Confirmed") ? "bg-indigo-100 text-indigo-800" :
+                      currentDisplayStatus === "Processing" ? "bg-sky-100 text-sky-800" :
+                      "bg-amber-100 text-amber-800"
+                    }`}>
+                      {currentDisplayStatus}
+                    </span>
+                  );
+                })()}
               </div>
               <p className="text-xs text-gray-500">Placed on {order.date} • {order.school || 'General Retail'}</p>
             </div>
@@ -640,14 +649,37 @@ export default function OrderDetailModal({
                 )}
               </div>
               {order.refundStatus && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center justify-between">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <CreditCard size={15} className="text-emerald-700 shrink-0" />
                     <div>
                       <strong className="font-black text-emerald-900">Refund Status: </strong>
                       <span className="font-semibold">{order.refundStatus}</span>
+                      {order.refundTxnId && (
+                        <span className="block font-mono text-[11px] text-emerald-800">TXN / Ref: {order.refundTxnId}</span>
+                      )}
                     </div>
                   </div>
+                  {(!String(order.refundStatus).toLowerCase().includes('completed') && String(order.paymentStatus || '').toLowerCase() !== 'refunded') && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const txn = window.prompt("Enter Settlement UTR / Transaction ID (or leave blank for Auto):", `REF-${Date.now().toString(36).toUpperCase()}`);
+                          if (txn !== null) {
+                            await handleApplyStatusUpdate('Cancelled', {
+                              paymentStatus: 'refunded',
+                              refundStatus: 'Completed',
+                              refundTxnId: txn.trim() || `REF-${Date.now().toString(36).toUpperCase()}`
+                            });
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        ✓ Mark Refund Paid
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -889,56 +921,12 @@ export default function OrderDetailModal({
               </div>
 
               {/* Admin Action Workflow Buttons */}
-              {!readOnly && (
-                <div className="pt-2 border-t border-amber-200/60 space-y-2">
-                  <div className="text-[11px] font-bold text-amber-900 flex items-center justify-between flex-wrap gap-1">
-                    <span>
-                      Admin Action Workflow for: <strong className="text-amber-950 underline">{order.returnRequest?.itemName || (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId))?.name || 'Item'}</strong>
-                      {(() => {
-                        const tgt = (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId));
-                        const sName = tgt?.storeName || tgt?.sellerName || tgt?.sellerDetails?.storeName;
-                        return sName ? <span className="text-[10px] font-normal text-amber-700 ml-1.5">(Sold by: {sName})</span> : null;
-                      })()}
-                    </span>
-                    {actionLoadingKey && (
-                      <span className="text-[10px] text-amber-700 flex items-center gap-1 font-semibold animate-pulse">
-                        <Loader2 size={12} className="animate-spin text-amber-600" /> Processing action...
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Inline Action Feedback Banner */}
-                  {actionFeedback && (
-                    <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
-                      actionFeedback.type === 'success' 
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs' 
-                        : 'bg-rose-50 border-rose-300 text-rose-900 shadow-xs'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {actionFeedback.type === 'success' ? (
-                          <CheckCircle size={15} className="text-emerald-600 shrink-0" />
-                        ) : (
-                          <AlertCircle size={15} className="text-rose-600 shrink-0" />
-                        )}
-                        <span>{actionFeedback.message}</span>
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => setActionFeedback(null)} 
-                        className="text-gray-400 hover:text-gray-700 font-bold px-1.5 py-0.5 rounded cursor-pointer"
-                        title="Dismiss"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
-                  {(() => {
-                    const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
-                    const retStatus = String(retReq.status || '').toLowerCase().trim();
-                    const retType = String(retReq.type || retReq.requestType || (retStatus.includes('exchange') ? 'exchange' : 'return')).toLowerCase().trim();
-                    const isExchange = retType === 'exchange';
-                    const isReturn = retType === 'return';
+              {!readOnly && (() => {
+                const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
+                const retStatus = String(retReq.status || '').toLowerCase().trim();
+                const retType = String(retReq.type || retReq.requestType || (retStatus.includes('exchange') ? 'exchange' : 'return')).toLowerCase().trim();
+                const isExchange = retType === 'exchange';
+                const isReturn = retType === 'return';
 
                     const isRequested = ['requested', 'return_requested', 'exchange_requested'].includes(retStatus);
                     const isApproved = ['approved', 'return_approved', 'exchange_approved'].includes(retStatus);
@@ -952,37 +940,218 @@ export default function OrderDetailModal({
                     const refundDueAmount = Math.abs(exchangePriceDiff) || Number(retReq.refundAmount || 0) || Math.max(0, Number(retReq.originalItemPrice || 0) - Number(retReq.replacementItemPrice || 0));
                     const hasRefundDue = isExchange && (exchangePriceAdjType === 'partial_refund' || exchangePriceDiff < 0 || refundDueAmount > 0);
                     const isExchangeRefundDone = Boolean(retReq.refundTxnId || displayOrder?.refundTxnId || order?.refundTxnId || displayOrder?.refundDetails?.refundTxnId || order?.refundDetails?.refundTxnId || retReq.refundStatus === 'completed');
+                    const isSelf = isOrderSelfDelivery(displayOrder || order);
+
+                    // ─── 3rd-Party Courier (Shiprocket) Mode ──────────────────────────
+                    // Manual workflow buttons are locked; status updates dynamically from courier tracking
+                    if (!isSelf) {
+                      return (
+                        <div className="space-y-2.5">
+                          {/* Live Courier Tracking & Status Sync Card */}
+                          <div className="p-3 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 rounded-xl border border-purple-200/80 shadow-2xs space-y-2">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <Truck size={14} className="text-purple-700 shrink-0" />
+                                <span className="text-xs font-black text-purple-950">
+                                  Shiprocket Status: <span className="text-indigo-900 underline font-black">{retReq.status ? retReq.status.replace(/_/g, ' ').toUpperCase() : 'EXCHANGE REQUESTED'}</span>
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-extrabold text-purple-800 bg-white/90 border border-purple-200 px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Live Sync via Shiprocket
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-700 bg-white/80 p-2.5 rounded-lg border border-purple-100">
+                              <div>
+                                <span className="text-gray-500 font-semibold">Courier Partner:</span>{' '}
+                                <strong className="text-gray-900">{retReq.exchangeCourier || displayOrder?.courierName || order?.courierName || 'Shiprocket / Delhivery'}</strong>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 font-semibold">Exchange AWB:</span>{' '}
+                                <strong className="font-mono text-purple-950 font-black">{retReq.exchangeAwb || displayOrder?.trackingNumber || order?.trackingNumber || 'Auto-assigned upon pickup'}</strong>
+                              </div>
+                              {(retReq.exchangeAwb || displayOrder?.trackingNumber || order?.trackingNumber) && (
+                                <div className="sm:col-span-2 pt-1 flex items-center gap-2">
+                                  <a
+                                    href={displayOrder?.trackingUrl || order?.trackingUrl || `https://shiprocket.co/tracking/${retReq.exchangeAwb || displayOrder?.trackingNumber || order?.trackingNumber}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-[10px] rounded-lg shadow-2xs inline-flex items-center gap-1"
+                                  >
+                                    <span>Track Live Shiprocket Status ↗</span>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-purple-900 bg-purple-100/70 p-2 rounded-lg border border-purple-200/80 leading-relaxed">
+                              ℹ️ <strong>3rd-Party Courier Mode (Shiprocket):</strong> Exchange reverse pickup & replacement dispatch lifecycle is synchronized automatically via Shiprocket API tracking. Manual status transitions are disabled for courier shipments.
+                            </div>
+                          </div>
+
+                          {/* Customer Refund Card if money is owed to customer */}
+                          {hasRefundDue && (
+                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 space-y-2">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div>
+                                  <span className="text-xs font-black text-amber-950">💳 Customer Partial Refund Due: </span>
+                                  <span className="text-sm font-black text-emerald-800">₹{refundDueAmount}</span>
+                                </div>
+                                {!isExchangeRefundDone ? (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(actionLoadingKey)}
+                                    onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: !prev.showRefundInput }))}
+                                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer"
+                                  >
+                                    {returnActionState.showRefundInput ? '✕ Close Form' : `💳 Record ₹${refundDueAmount} Refund Paid`}
+                                  </button>
+                                ) : (
+                                  <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300">
+                                    ✅ Refund Recorded
+                                  </span>
+                                )}
+                              </div>
+
+                              {isExchangeRefundDone ? (
+                                <div className="text-[11px] text-emerald-900 font-bold bg-white/80 p-2 rounded-lg border border-emerald-200">
+                                  Customer refund of ₹{refundDueAmount} marked paid. TXN Ref:{' '}
+                                  <span className="font-mono text-emerald-950">{retReq.refundTxnId || displayOrder?.refundTxnId || order?.refundTxnId || 'Completed'}</span>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-amber-800">
+                                  Replacement product price is ₹{refundDueAmount} lower than the original product. Transfer ₹{refundDueAmount} to customer bank account shown above and enter the transaction / UTR reference.
+                                </p>
+                              )}
+
+                              {returnActionState.showRefundInput && !isExchangeRefundDone && (
+                                <div className="p-3 bg-white rounded-xl border border-emerald-300 space-y-2">
+                                  <label className="font-semibold text-emerald-900 text-[11px] block">
+                                    Customer Refund UTR / Transaction Reference:
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. UTR / IMPS / UPI Ref (e.g. UPI-REF-99238491823)"
+                                      value={returnActionState.refundTxnId}
+                                      onChange={e => setReturnActionState(prev => ({ ...prev, refundTxnId: e.target.value }))}
+                                      className="flex-1 px-3 py-1.5 text-xs border border-emerald-300 rounded-lg outline-none font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setReturnActionState(prev => ({ ...prev, refundTxnId: `UPI-REF-${Date.now().toString().slice(-8)}` }))}
+                                      className="px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-emerald-100"
+                                    >
+                                      Generate ID
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={Boolean(actionLoadingKey)}
+                                      onClick={() => {
+                                        const finalTxn = returnActionState.refundTxnId || `UPI-REF-${Date.now().toString().slice(-8)}`;
+                                        handleReturnExchangeStatusUpdate(
+                                          retStatus || 'exchange_requested',
+                                          {
+                                            refundTransactionId: finalTxn,
+                                            refundTxnId: finalTxn,
+                                            refundAmount: refundDueAmount
+                                          },
+                                          'refund'
+                                        );
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs"
+                                    >
+                                      {actionLoadingKey === 'refund' ? (
+                                        <>
+                                          <Loader2 size={13} className="animate-spin text-white" />
+                                          <span>Saving Refund...</span>
+                                        </>
+                                      ) : (
+                                        <span>✓ Save ₹{refundDueAmount} Refund Paid</span>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setReturnActionState(prev => ({ ...prev, showRefundInput: false }))}
+                                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Completed Documents link */}
+                          {isCompleted && (
+                            <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-[11px] bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                              <span>✅ Lifecycle Completed</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    const hasWorkflowButtons = (isApproved && isReturn) ||
+                      ((isApproved || isPickupScheduled || isProductReceived) && isExchange && !isExchangeDispatched) ||
+                      (isPickupScheduled && isReturn) ||
+                      (isProductReceived && isReturn) ||
+                      ((isExchangeDispatched || (isProductReceived && isExchange))) ||
+                      isCompleted;
+
+                    if (!hasWorkflowButtons) return null;
 
                     return (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {isRequested && (
-                            <>
-                              <button
-                                type="button"
-                                disabled={Boolean(actionLoadingKey)}
-                                onClick={() => handleReturnExchangeStatusUpdate(isExchange ? 'exchange_approved' : 'return_approved', {}, 'approve')}
-                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                              >
-                                {actionLoadingKey === 'approve' ? (
-                                  <>
-                                    <Loader2 size={13} className="animate-spin text-white" />
-                                    <span>Approving {isExchange ? 'Exchange' : 'Return'}...</span>
-                                  </>
-                                ) : (
-                                  <span>✓ Approve {isExchange ? 'Exchange' : 'Return'}</span>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={Boolean(actionLoadingKey)}
-                                onClick={() => setReturnActionState(prev => ({ ...prev, showRejectInput: !prev.showRejectInput }))}
-                                className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                              >
-                                <span>✕ Reject Request</span>
-                              </button>
-                            </>
+                      <div className="pt-2 border-t border-amber-200/60 space-y-2">
+                        <div className="text-[11px] font-bold text-amber-900 flex items-center justify-between flex-wrap gap-1">
+                          <span>
+                            Workflow for: <strong className="text-amber-950 underline">{order.returnRequest?.itemName || (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId))?.name || 'Item'}</strong>
+                            {(() => {
+                              const tgt = (order.items || []).find(it => String(it._id || it.id) === String(order.returnRequest?.itemId));
+                              const sName = tgt?.storeName || tgt?.sellerName || tgt?.sellerDetails?.storeName;
+                              return sName ? <span className="text-[10px] font-normal text-amber-700 ml-1.5">(Sold by: {sName})</span> : null;
+                            })()}
+                          </span>
+                          {actionLoadingKey && (
+                            <span className="text-[10px] text-amber-700 flex items-center gap-1 font-semibold animate-pulse">
+                              <Loader2 size={12} className="animate-spin text-amber-600" /> Processing action...
+                            </span>
                           )}
+                        </div>
+
+                        {/* Inline Action Feedback Banner */}
+                        {actionFeedback && (
+                          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                            actionFeedback.type === 'success' 
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs' 
+                              : 'bg-rose-50 border-rose-300 text-rose-900 shadow-xs'
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              {actionFeedback.type === 'success' ? (
+                                <CheckCircle size={15} className="text-emerald-600 shrink-0" />
+                              ) : (
+                                <AlertCircle size={15} className="text-rose-600 shrink-0" />
+                              )}
+                              <span>{actionFeedback.message}</span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => setActionFeedback(null)} 
+                              className="text-gray-400 hover:text-gray-700 font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                              title="Dismiss"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* [✓ Approve] & [✕ Reject] buttons removed: handled directly via Order Status controls below */}
 
                           {/* For Returns: Schedule pickup */}
                           {isApproved && isReturn && (
@@ -1159,37 +1328,8 @@ export default function OrderDetailModal({
                           </div>
                         )}
                       </div>
-                    );
-                  })()}
 
-                  {returnActionState.showRejectInput && (
-                    <div className="p-3 bg-white rounded-xl border border-rose-200 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Reason for rejection (e.g., Item used or tag missing)"
-                        value={returnActionState.rejectionReason}
-                        onChange={e => setReturnActionState(prev => ({ ...prev, rejectionReason: e.target.value }))}
-                        className="w-full px-3 py-1.5 text-xs border border-rose-300 rounded-lg outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        disabled={Boolean(actionLoadingKey) || !returnActionState.rejectionReason.trim()}
-                        onClick={() => handleReturnExchangeStatusUpdate('rejected', { rejectionReason: returnActionState.rejectionReason }, 'reject')}
-                        className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
-                      >
-                        {actionLoadingKey === 'reject' ? (
-                          <>
-                            <Loader2 size={13} className="animate-spin text-white" />
-                            <span>Rejecting...</span>
-                          </>
-                        ) : (
-                          <span>Confirm Rejection</span>
-                        )}
-                      </button>
-                    </div>
-                  )}
-
-                  {returnActionState.showPickupInput && (
+                      {returnActionState.showPickupInput && (
                     <div className="p-3 bg-white rounded-xl border border-blue-200 space-y-2">
                       <label className="block text-[11px] font-bold text-gray-700">Select Pickup Date:</label>
                       <input
@@ -1367,8 +1507,9 @@ export default function OrderDetailModal({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+                    </div>
+                  );
+                })()}
 
               {/* Return/Exchange Event Timeline */}
               {Array.isArray(order.returnRequest.timeline) && order.returnRequest.timeline.length > 0 && (
@@ -1424,6 +1565,24 @@ export default function OrderDetailModal({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-gray-700">Order Status:</span>
                 {(() => {
+                  const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
+                  const isRetOrExch = Boolean(retReq.type || (retReq.status && retReq.status !== 'no_request'));
+                  const isSelf = isOrderSelfDelivery(displayOrder || order);
+
+                  if (!isSelf && isRetOrExch) {
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="bg-purple-50 text-purple-900 border border-purple-200 text-xs font-extrabold rounded-xl px-3 py-1.5 shadow-2xs flex items-center gap-1.5">
+                          <Truck size={13} className="text-purple-700" />
+                          <span>{displayOrder?.status} (Dynamic via Shiprocket)</span>
+                        </span>
+                        <span className="text-[10px] text-purple-700 font-bold">
+                          🔒 3rd-Party courier status updates dynamically via Shiprocket live tracking.
+                        </span>
+                      </div>
+                    );
+                  }
+
                   const currentSt = String(displayOrder?.status || 'Pending').toLowerCase().trim();
                   const isDeliveredOrCancelled = currentSt === 'delivered' || currentSt === 'cancelled';
                   const isConfirmedStage = currentSt === 'confirmed' || currentSt === 'processing' || currentSt === 'packed';
@@ -1505,31 +1664,40 @@ export default function OrderDetailModal({
                         </button>
                       ) : null;
                     })()}
-                <button
-                  type="button"
-                  disabled={Boolean(actionLoadingKey)}
-                  onClick={() => handleApplyStatusUpdate(selectedStatus)}
-                  className={`px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    actionLoadingKey === 'status' ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {actionLoadingKey === 'status' ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin text-white" />
-                      <span>Updating Status...</span>
-                    </>
-                  ) : statusUpdatedToast ? (
-                    <>
-                      <Check size={14} className="text-emerald-300" />
-                      <span>Updated Status!</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={14} />
-                      <span>Update Status</span>
-                    </>
-                  )}
-                </button>
+                {(() => {
+                  const retReq = displayOrder?.returnRequest || order?.returnRequest || {};
+                  const isRetOrExch = Boolean(retReq.type || (retReq.status && retReq.status !== 'no_request'));
+                  const isSelf = isOrderSelfDelivery(displayOrder || order);
+                  if (!isSelf && isRetOrExch) return null;
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={Boolean(actionLoadingKey)}
+                      onClick={() => handleApplyStatusUpdate(selectedStatus)}
+                      className={`px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        actionLoadingKey === 'status' ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {actionLoadingKey === 'status' ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-white" />
+                          <span>Updating Status...</span>
+                        </>
+                      ) : statusUpdatedToast ? (
+                        <>
+                          <Check size={14} className="text-emerald-300" />
+                          <span>Updated Status!</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={14} />
+                          <span>Update Status</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center gap-2">

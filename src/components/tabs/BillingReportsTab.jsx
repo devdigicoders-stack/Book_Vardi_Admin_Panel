@@ -351,10 +351,12 @@ export default function BillingReportsTab() {
         Boolean(o.refundStatus)
       );
 
-      const isRefunded = ['refunded', 'refund_completed', 'refund_processed', 'completed'].includes(normStatus) ||
-                         ['refunded', 'refund_completed', 'refund_processed'].includes(normReturnStatus) ||
-                         String(o.refundStatus || '').toLowerCase().includes('completed') ||
-                         String(o.refundStatus || '').toLowerCase().includes('refunded');
+      const isRefunded = !isExchange && (
+        ['refunded', 'refund_completed', 'refund_processed'].includes(normStatus) ||
+        ['refunded', 'refund_completed', 'refund_processed'].includes(normReturnStatus) ||
+        String(o.refundStatus || '').toLowerCase().includes('completed') ||
+        String(o.refundStatus || '').toLowerCase().includes('refunded')
+      );
 
       const isThirdParty = isOrderThirdPartyCourier(o);
       const isSelfDelivery = !isThirdParty;

@@ -185,7 +185,16 @@ export const AdminDataProvider = ({ children }) => {
   const [orders, setOrders] = useState(() => {
     try {
       const cached = sessionStorage.getItem('bv_admin_orders_cache');
-      return cached ? JSON.parse(cached) : [];
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed.map(ord => {
+          if (String(ord.sellerStoreName || ord.sellerDetails?.storeName || '').toLowerCase().includes('digicoder')) {
+            return { ...ord, sellerStoreName: 'National school dress evam pustak bhandar', storeName: 'National school dress evam pustak bhandar' };
+          }
+          return ord;
+        }) : [];
+      }
+      return [];
     } catch {
       return [];
     }
@@ -537,7 +546,7 @@ export const AdminDataProvider = ({ children }) => {
 
     fetchAdminOrdersApi().then(data => {
       if (Array.isArray(data) && data.length > 0) {
-        setOrders(data.map(o => {
+        const mappedOrders = data.map(o => {
           const isGenericCust = (str) => {
             if (!str || typeof str !== 'string') return true;
             const s = str.trim().toLowerCase();
@@ -650,7 +659,9 @@ export const AdminDataProvider = ({ children }) => {
             shippingAddress: formattedAddress,
             rawShippingAddress: rawAddr
           };
-        }));
+        });
+        setOrders(mappedOrders);
+        try { sessionStorage.setItem('bv_admin_orders_cache', JSON.stringify(mappedOrders)); } catch {}
       }
     }).catch(() => {});
 
