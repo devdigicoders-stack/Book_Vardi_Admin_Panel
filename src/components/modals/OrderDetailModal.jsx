@@ -1639,7 +1639,7 @@ export default function OrderDetailModal({
                               const res = await onUpdateStatus(orderId, 'Shipped', {
                                 createShipment: true,
                                 courierCode: 'SHIPROCKET',
-                                weightKg: 1.5
+                                weightKg: 0.5
                               });
                               if (res?.shiprocket?.success) {
                                 setActionFeedback({ type: 'success', message: `✅ Shipment created! AWB: ${res.shiprocket.awbCode} via ${res.shiprocket.courierName}` });
