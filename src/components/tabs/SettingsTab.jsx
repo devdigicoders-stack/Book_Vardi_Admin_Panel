@@ -400,26 +400,35 @@ export default function SettingsTab() {
 
         {/* GST & Tax Rates */}
         <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
-          <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
-            <ShieldCheck size={17} className="text-teal-700" /> GST Tax Compliance (HSN)
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
+              <ShieldCheck size={17} className="text-teal-700" /> GST Tax Compliance (HSN)
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              100% Dynamic Per Product
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-500 leading-relaxed">
+            GST rates are completely dynamic (0% Exempt, 5%, 12%, 18%, 28%) and individually configurable per product. Tax invoices, shipping labels, and credit notes calculate dynamic item-level taxes accurately based on product settings.
+          </p>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
               <span className="text-[10px] uppercase font-bold text-gray-400">School Uniforms</span>
-              <div className="font-bold text-gray-900 mt-1">5% GST (HSN 6204)</div>
+              <div className="font-bold text-gray-900 mt-1">5% / Dynamic (HSN 6204)</div>
             </div>
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <span className="text-[10px] uppercase font-bold text-gray-400">NCERT Textbooks</span>
-              <div className="font-bold text-gray-900 mt-1">0% GST (Exempt)</div>
+              <span className="text-[10px] uppercase font-bold text-gray-400">NCERT & Books</span>
+              <div className="font-bold text-gray-900 mt-1">0% (Exempt) / Dynamic (HSN 4901)</div>
             </div>
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <span className="text-[10px] uppercase font-bold text-gray-400">School Shoes</span>
-              <div className="font-bold text-gray-900 mt-1">12% GST (HSN 6403)</div>
+              <span className="text-[10px] uppercase font-bold text-gray-400">School Shoes & Footwear</span>
+              <div className="font-bold text-gray-900 mt-1">5% / 12% / Dynamic (HSN 6403)</div>
             </div>
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
               <span className="text-[10px] uppercase font-bold text-gray-400">Stationery & Bags</span>
-              <div className="font-bold text-gray-900 mt-1">18% GST (HSN 4202)</div>
+              <div className="font-bold text-gray-900 mt-1">0% / 5% / 12% / 18% (HSN 4202/4820)</div>
             </div>
           </div>
         </div>
