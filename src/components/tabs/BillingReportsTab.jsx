@@ -385,7 +385,10 @@ export default function BillingReportsTab() {
       });
 
       const invoiceNo = o.sellerInvoiceNo || o.invoiceNumber || getSellerInvoiceNumber(o, matchedSeller, orders);
-      const creditNoteNo = o.sellerCreditNoteNo || o.creditNoteNumber || getSellerCreditNoteNumber(o, matchedSeller, orders);
+      const isValidSequentialCN = (cn) => typeof cn === 'string' && /^[A-Z0-9]{2,}CN\d+$/i.test(cn);
+      const creditNoteNo = (isValidSequentialCN(o.sellerCreditNoteNo) ? o.sellerCreditNoteNo : null) ||
+                           (isValidSequentialCN(o.creditNoteNumber) ? o.creditNoteNumber : null) ||
+                           getSellerCreditNoteNumber(o, matchedSeller, orders);
       const isExchDelivered = isOrderExchangeDelivered(o);
       const exchangeInvoiceNo = o.exchangeInvoiceNumber || o.sellerExchangeInvoiceNo || getSellerExchangeInvoiceNumber(o, matchedSeller, orders);
 

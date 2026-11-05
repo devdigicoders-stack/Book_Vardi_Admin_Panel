@@ -1769,7 +1769,16 @@ export default function OrderDetailModal({
                     'pickup_scheduled', 'product_received', 'product_return_received',
                     'refund_initiated', 'refund_processed', 'refund_completed', 'refunded'
                   ];
-                  const isReturnAccepted = acceptedStatuses.some(s => retStatus.includes(s));
+                  const hasCompletedRefundUI = Boolean(
+    ['refund_completed', 'refunded', 'completed', 'refund_processed'].includes(String(order.returnRequest?.refundStatus || '').toLowerCase().trim()) ||
+    ['refund completed', 'refund_completed', 'refunded', 'completed', 'refund processed', 'refund_processed'].includes(String(order.refundStatus || '').toLowerCase().trim()) ||
+    order.settlementStatus === 'refunded' ||
+    Boolean(order.returnRequest?.refundTxnId) ||
+    Boolean(order.refundTxnId) ||
+    Boolean(order.sellerCreditNoteNo) ||
+    Boolean(order.creditNoteNumber)
+  );
+  const isReturnAccepted = acceptedStatuses.some(s => retStatus.includes(s)) || hasCompletedRefundUI;
                   const isCancelled = String(order.status).toLowerCase() === 'cancelled' || Boolean(order.cancelledAt);
                   const canShowCreditNote = isOrderExchange ? isReturnAccepted : (isReturnAccepted || isCancelled);
                   const isPendingApproval = !isCancelled && (retType === 'return' || retType === 'exchange' || retStatus.includes('return') || retStatus.includes('exchange')) && !isReturnAccepted;
@@ -1781,15 +1790,17 @@ export default function OrderDetailModal({
                   return (
                     <>
                       {canShowCreditNote && (
-                        <a
-                          href={`${SERVER_URL}/orders/${order.id || order._id}/credit-note`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInvoiceModalMode('credit_note');
+                            setIsInvoiceOpen(true);
+                          }}
                           className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200"
-                          title="Download GST Credit Note under Section 34 of CGST Act (Original Returned Item)"
+                          title="View & Download GST Credit Note under Section 34 of CGST Act"
                         >
                           <FileText size={13} /> GST Credit Note
-                        </a>
+                        </button>
                       )}
                       {isPendingApproval && (
                         <span

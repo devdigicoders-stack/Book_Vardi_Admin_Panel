@@ -20,7 +20,8 @@ import {
   Check
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
-import { fetchAdminCategoriesApi, createAdminCategoryApi, updateAdminCategoryApi, deleteAdminCategoryApi } from '../../utils/api';
+import { fetchAdminCategoriesApi, createAdminCategoryApi, updateAdminCategoryApi, deleteAdminCategoryApi, resolveImageUrl } from '../../utils/api';
+import ImageUploadDropzone from '../common/ImageUploadDropzone';
 import { confirmDelete, showSuccessAlert } from '../../utils/sweetAlert';
 
 export default function CategoriesTab() {
@@ -37,7 +38,9 @@ export default function CategoriesTab() {
   const [categoryForm, setCategoryForm] = useState({
     name: '',
     gstPercentage: '5',
-    subCategories: []
+    subCategories: [],
+    imageUrl: '',
+    images: []
   });
   const [newSubInput, setNewSubInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -92,7 +95,9 @@ export default function CategoriesTab() {
     setCategoryForm({
       name: '',
       gstPercentage: '5',
-      subCategories: []
+      subCategories: [],
+      imageUrl: '',
+      images: []
     });
     setNewSubInput('');
     setIsModalOpen(true);
@@ -105,10 +110,13 @@ export default function CategoriesTab() {
     const existingSubs = Array.isArray(cat.subCategories)
       ? cat.subCategories.map(s => (typeof s === 'string' ? s : s.name))
       : [];
+    const catImg = cat.imageUrl || cat.image || '';
     setCategoryForm({
       name: cat.name || '',
       gstPercentage: cat.gstPercentage !== undefined ? String(cat.gstPercentage) : '5',
-      subCategories: existingSubs
+      subCategories: existingSubs,
+      imageUrl: catImg,
+      images: catImg ? [catImg] : []
     });
     setNewSubInput('');
     setIsModalOpen(true);
@@ -142,11 +150,14 @@ export default function CategoriesTab() {
     if (!categoryForm.name.trim()) return;
 
     setSubmitting(true);
+    const finalImg = (categoryForm.images && categoryForm.images[0]) || categoryForm.imageUrl || '';
     const payload = {
       name: categoryForm.name.trim(),
       description: editingCategory?.description || '',
       gstPercentage: Number(categoryForm.gstPercentage),
       icon: editingCategory?.icon || 'Package',
+      imageUrl: finalImg,
+      image: finalImg,
       subCategories: categoryForm.subCategories.map(s => ({ name: s, slug: s.toLowerCase().replace(/[^a-z0-9]+/g, '-') }))
     };
 
@@ -359,8 +370,19 @@ export default function CategoriesTab() {
                 {/* Main Category Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-brand-teal/10 text-brand-teal flex items-center justify-center font-extrabold text-lg shrink-0">
-                      {cat.name.charAt(0)}
+                    <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center font-extrabold text-lg shrink-0 overflow-hidden border border-gray-200 shadow-2xs">
+                      {cat.imageUrl || cat.image ? (
+                        <img
+                          src={resolveImageUrl(cat.imageUrl || cat.image)}
+                          alt={cat.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span className="text-brand-teal">{cat.name.charAt(0)}</span>
+                      )}
                     </div>
                     <div>
                       <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
@@ -461,7 +483,7 @@ export default function CategoriesTab() {
       {/* Modal for Creating / Editing Category */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-gray-100">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h2 className="font-display font-bold text-base text-gray-900 flex items-center gap-2">
                 <FolderPlus size={18} className="text-brand-teal" />
@@ -501,6 +523,26 @@ export default function CategoriesTab() {
                   <option value="18">18%</option>
                   <option value="28">28%</option>
                 </select>
+              </div>
+
+              {/* Category Image Upload */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700 flex items-center justify-between">
+                  <span>Category Image</span>
+                  <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
+                    Featured in Website Storefront
+                  </span>
+                </label>
+                <ImageUploadDropzone
+                  images={categoryForm.images}
+                  onChange={(imgs) => setCategoryForm(prev => ({
+                    ...prev,
+                    images: imgs,
+                    imageUrl: imgs[0] || ''
+                  }))}
+                  maxImages={1}
+                  helperText="Upload Category Photo (Drag & Drop or browse)"
+                />
               </div>
 
               {/* Subcategories List Manager inside Modal */}

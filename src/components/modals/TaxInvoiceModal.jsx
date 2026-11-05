@@ -13,7 +13,8 @@ import {
   Truck,
   ExternalLink,
   User,
-  Barcode as BarcodeIcon
+  Barcode as BarcodeIcon,
+  RotateCcw
 } from 'lucide-react';
 import { SERVER_URL } from '../../utils/api';
 import { getSellerInvoiceNumber, getSellerCreditNoteNumber, getSellerInvoicePrefix, formatSellerInvoiceNumber, getSellerExchangeInvoiceNumber, isOrderExchangeDelivered } from '../../utils/invoiceHelper';
@@ -218,8 +219,7 @@ export function parseStateInfo(sourceObj, fallbackString = '') {
   return { key: 'uttar_pradesh', name: 'Uttar Pradesh' };
 }
 
-export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propSellers, initialMode = 'invoice' }) {
-  if (!isOpen || !order) return null;
+function TaxInvoiceModalContent({ isOpen, onClose, order, sellers: propSellers, initialMode = 'invoice' }) {
 
   const isSelfDelivery = Boolean(
     order.deliveryMode === 'self_delivery' ||
@@ -244,6 +244,16 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
   const rawStatus = String(order.overallStatus || order.status || '').toLowerCase().trim();
   const normStatus = rawStatus.replace(/[\s-]+/g, '_');
   const isCancelled = normStatus === 'cancelled' || normStatus === 'canceled' || Boolean(order.isCancelled) || Boolean(order.cancelledAt);
+  const hasCreditNote = Boolean(
+    order.creditNoteNumber || 
+    order.sellerCreditNoteNo || 
+    order.settlementStatus === 'refunded' || 
+    isCancelled || 
+    ['refund_completed', 'refund_processed', 'refunded'].includes(normStatus) ||
+    Boolean(order.returnRequest && ['refund_completed', 'refund_processed', 'refunded', 'approved'].includes(String(order.returnRequest.status || order.returnRequest.refundStatus || '').toLowerCase().trim())) ||
+    Boolean(order.refundStatus && ['refund completed', 'refund_completed', 'refunded', 'completed', 'refund processed', 'refund_processed'].includes(String(order.refundStatus).toLowerCase().trim()))
+  );
+  const isCreditNoteMode = documentMode === 'credit_note';
 
   const isBulkOrder = Boolean(
     order.isBulkOrder ||
@@ -1698,13 +1708,13 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
 
             <div className="sm:text-right border-l-2 sm:border-l-0 sm:border-r-0 border-brand-teal pl-3 sm:pl-0">
               <h2 className="font-display font-black text-lg text-gray-900 uppercase tracking-wider">
-                {isCancelled ? 'CREDIT NOTE' : 'TAX INVOICE'}
+                {isCreditNoteMode ? 'CREDIT NOTE' : 'TAX INVOICE'}
               </h2>
               <p className="text-xs font-bold text-gray-700">
-                {isCancelled ? 'Credit Note No: ' : 'Invoice No: '}
-                <strong className="font-mono text-brand-teal">{isCancelled ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong>
+                {isCreditNoteMode ? 'Credit Note No: ' : 'Invoice No: '}
+                <strong className="font-mono text-brand-teal">{isCreditNoteMode ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong>
               </p>
-              <p className="text-[11px] text-gray-500">{isCancelled ? 'Reversal Date: ' : 'Invoice Date: '}{order.date || new Date().toLocaleDateString('en-GB')}</p>
+              <p className="text-[11px] text-gray-500">{isCreditNoteMode ? 'Reversal Date: ' : 'Invoice Date: '}{order.date || new Date().toLocaleDateString('en-GB')}</p>
             </div>
           </div>
 
@@ -1767,7 +1777,7 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
                 <FileText size={12} className="text-gray-500" /> Order & Tax Meta
               </span>
               <p className="text-gray-700">Order ID: <strong className="font-mono text-gray-900">#{order.id}</strong></p>
-              <p className="text-gray-700">{isCancelled ? 'Credit Note No: ' : 'Invoice No: '}<strong className="font-mono text-brand-teal">{isCancelled ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong></p>
+              <p className="text-gray-700">{isCreditNoteMode ? 'Credit Note No: ' : 'Invoice No: '}<strong className="font-mono text-brand-teal">{isCreditNoteMode ? resolvedCreditNoteNumber : resolvedInvoiceNumber}</strong></p>
               <p className="text-gray-700">Invoice Date: <strong className="text-gray-900">{order.date || new Date().toLocaleDateString('en-GB')}</strong></p>
               <p className="text-gray-700">Status: <strong className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px]">{activeSellerStatusLabel}</strong></p>
               <p className="text-gray-700">Payment: <strong className="text-gray-900">{order.paymentMethod || 'Online UPI'}</strong> ({order.paymentStatus || 'Paid'})</p>
@@ -2267,4 +2277,10 @@ export default function TaxInvoiceModal({ isOpen, onClose, order, sellers: propS
       </div>
     </div>
   );
+}
+
+
+export default function TaxInvoiceModal(props) {
+  if (!props.isOpen || !props.order) return null;
+  return <TaxInvoiceModalContent {...props} />;
 }
