@@ -24,6 +24,8 @@ import SellerFinanceModal from '../modals/SellerFinanceModal';
 export default function SellersTab() {
   const { 
     sellers, 
+    isLoadingSellers,
+    refreshSellers,
     orders = [],
     approveSeller, 
     rejectSeller, 
@@ -43,6 +45,13 @@ export default function SellersTab() {
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [financeSeller, setFinanceSeller] = useState(null);
+
+  // Automatically refresh sellers from MongoDB database on mount
+  React.useEffect(() => {
+    if (refreshSellers) {
+      refreshSellers();
+    }
+  }, [refreshSellers]);
 
   // Status counts
   const counts = {
@@ -99,9 +108,22 @@ export default function SellersTab() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold bg-teal-50 px-3.5 py-1.5 rounded-xl border border-teal-100">
-          <span>Total Registered Vendors:</span>
-          <span className="font-extrabold text-teal-900">{sellers.length}</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => refreshSellers && refreshSellers()}
+            disabled={isLoadingSellers}
+            className="flex items-center gap-1.5 text-xs font-bold bg-white hover:bg-teal-50 text-teal-800 px-3.5 py-1.5 rounded-xl border border-teal-200 shadow-2xs transition-all cursor-pointer"
+            title="Sync all registered sellers from live database"
+          >
+            <RefreshCw size={13} className={isLoadingSellers ? 'animate-spin text-teal-700' : 'text-teal-700'} />
+            <span>{isLoadingSellers ? 'Syncing...' : 'Sync Live Vendors'}</span>
+          </button>
+
+          <div className="flex items-center gap-2 text-xs font-semibold bg-teal-50 px-3.5 py-1.5 rounded-xl border border-teal-100">
+            <span>Total Registered Vendors:</span>
+            <span className="font-extrabold text-teal-900">{sellers.length}</span>
+          </div>
         </div>
       </div>
 
@@ -331,10 +353,21 @@ export default function SellersTab() {
       </div>
 
       {filteredSellers.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center text-gray-500 space-y-2">
+        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center text-gray-500 space-y-3">
           <Store size={36} className="mx-auto text-gray-300" />
           <p className="font-bold text-gray-700">No sellers found for selected status or search query.</p>
           <p className="text-xs text-gray-400">Try changing the status tab or clearing search parameters.</p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => refreshSellers && refreshSellers()}
+              disabled={isLoadingSellers}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+            >
+              <RefreshCw size={13} className={isLoadingSellers ? 'animate-spin' : ''} />
+              <span>Sync Live Sellers from Database</span>
+            </button>
+          </div>
         </div>
       )}
 

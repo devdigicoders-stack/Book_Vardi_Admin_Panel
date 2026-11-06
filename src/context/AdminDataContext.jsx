@@ -216,6 +216,59 @@ export const AdminDataProvider = ({ children }) => {
       return [];
     }
   });
+  const [isLoadingSellers, setIsLoadingSellers] = useState(false);
+
+  const refreshSellers = useCallback(async () => {
+    setIsLoadingSellers(true);
+    try {
+      const data = await fetchAdminSellersApi();
+      const list = Array.isArray(data) ? data : (data?.sellers || []);
+      const mapped = list.map(s => {
+        const rawStatus = String(s.status || 'pending').toLowerCase().trim();
+        const displayStatus =
+          rawStatus === 'approved' || rawStatus === 'verified' ? 'Verified' :
+          rawStatus === 'pending' || rawStatus === 'pending approval' ? 'Pending Approval' :
+          rawStatus === 'rejected' ? 'Rejected' :
+          rawStatus === 'suspended' ? 'Suspended' :
+          (s.status ? (s.status.charAt(0).toUpperCase() + s.status.slice(1)) : 'Pending Approval');
+
+        return {
+          id: s._id || s.id,
+          _id: s._id || s.id,
+          storeName: s.storeName || s.businessName || s.name || s.rawApplication?.storeName || 'Vendor Store',
+          ownerName: s.ownerName || s.name || s.ownerDetails?.ownerFullName || s.rawApplication?.ownerFullName || 'Vendor',
+          email: s.email || '',
+          phone: s.phone || '',
+          address: s.address || s.addressDetails?.addressLine1 || '',
+          city: s.city || '',
+          state: s.state || '',
+          pincode: s.pincode || '',
+          status: displayStatus,
+          rawStatus: s.status || 'pending',
+          commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          commissionPercentage: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 10),
+          payoutBalance: s.walletBalance || s.payoutBalance || 0,
+          pendingSettlementBalance: s.pendingSettlementBalance || 0,
+          totalEarnings: s.totalEarnings || 0,
+          documents: s.documents || {},
+          bankDetails: s.bankDetails || {},
+          ownerDetails: s.ownerDetails || {},
+          deliveryPreferences: s.deliveryPreferences || {},
+          ...s
+        };
+      });
+      setSellers(mapped);
+      try {
+        localStorage.setItem('admin_sellers', JSON.stringify(mapped));
+      } catch (e) {}
+      return mapped;
+    } catch (err) {
+      console.warn('Failed to sync sellers from backend API:', err);
+      return [];
+    } finally {
+      setIsLoadingSellers(false);
+    }
+  }, []);
 
   // 5. Schools
   const [schools, setSchools] = useState(() => {
@@ -789,13 +842,15 @@ export const AdminDataProvider = ({ children }) => {
       }
     }).catch(() => {});
 
+    refreshSellers();
     refreshCategories();
-  }, [refreshCategories]);
+  }, [refreshCategories, refreshSellers]);
 
-  // Load categories on initial mount unconditionally
+  // Load categories and sellers on initial mount unconditionally
   useEffect(() => {
     refreshCategories();
-  }, [refreshCategories]);
+    refreshSellers();
+  }, [refreshCategories, refreshSellers]);
 
   // Real-time synchronization of orders across Admin, Seller, and Website
   useEffect(() => {
@@ -1107,21 +1162,7 @@ export const AdminDataProvider = ({ children }) => {
     };
 
     const handleSellersEvent = () => {
-      fetchAdminSellersApi().then(data => {
-        const list = Array.isArray(data) ? data : (data?.sellers || []);
-        if (list.length > 0) {
-          setSellers(list.map(s => ({
-            id: s._id || s.id,
-            _id: s._id || s.id,
-            storeName: s.storeName || s.businessName || s.name || 'Vendor Store',
-            ownerName: s.ownerName || s.name || 'Vendor',
-            status: s.status === 'approved' ? 'Verified' : (s.status === 'pending' ? 'Pending' : (s.status === 'rejected' ? 'Rejected' : s.status)),
-            commissionRate: s.commissionPercentage !== undefined ? s.commissionPercentage : (s.commissionRate || 5),
-            payoutBalance: s.walletBalance || s.payoutBalance || 0,
-            ...s
-          })));
-        }
-      }).catch(() => {});
+      refreshSellers();
     };
 
     const handleNotifEvent = (e) => {
@@ -2837,6 +2878,8 @@ export const AdminDataProvider = ({ children }) => {
     approveSellerQuotation,
     updateSchoolOrderStatusAndTracking,
     sellers,
+    isLoadingSellers,
+    refreshSellers,
     approveSeller,
     rejectSeller,
     approveSellerUpdates,
