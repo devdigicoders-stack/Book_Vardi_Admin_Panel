@@ -22,7 +22,8 @@ export default function SettingsTab() {
   const [formData, setFormData] = useState({
     ...settings,
     companyName: settings?.companyName || 'BOOK VARDI',
-    companyAddress: settings?.companyAddress || 'Lucknow, Uttar Pradesh - 226001',
+    companyAddress: settings?.companyAddress || 'Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121',
+    headOfficeAddress: settings?.headOfficeAddress || 'Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121',
     companyGstin: settings?.companyGstin || '09AAACB1234F1Z9',
     customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || '+91 98765 43210',
     customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || 'support@bookvardi.in',
@@ -42,7 +43,8 @@ export default function SettingsTab() {
       ...prev,
       ...settings,
       companyName: settings?.companyName || prev.companyName || 'BOOK VARDI',
-      companyAddress: settings?.companyAddress || prev.companyAddress || 'Lucknow, Uttar Pradesh - 226001',
+      companyAddress: settings?.companyAddress || prev.companyAddress || 'Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121',
+      headOfficeAddress: settings?.headOfficeAddress || prev.headOfficeAddress || 'Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121',
       companyGstin: settings?.companyGstin || prev.companyGstin || '09AAACB1234F1Z9',
       customerCarePhone: settings?.customerCarePhone || settings?.supportPhone || prev.customerCarePhone || '+91 98765 43210',
       customerCareEmail: settings?.customerCareEmail || settings?.supportEmail || prev.customerCareEmail || 'support@bookvardi.in',
@@ -128,13 +130,26 @@ export default function SettingsTab() {
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
+                Head Office Location (Contact Page)
+              </label>
+              <input
+                type="text"
+                value={formData.headOfficeAddress || ''}
+                onChange={e => setFormData({ ...formData, headOfficeAddress: e.target.value })}
+                placeholder="e.g. Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121"
+                className="w-full px-3.5 py-2 text-xs font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
                 Registered Office Address (Invoice Header)
               </label>
               <input
                 type="text"
                 value={formData.companyAddress || ''}
                 onChange={e => setFormData({ ...formData, companyAddress: e.target.value })}
-                placeholder="e.g. Lucknow, Uttar Pradesh - 226001"
+                placeholder="e.g. Shakhumbhari Road, Town Behat, Dist. Saharanpur (U.P.) - 247121"
                 className="w-full px-3.5 py-2 text-xs font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-yellow outline-hidden"
               />
             </div>
