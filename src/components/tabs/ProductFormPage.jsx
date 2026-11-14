@@ -265,6 +265,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
     originalPrice: '',
     category: '',
     subCategory: '',
+    hsn: '6203',
     gst: '5',
     isGstInclusive: true,
     schoolName: '',
@@ -450,6 +451,7 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
         originalPrice: product.originalPrice || product.mrp ? String(product.originalPrice || product.mrp) : '',
         category: product.category || '',
         subCategory: product.subCategory || '',
+        hsn: product.hsn || product.hsnCode || '6203',
         gst: product.gst !== undefined ? String(product.gst) : (product.gstPercentage !== undefined ? String(product.gstPercentage) : '5'),
         isGstInclusive: parseBool(product.isGstInclusive, true),
         schoolName: product.schoolName || '',
@@ -880,6 +882,8 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
           ...formData,
           sellerId: cleanSellerId,
           sellerName: formData.sellerName || 'Book Vardi Verified Seller',
+          hsn: formData.hsn ? String(formData.hsn).trim() : '6203',
+          hsnCode: formData.hsn ? String(formData.hsn).trim() : '6203',
           gst: selectedGstNum,
           gstPercent: selectedGstNum,
           gstPercentage: selectedGstNum,
@@ -1334,6 +1338,42 @@ export default function ProductFormPage({ product, sellers = [], categories: pas
                           <option value="18">18%</option>
                           <option value="28">28%</option>
                         </select>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-gray-700">HSN Code *</label>
+                          <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">GST Invoice</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={formData.hsn}
+                          onChange={e => setFormData({ ...formData, hsn: e.target.value })}
+                          placeholder="e.g. 6203, 4901, 4820"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold font-mono focus:ring-2 focus:ring-brand-yellow outline-hidden"
+                        />
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {[
+                            { code: '6203', label: 'Uniform (6203)' },
+                            { code: '4901', label: 'Books (4901)' },
+                            { code: '4820', label: 'Stationery (4820)' },
+                            { code: '6403', label: 'Shoes (6403)' },
+                            { code: '4202', label: 'Bags (4202)' },
+                            { code: '6505', label: 'Caps (6505)' }
+                          ].map(item => (
+                            <button
+                              key={item.code}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, hsn: item.code }))}
+                              className={`text-[9.5px] px-1.5 py-0.5 rounded-md font-bold transition-all cursor-pointer border ${
+                                formData.hsn === item.code
+                                  ? 'bg-brand-teal text-white border-brand-teal shadow-xs'
+                                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 

@@ -12,6 +12,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
     price: '',
     originalPrice: '',
     category: 'uniforms',
+    hsn: '6203',
     badge: 'NEW',
     stockQuantity: '50',
     sellerId: 'SEL-101',
@@ -38,6 +39,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         price: product.price !== undefined ? String(product.price) : '',
         originalPrice: product.originalPrice || product.mrp ? String(product.originalPrice || product.mrp) : '',
         category: product.category || 'uniforms',
+        hsn: product.hsn || product.hsnCode || '6203',
         badge: product.badge || 'NEW',
         stockQuantity: product.stockQuantity ?? 50,
         sellerId: product.sellerId || 'self',
@@ -54,6 +56,7 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
         price: '',
         originalPrice: '',
         category: 'uniforms',
+        hsn: '6203',
         badge: 'NEW',
         stockQuantity: '50',
         sellerId: 'self',
@@ -83,6 +86,8 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
 
     onSave({
       ...formData,
+      hsn: formData.hsn ? String(formData.hsn).trim() : '6203',
+      hsnCode: formData.hsn ? String(formData.hsn).trim() : '6203',
       image: primaryImg,
       images: finalImages,
       paymentMethodAllowed: paymentAllowedStr,
@@ -201,6 +206,19 @@ export default function ProductModal({ isOpen, onClose, onSave, product = null, 
                 value={formData.stockQuantity}
                 onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-brand-yellow outline-hidden"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-gray-700">HSN Code *</label>
+                <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-1 py-0.2 rounded border border-teal-200">GST</span>
+              </div>
+              <input
+                type="text"
+                value={formData.hsn}
+                onChange={e => setFormData({ ...formData, hsn: e.target.value })}
+                placeholder="e.g. 6203, 4901, 4820"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold font-mono focus:ring-2 focus:ring-brand-yellow outline-hidden"
               />
             </div>
           </div>
