@@ -394,6 +394,7 @@ export default function AdminKitFormPage({
       originalPrice: Number(product.mrp || product.originalPrice || price),
       size: (product.sizeVariants && product.sizeVariants[0]?.size) || (product.sizes && product.sizes[0]) || '',
       availableSizes: prodSizes,
+      sizeVariants: Array.isArray(product.sizeVariants) ? product.sizeVariants : [],
       color: product.color || '',
       image: primaryImg
     };
