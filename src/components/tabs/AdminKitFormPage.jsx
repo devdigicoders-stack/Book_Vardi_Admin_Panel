@@ -381,6 +381,10 @@ export default function AdminKitFormPage({
       ? product.images[0]
       : (product.image || '');
 
+    const prodSizes = Array.isArray(product.sizes) && product.sizes.length > 0
+      ? product.sizes
+      : (Array.isArray(product.sizeVariants) ? product.sizeVariants.map(v => typeof v === 'object' ? (v.size || v.measureValue) : v).filter(Boolean) : []);
+
     const newItem = {
       productId: product.id || product._id,
       name: product.name || product.title || 'Product',
@@ -389,6 +393,7 @@ export default function AdminKitFormPage({
       totalPrice: price,
       originalPrice: Number(product.mrp || product.originalPrice || price),
       size: (product.sizeVariants && product.sizeVariants[0]?.size) || (product.sizes && product.sizes[0]) || '',
+      availableSizes: prodSizes,
       color: product.color || '',
       image: primaryImg
     };
